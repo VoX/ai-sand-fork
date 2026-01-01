@@ -93,6 +93,22 @@ function App() {
     const grid = gridRef.current
     const { cols, rows } = dimensionsRef.current
 
+    // Helper to check if a cell can be displaced by a heavier material
+    const canDisplace = (from: Cell, to: Cell): boolean => {
+      if (!to) return true // Empty cell
+      if (from === 'sand' && to === 'water') return true // Sand sinks in water
+      if (from === 'dirt' && to === 'water') return true // Dirt sinks in water
+      return false
+    }
+
+    // Helper to swap or move
+    const moveOrSwap = (fromY: number, fromX: number, toY: number, toX: number) => {
+      const from = grid[fromY][fromX]
+      const to = grid[toY][toX]
+      grid[toY][toX] = from
+      grid[fromY][fromX] = to // null or water (swap)
+    }
+
     // Process bottom to top so particles fall properly
     for (let y = rows - 2; y >= 0; y--) {
       // Randomize left-right processing to prevent bias
@@ -105,21 +121,18 @@ function App() {
         if (!cell) continue
 
         if (cell === 'sand') {
-          // Sand: falls down, rolls diagonally
-          if (!grid[y + 1][x]) {
-            grid[y + 1][x] = cell
-            grid[y][x] = null
+          // Sand: falls down (through water too), rolls diagonally
+          if (canDisplace(cell, grid[y + 1][x])) {
+            moveOrSwap(y, x, y + 1, x)
           } else {
             const goLeft = Math.random() < 0.5
             const dx1 = goLeft ? -1 : 1
             const dx2 = goLeft ? 1 : -1
 
-            if (x + dx1 >= 0 && x + dx1 < cols && !grid[y + 1][x + dx1] && !grid[y][x + dx1]) {
-              grid[y + 1][x + dx1] = cell
-              grid[y][x] = null
-            } else if (x + dx2 >= 0 && x + dx2 < cols && !grid[y + 1][x + dx2] && !grid[y][x + dx2]) {
-              grid[y + 1][x + dx2] = cell
-              grid[y][x] = null
+            if (x + dx1 >= 0 && x + dx1 < cols && canDisplace(cell, grid[y + 1][x + dx1]) && !grid[y][x + dx1]) {
+              moveOrSwap(y, x, y + 1, x + dx1)
+            } else if (x + dx2 >= 0 && x + dx2 < cols && canDisplace(cell, grid[y + 1][x + dx2]) && !grid[y][x + dx2]) {
+              moveOrSwap(y, x, y + 1, x + dx2)
             }
           }
         } else if (cell === 'water') {
@@ -148,22 +161,19 @@ function App() {
             }
           }
         } else if (cell === 'dirt') {
-          // Dirt: falls down, less likely to roll
-          if (!grid[y + 1][x]) {
-            grid[y + 1][x] = cell
-            grid[y][x] = null
+          // Dirt: falls down (through water too), less likely to roll
+          if (canDisplace(cell, grid[y + 1][x])) {
+            moveOrSwap(y, x, y + 1, x)
           } else if (Math.random() < 0.3) {
             // Only 30% chance to roll
             const goLeft = Math.random() < 0.5
             const dx1 = goLeft ? -1 : 1
             const dx2 = goLeft ? 1 : -1
 
-            if (x + dx1 >= 0 && x + dx1 < cols && !grid[y + 1][x + dx1] && !grid[y][x + dx1]) {
-              grid[y + 1][x + dx1] = cell
-              grid[y][x] = null
-            } else if (x + dx2 >= 0 && x + dx2 < cols && !grid[y + 1][x + dx2] && !grid[y][x + dx2]) {
-              grid[y + 1][x + dx2] = cell
-              grid[y][x] = null
+            if (x + dx1 >= 0 && x + dx1 < cols && canDisplace(cell, grid[y + 1][x + dx1]) && !grid[y][x + dx1]) {
+              moveOrSwap(y, x, y + 1, x + dx1)
+            } else if (x + dx2 >= 0 && x + dx2 < cols && canDisplace(cell, grid[y + 1][x + dx2]) && !grid[y][x + dx2]) {
+              moveOrSwap(y, x, y + 1, x + dx2)
             }
           }
         }
