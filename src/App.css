@@ -1,59 +1,128 @@
-.container {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
 }
 
-h1 {
-  margin-bottom: 1.5rem;
-  color: #333;
-}
-
-.image-container {
-  width: 100%;
-  max-width: 800px;
-  height: 400px;
-  margin: 0 auto 1.5rem;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #f0f0f0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.image-container img {
-  width: 100%;
+html, body, #root {
   height: 100%;
-  object-fit: cover;
+  width: 100%;
+  overflow: hidden;
+  background: #000;
 }
 
-.loading, .error {
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  background: #000;
+}
+
+.controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #111;
+  border-bottom: 1px solid #333;
+  flex-shrink: 0;
+  gap: 12px;
+  /* iOS safe area */
+  padding-top: max(12px, env(safe-area-inset-top));
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+}
+
+.material-picker {
+  display: flex;
+  gap: 8px;
+}
+
+.material-btn {
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: capitalize;
+  background: #222;
   color: #888;
-  font-size: 1.2rem;
+  border: 2px solid #333;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 
-.error {
-  color: #e74c3c;
+.material-btn:hover {
+  background: #2a2a2a;
+  color: #aaa;
 }
 
-button {
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
-  background: #3498db;
-  color: white;
+.material-btn.active {
+  background: #1a1a1a;
+  color: var(--material-color);
+  border-color: var(--material-color);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--material-color) 40%, transparent);
+}
+
+.reset-btn {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  background: #333;
+  color: #fff;
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 
-button:hover:not(:disabled) {
-  background: #2980b9;
+.reset-btn:hover {
+  background: #444;
 }
 
-button:disabled {
-  background: #bdc3c7;
-  cursor: not-allowed;
+.reset-btn:active {
+  background: #555;
+  transform: scale(0.98);
+}
+
+.canvas-container {
+  flex: 1;
+  width: 100%;
+  overflow: hidden;
+  background: #1a1a1a;
+  /* iOS safe area for bottom */
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.canvas-container canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Mobile adjustments */
+@media (max-width: 480px) {
+  .controls {
+    padding: 10px 12px;
+    padding-top: max(10px, env(safe-area-inset-top));
+  }
+
+  .material-btn {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .reset-btn {
+    padding: 8px 16px;
+    font-size: 13px;
+  }
+}
+
+/* Prevent pull-to-refresh on mobile */
+body {
+  overscroll-behavior: none;
 }
