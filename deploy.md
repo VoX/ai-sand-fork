@@ -2,6 +2,103 @@
 
 This guide covers how to deploy this repo (and future repos) to your custom domain `sammcgrail.com` using GitHub Pages and Squarespace DNS.
 
+---
+
+## ⚠️ Important: Your Current Firebase Setup
+
+Your main site `sammcgrail.com` is currently hosted on **Firebase Hosting**, not GitHub Pages.
+
+**Firebase Project**: `streamwebsite-68d3c`
+**Repo**: [sammcgrail/streampcwebsite](https://github.com/sammcgrail/streampcwebsite)
+
+```json
+// firebase.json
+{
+  "hosting": {
+    "public": "src",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
+  }
+}
+```
+
+### The Challenge
+
+You **cannot** serve `sammcgrail.com/sand` from GitHub Pages while `sammcgrail.com` is on Firebase. The DNS points to Firebase, so Firebase handles ALL requests to that domain.
+
+### Your Options
+
+#### Option A: Use a Subdomain for GitHub Pages (Recommended)
+
+Keep Firebase for main site, use a subdomain for apps:
+
+| URL | Hosted On |
+|-----|-----------|
+| `sammcgrail.com` | Firebase (main site) |
+| `apps.sammcgrail.com` | GitHub Pages |
+| `apps.sammcgrail.com/clawd/` | This sand game |
+
+**Setup:**
+1. In Squarespace DNS, add: `CNAME | apps | sammcgrail.github.io`
+2. Create `sammcgrail.github.io` repo with custom domain `apps.sammcgrail.com`
+3. Project sites auto-inherit: `apps.sammcgrail.com/clawd/`
+
+#### Option B: Add Rewrites in Firebase (Hacky)
+
+Use Firebase to redirect specific paths to GitHub Pages:
+
+```json
+// firebase.json
+{
+  "hosting": {
+    "public": "src",
+    "redirects": [
+      {
+        "source": "/sand",
+        "destination": "https://sammcgrail.github.io/clawd/",
+        "type": 302
+      },
+      {
+        "source": "/sand/**",
+        "destination": "https://sammcgrail.github.io/clawd/:splat",
+        "type": 302
+      }
+    ]
+  }
+}
+```
+
+**Downsides**: URL changes in browser, doesn't feel native, requires Firebase deploy for each new app.
+
+#### Option C: Host Apps on Firebase Too
+
+Add your apps to the Firebase project directly:
+
+```json
+// firebase.json
+{
+  "hosting": {
+    "public": "dist",
+    "rewrites": [
+      { "source": "/sand/**", "destination": "/sand/index.html" },
+      { "source": "**", "destination": "/index.html" }
+    ]
+  }
+}
+```
+
+Build your apps into subdirectories of the Firebase public folder.
+
+#### Option D: Switch Entirely to GitHub Pages
+
+Move everything to GitHub Pages and retire Firebase:
+
+1. Move `streampcwebsite` content to `sammcgrail.github.io` repo
+2. Update Squarespace DNS to point to GitHub (A records + CNAME)
+3. Disable Firebase hosting
+4. All project sites work at `sammcgrail.com/reponame/`
+
+---
+
 ## Current Setup
 
 This repo builds to `docs/` folder and is served via GitHub Pages:
