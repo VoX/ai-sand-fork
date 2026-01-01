@@ -36,7 +36,8 @@ html, body, #root {
 
 .material-picker {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .material-btn {
@@ -105,20 +106,26 @@ html, body, #root {
 }
 
 /* Mobile adjustments */
-@media (max-width: 480px) {
+@media (max-width: 600px) {
   .controls {
-    padding: 10px 12px;
-    padding-top: max(10px, env(safe-area-inset-top));
+    padding: 8px 10px;
+    padding-top: max(8px, env(safe-area-inset-top));
+    gap: 8px;
+  }
+
+  .material-picker {
+    gap: 4px;
   }
 
   .material-btn {
-    padding: 8px 12px;
-    font-size: 13px;
+    padding: 6px 10px;
+    font-size: 12px;
   }
 
   .reset-btn {
-    padding: 8px 16px;
-    font-size: 13px;
+    padding: 6px 12px;
+    font-size: 12px;
+    flex-shrink: 0;
   }
 }
 

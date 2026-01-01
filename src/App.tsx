@@ -1,14 +1,18 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas'
 type Cell = Material | null
 
 const CELL_SIZE = 4
-const COLORS: Record<Material, string> = {
+const COLORS: Record<Material, string | ((x: number, y: number) => string)> = {
   sand: '#e6c86e',
   water: '#4a90d9',
-  dirt: '#8b6914',
+  dirt: '#8b5a2b',
+  stone: '#666666',
+  plant: '#228b22',
+  fire: () => `hsl(${Math.random() * 30 + 10}, 100%, ${50 + Math.random() * 20}%)`,
+  gas: '#888888',
 }
 
 function App() {
@@ -95,9 +99,10 @@ function App() {
 
     // Helper to check if a cell can be displaced by a heavier material
     const canDisplace = (from: Cell, to: Cell): boolean => {
-      if (!to) return true // Empty cell
-      if (from === 'sand' && to === 'water') return true // Sand sinks in water
-      if (from === 'dirt' && to === 'water') return true // Dirt sinks in water
+      if (!to) return true
+      if (from === 'sand' && to === 'water') return true
+      if (from === 'dirt' && to === 'water') return true
+      if (from === 'stone' && to === 'water') return true
       return false
     }
 
@@ -106,12 +111,114 @@ function App() {
       const from = grid[fromY][fromX]
       const to = grid[toY][toX]
       grid[toY][toX] = from
-      grid[fromY][fromX] = to // null or water (swap)
+      grid[fromY][fromX] = to
     }
 
-    // Process bottom to top so particles fall properly
+    // Check neighbors for a material
+    const hasNeighbor = (y: number, x: number, mat: Material): boolean => {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (dy === 0 && dx === 0) continue
+          const ny = y + dy
+          const nx = x + dx
+          if (ny >= 0 && ny < rows && nx >= 0 && nx < cols && grid[ny][nx] === mat) {
+            return true
+          }
+        }
+      }
+      return false
+    }
+
+    // Check if flammable
+    const isFlammable = (cell: Cell): boolean => {
+      return cell === 'plant' || cell === 'gas'
+    }
+
+    // Process top to bottom for rising elements (fire, gas)
+    for (let y = 1; y < rows; y++) {
+      const startX = Math.random() < 0.5 ? 0 : cols - 1
+      const endX = startX === 0 ? cols : -1
+      const stepX = startX === 0 ? 1 : -1
+
+      for (let x = startX; x !== endX; x += stepX) {
+        const cell = grid[y][x]
+        if (!cell) continue
+
+        if (cell === 'fire') {
+          // Fire: burns out randomly, rises, spreads to flammable materials
+          if (Math.random() < 0.1) {
+            // 10% chance to burn out and create gas
+            grid[y][x] = Math.random() < 0.3 ? 'gas' : null
+            continue
+          }
+
+          // Spread fire to adjacent flammable materials
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dy === 0 && dx === 0) continue
+              const ny = y + dy
+              const nx = x + dx
+              if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
+                if (isFlammable(grid[ny][nx]) && Math.random() < 0.3) {
+                  grid[ny][nx] = 'fire'
+                }
+              }
+            }
+          }
+
+          // Fire rises
+          if (y > 0 && !grid[y - 1][x]) {
+            grid[y - 1][x] = 'fire'
+            grid[y][x] = null
+          } else {
+            // Try to rise diagonally
+            const goLeft = Math.random() < 0.5
+            const dx1 = goLeft ? -1 : 1
+            const dx2 = goLeft ? 1 : -1
+
+            if (y > 0 && x + dx1 >= 0 && x + dx1 < cols && !grid[y - 1][x + dx1]) {
+              grid[y - 1][x + dx1] = 'fire'
+              grid[y][x] = null
+            } else if (y > 0 && x + dx2 >= 0 && x + dx2 < cols && !grid[y - 1][x + dx2]) {
+              grid[y - 1][x + dx2] = 'fire'
+              grid[y][x] = null
+            }
+          }
+        } else if (cell === 'gas') {
+          // Gas: rises and disperses
+          if (Math.random() < 0.02) {
+            // Slowly disappears
+            grid[y][x] = null
+            continue
+          }
+
+          // Rise
+          if (y > 0 && !grid[y - 1][x]) {
+            grid[y - 1][x] = 'gas'
+            grid[y][x] = null
+          } else {
+            // Drift sideways
+            const goLeft = Math.random() < 0.5
+            const dx1 = goLeft ? -1 : 1
+            const dx2 = goLeft ? 1 : -1
+
+            if (y > 0 && x + dx1 >= 0 && x + dx1 < cols && !grid[y - 1][x + dx1]) {
+              grid[y - 1][x + dx1] = 'gas'
+              grid[y][x] = null
+            } else if (y > 0 && x + dx2 >= 0 && x + dx2 < cols && !grid[y - 1][x + dx2]) {
+              grid[y - 1][x + dx2] = 'gas'
+              grid[y][x] = null
+            } else if (x + dx1 >= 0 && x + dx1 < cols && !grid[y][x + dx1]) {
+              grid[y][x + dx1] = 'gas'
+              grid[y][x] = null
+            }
+          }
+        }
+      }
+    }
+
+    // Process bottom to top for falling elements
     for (let y = rows - 2; y >= 0; y--) {
-      // Randomize left-right processing to prevent bias
       const startX = Math.random() < 0.5 ? 0 : cols - 1
       const endX = startX === 0 ? cols : -1
       const stepX = startX === 0 ? 1 : -1
@@ -121,7 +228,6 @@ function App() {
         if (!cell) continue
 
         if (cell === 'sand') {
-          // Sand: falls down (through water too), rolls diagonally
           if (canDisplace(cell, grid[y + 1][x])) {
             moveOrSwap(y, x, y + 1, x)
           } else {
@@ -136,7 +242,16 @@ function App() {
             }
           }
         } else if (cell === 'water') {
-          // Water: falls, then spreads horizontally
+          // Water touching plant near dirt = plant grows
+          if (hasNeighbor(y, x, 'plant') && Math.random() < 0.05) {
+            // Higher chance if dirt nearby
+            const nearDirt = hasNeighbor(y, x, 'dirt')
+            if (nearDirt || Math.random() < 0.3) {
+              grid[y][x] = 'plant'
+              continue
+            }
+          }
+
           if (!grid[y + 1][x]) {
             grid[y + 1][x] = cell
             grid[y][x] = null
@@ -152,7 +267,6 @@ function App() {
               grid[y + 1][x + dx2] = cell
               grid[y][x] = null
             } else if (x + dx1 >= 0 && x + dx1 < cols && !grid[y][x + dx1]) {
-              // Spread horizontally
               grid[y][x + dx1] = cell
               grid[y][x] = null
             } else if (x + dx2 >= 0 && x + dx2 < cols && !grid[y][x + dx2]) {
@@ -161,11 +275,9 @@ function App() {
             }
           }
         } else if (cell === 'dirt') {
-          // Dirt: falls down (through water too), less likely to roll
           if (canDisplace(cell, grid[y + 1][x])) {
             moveOrSwap(y, x, y + 1, x)
           } else if (Math.random() < 0.3) {
-            // Only 30% chance to roll
             const goLeft = Math.random() < 0.5
             const dx1 = goLeft ? -1 : 1
             const dx2 = goLeft ? 1 : -1
@@ -177,6 +289,7 @@ function App() {
             }
           }
         }
+        // Stone and Plant are static - no movement
       }
     }
   }, [])
@@ -197,7 +310,8 @@ function App() {
       for (let x = 0; x < cols; x++) {
         const cell = grid[y][x]
         if (cell) {
-          ctx.fillStyle = COLORS[cell]
+          const colorVal = COLORS[cell]
+          ctx.fillStyle = typeof colorVal === 'function' ? colorVal(x, y) : colorVal
           ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
         }
       }
@@ -216,7 +330,7 @@ function App() {
     initGrid()
   }, [initGrid])
 
-  // Handle pointer events (works for both mouse and touch)
+  // Handle pointer events
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault()
     setIsDrawing(true)
@@ -249,20 +363,26 @@ function App() {
     }
   }, [initGrid, gameLoop])
 
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas']
+
   return (
     <div className="app">
       <div className="controls">
         <div className="material-picker">
-          {(['sand', 'water', 'dirt'] as Material[]).map((m) => (
-            <button
-              key={m}
-              className={`material-btn ${material === m ? 'active' : ''}`}
-              onClick={() => setMaterial(m)}
-              style={{ '--material-color': COLORS[m] } as React.CSSProperties}
-            >
-              {m}
-            </button>
-          ))}
+          {materials.map((m) => {
+            const colorVal = COLORS[m]
+            const color = typeof colorVal === 'function' ? '#ff6600' : colorVal
+            return (
+              <button
+                key={m}
+                className={`material-btn ${material === m ? 'active' : ''}`}
+                onClick={() => setMaterial(m)}
+                style={{ '--material-color': color } as React.CSSProperties}
+              >
+                {m}
+              </button>
+            )
+          })}
         </div>
         <button className="reset-btn" onClick={reset}>
           Reset
