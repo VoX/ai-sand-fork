@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
 type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug'
+type Tool = Material | 'erase'
 type Cell = Material | null
 
 const CELL_SIZE = 4
@@ -20,7 +21,7 @@ const COLORS: Record<Material, string | ((x: number, y: number) => string)> = {
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const gridRef = useRef<Cell[][]>([])
-  const [material, setMaterial] = useState<Material>('sand')
+  const [tool, setTool] = useState<Tool>('sand')
   const [isDrawing, setIsDrawing] = useState(false)
   const animationRef = useRef<number>(0)
   const dimensionsRef = useRef({ cols: 0, rows: 0 })
@@ -70,7 +71,7 @@ function App() {
     return null
   }, [])
 
-  // Add particles at position
+  // Add particles at position (or erase)
   const addParticles = useCallback((clientX: number, clientY: number) => {
     const pos = getCellPos(clientX, clientY)
     if (!pos) return
@@ -84,15 +85,17 @@ function App() {
         if (dx * dx + dy * dy <= radius * radius) {
           const nx = pos.x + dx
           const ny = pos.y + dy
-          if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && !grid[ny][nx]) {
-            if (Math.random() > 0.3) {
-              grid[ny][nx] = material
+          if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+            if (tool === 'erase') {
+              grid[ny][nx] = null
+            } else if (!grid[ny][nx] && Math.random() > 0.3) {
+              grid[ny][nx] = tool
             }
           }
         }
       }
     }
-  }, [material, getCellPos])
+  }, [tool, getCellPos])
 
   // Physics update
   const updatePhysics = useCallback(() => {
@@ -470,8 +473,8 @@ function App() {
             return (
               <button
                 key={m}
-                className={`material-btn ${material === m ? 'active' : ''}`}
-                onClick={() => setMaterial(m)}
+                className={`material-btn ${tool === m ? 'active' : ''}`}
+                onClick={() => setTool(m)}
                 style={{ '--material-color': color } as React.CSSProperties}
               >
                 {m}
@@ -479,9 +482,17 @@ function App() {
             )
           })}
         </div>
-        <button className="reset-btn" onClick={reset}>
-          Reset
-        </button>
+        <div className="action-btns">
+          <button className="reset-btn" onClick={reset}>
+            Reset
+          </button>
+          <button
+            className={`erase-btn ${tool === 'erase' ? 'active' : ''}`}
+            onClick={() => setTool('erase')}
+          >
+            Erase
+          </button>
+        </div>
       </div>
       <div className="canvas-container">
         <canvas
