@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug'
 type Cell = Material | null
 
 const CELL_SIZE = 4
@@ -14,6 +14,7 @@ const COLORS: Record<Material, string | ((x: number, y: number) => string)> = {
   fire: () => `hsl(${Math.random() * 30 + 10}, 100%, ${50 + Math.random() * 20}%)`,
   gas: '#888888',
   fluff: '#f5e6d3',
+  bug: '#ff69b4',
 }
 
 function App() {
@@ -132,7 +133,12 @@ function App() {
 
     // Check if flammable
     const isFlammable = (cell: Cell): boolean => {
-      return cell === 'plant' || cell === 'gas' || cell === 'fluff'
+      return cell === 'plant' || cell === 'gas' || cell === 'fluff' || cell === 'bug'
+    }
+
+    // Check if edible by bugs
+    const isEdible = (cell: Cell): boolean => {
+      return cell === 'dirt' || cell === 'plant'
     }
 
     // Process top to bottom for rising elements (fire, gas)
@@ -315,6 +321,68 @@ function App() {
               }
             }
           }
+        } else if (cell === 'bug') {
+          // Bug: crawls around, eats dirt/plant, reproduces, flammable
+          if (Math.random() < 0.3) {
+            // 30% chance to act each frame
+
+            // First check if falling (no support below)
+            if (y + 1 < rows && !grid[y + 1][x]) {
+              grid[y + 1][x] = cell
+              grid[y][x] = null
+              continue
+            }
+
+            // Try to eat adjacent dirt/plant
+            const directions = [
+              { dx: 0, dy: 1 },  // down
+              { dx: -1, dy: 0 }, // left
+              { dx: 1, dy: 0 },  // right
+              { dx: 0, dy: -1 }, // up
+              { dx: -1, dy: 1 }, // down-left
+              { dx: 1, dy: 1 },  // down-right
+            ]
+
+            // Shuffle directions for randomness
+            for (let i = directions.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1))
+              ;[directions[i], directions[j]] = [directions[j], directions[i]]
+            }
+
+            for (const dir of directions) {
+              const nx = x + dir.dx
+              const ny = y + dir.dy
+              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                const target = grid[ny][nx]
+
+                // Eat dirt or plant
+                if (isEdible(target)) {
+                  grid[ny][nx] = 'bug'
+                  // Chance to reproduce when eating
+                  if (Math.random() < 0.15) {
+                    // Leave a new bug behind
+                    grid[y][x] = 'bug'
+                  } else {
+                    grid[y][x] = null
+                  }
+                  break
+                }
+                // Climb on other bugs
+                else if (target === 'bug' && Math.random() < 0.3) {
+                  // Can stack on bugs, swap positions
+                  grid[ny][nx] = 'bug'
+                  grid[y][x] = 'bug'
+                  break
+                }
+                // Move to empty space
+                else if (!target && Math.random() < 0.5) {
+                  grid[ny][nx] = 'bug'
+                  grid[y][x] = null
+                  break
+                }
+              }
+            }
+          }
         }
         // Stone and Plant are static - no movement
       }
@@ -390,7 +458,7 @@ function App() {
     }
   }, [initGrid, gameLoop])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug']
 
   return (
     <div className="app">
