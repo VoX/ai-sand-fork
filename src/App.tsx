@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma'
 type Tool = Material | 'erase'
 type Cell = Material | null
 
@@ -16,6 +16,7 @@ const COLORS: Record<Material, string | ((x: number, y: number) => string)> = {
   gas: '#888888',
   fluff: '#f5e6d3',
   bug: '#ff69b4',
+  plasma: () => `hsl(${Math.random() < 0.5 ? 280 + Math.random() * 20 : 320 + Math.random() * 20}, 100%, ${60 + Math.random() * 25}%)`,
 }
 
 function App() {
@@ -220,6 +221,46 @@ function App() {
               grid[y][x] = null
             } else if (x + dx1 >= 0 && x + dx1 < cols && !grid[y][x + dx1]) {
               grid[y][x + dx1] = 'gas'
+              grid[y][x] = null
+            }
+          }
+        } else if (cell === 'plasma') {
+          // Plasma: fire-like, destroys sand in chain reaction
+          if (Math.random() < 0.08) {
+            // Burns out slightly slower than fire
+            grid[y][x] = null
+            continue
+          }
+
+          // Spread plasma to adjacent sand (chain reaction)
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dy === 0 && dx === 0) continue
+              const ny = y + dy
+              const nx = x + dx
+              if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
+                if (grid[ny][nx] === 'sand' && Math.random() < 0.4) {
+                  grid[ny][nx] = 'plasma'
+                }
+              }
+            }
+          }
+
+          // Plasma rises like fire
+          if (y > 0 && !grid[y - 1][x]) {
+            grid[y - 1][x] = 'plasma'
+            grid[y][x] = null
+          } else {
+            // Try to rise diagonally
+            const goLeft = Math.random() < 0.5
+            const dx1 = goLeft ? -1 : 1
+            const dx2 = goLeft ? 1 : -1
+
+            if (y > 0 && x + dx1 >= 0 && x + dx1 < cols && !grid[y - 1][x + dx1]) {
+              grid[y - 1][x + dx1] = 'plasma'
+              grid[y][x] = null
+            } else if (y > 0 && x + dx2 >= 0 && x + dx2 < cols && !grid[y - 1][x + dx2]) {
+              grid[y - 1][x + dx2] = 'plasma'
               grid[y][x] = null
             }
           }
@@ -461,7 +502,7 @@ function App() {
     }
   }, [initGrid, gameLoop])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma']
 
   return (
     <div className="app">
@@ -469,7 +510,9 @@ function App() {
         <div className="material-picker">
           {materials.map((m) => {
             const colorVal = COLORS[m]
-            const color = typeof colorVal === 'function' ? '#ff6600' : colorVal
+            const color = typeof colorVal === 'function'
+              ? (m === 'plasma' ? '#c8a2c8' : '#ff6600')
+              : colorVal
             return (
               <button
                 key={m}
