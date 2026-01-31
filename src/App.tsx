@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning'
 type Tool = Material | 'erase'
 type Cell = Material | null
 
@@ -18,6 +18,8 @@ const COLORS: Record<Material, string | ((x: number, y: number) => string)> = {
   bug: '#ff69b4',
   plasma: () => `hsl(${Math.random() < 0.5 ? 280 + Math.random() * 20 : 320 + Math.random() * 20}, 100%, ${60 + Math.random() * 25}%)`,
   nitro: '#39ff14',
+  glass: '#a8d8ea',
+  lightning: () => `hsl(${50 + Math.random() * 20}, 100%, ${80 + Math.random() * 20}%)`,
 }
 
 function App() {
@@ -265,6 +267,97 @@ function App() {
               grid[y][x] = null
             }
           }
+        } else if (cell === 'lightning') {
+          // Lightning: strikes down fast, turns sand to glass, spreads in water
+          // Disappears quickly
+          if (Math.random() < 0.3) {
+            grid[y][x] = null
+            continue
+          }
+
+          // Strike downward (check multiple cells for speed)
+          let struck = false
+          for (let dist = 1; dist <= 3; dist++) {
+            const ny = y + dist
+            if (ny >= rows) break
+
+            const target = grid[ny][x]
+
+            if (target === 'sand') {
+              // Sand becomes glass
+              grid[ny][x] = 'glass'
+              grid[y][x] = null
+              struck = true
+              // Branch chance
+              if (Math.random() < 0.4) {
+                const branchX = x + (Math.random() < 0.5 ? -1 : 1)
+                if (branchX >= 0 && branchX < cols && !grid[y][branchX]) {
+                  grid[y][branchX] = 'lightning'
+                }
+              }
+              break
+            } else if (target === 'water') {
+              // Electrify water - spread lightning horizontally
+              grid[ny][x] = 'lightning'
+              grid[y][x] = null
+              // Spread to adjacent water
+              for (let dx = -1; dx <= 1; dx++) {
+                const wx = x + dx
+                if (wx >= 0 && wx < cols && grid[ny][wx] === 'water' && Math.random() < 0.5) {
+                  grid[ny][wx] = 'lightning'
+                }
+              }
+              struck = true
+              break
+            } else if (target === 'plant' || target === 'fluff' || target === 'bug') {
+              // Burns flammable things
+              grid[ny][x] = 'fire'
+              grid[y][x] = null
+              struck = true
+              break
+            } else if (target === 'nitro') {
+              // Triggers nitro explosion
+              grid[y][x] = null
+              // The nitro will explode on its own tick
+              break
+            } else if (target === 'stone' || target === 'glass') {
+              // Stops at stone/glass
+              grid[y][x] = null
+              struck = true
+              break
+            } else if (target === 'dirt') {
+              // Passes through dirt, turning some to glass
+              if (Math.random() < 0.3) {
+                grid[ny][x] = 'glass'
+              }
+              grid[y][x] = null
+              struck = true
+              break
+            } else if (!target) {
+              // Move down through empty space
+              continue
+            } else {
+              // Hit something else, stop
+              grid[y][x] = null
+              struck = true
+              break
+            }
+          }
+
+          // If didn't hit anything, move down
+          if (!struck && y + 1 < rows && !grid[y + 1][x]) {
+            grid[y + 1][x] = 'lightning'
+            grid[y][x] = null
+            // Random branching
+            if (Math.random() < 0.15) {
+              const branchX = x + (Math.random() < 0.5 ? -1 : 1)
+              if (branchX >= 0 && branchX < cols && !grid[y][branchX]) {
+                grid[y][branchX] = 'lightning'
+              }
+            }
+          } else if (!struck) {
+            grid[y][x] = null
+          }
         }
       }
     }
@@ -445,7 +538,7 @@ function App() {
                 const neighbor = grid[ny][nx]
                 if (neighbor === 'water') {
                   touchingWater = true
-                } else if (neighbor && neighbor !== 'nitro' && neighbor !== 'fire' && neighbor !== 'gas') {
+                } else if (neighbor && neighbor !== 'nitro' && neighbor !== 'fire' && neighbor !== 'gas' && neighbor !== 'lightning') {
                   touchingOther = true
                 }
               }
@@ -581,7 +674,7 @@ function App() {
     }
   }, [initGrid, gameLoop])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning']
 
   return (
     <div className="app">
@@ -590,7 +683,7 @@ function App() {
           {materials.map((m) => {
             const colorVal = COLORS[m]
             const color = typeof colorVal === 'function'
-              ? (m === 'plasma' ? '#c8a2c8' : '#ff6600')
+              ? (m === 'plasma' ? '#c8a2c8' : m === 'lightning' ? '#ffff88' : '#ff6600')
               : colorVal
             return (
               <button
