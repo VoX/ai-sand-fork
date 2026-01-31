@@ -445,7 +445,7 @@ function App() {
                 const neighbor = grid[ny][nx]
                 if (neighbor === 'water') {
                   touchingWater = true
-                } else if (neighbor && neighbor !== 'nitro') {
+                } else if (neighbor && neighbor !== 'nitro' && neighbor !== 'fire') {
                   touchingOther = true
                 }
               }
