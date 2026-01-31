@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro'
 type Tool = Material | 'erase'
 type Cell = Material | null
 
@@ -17,6 +17,7 @@ const COLORS: Record<Material, string | ((x: number, y: number) => string)> = {
   fluff: '#f5e6d3',
   bug: '#ff69b4',
   plasma: () => `hsl(${Math.random() < 0.5 ? 280 + Math.random() * 20 : 320 + Math.random() * 20}, 100%, ${60 + Math.random() * 25}%)`,
+  nitro: '#39ff14',
 }
 
 function App() {
@@ -427,6 +428,84 @@ function App() {
               }
             }
           }
+        } else if (cell === 'nitro') {
+          // Nitro: falls, explodes on contact with particles (except water)
+          // Water extinguishes it and some water turns to stone
+
+          // Check for adjacent particles
+          let touchingWater = false
+          let touchingOther = false
+
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dy === 0 && dx === 0) continue
+              const ny = y + dy
+              const nx = x + dx
+              if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
+                const neighbor = grid[ny][nx]
+                if (neighbor === 'water') {
+                  touchingWater = true
+                } else if (neighbor && neighbor !== 'nitro') {
+                  touchingOther = true
+                }
+              }
+            }
+          }
+
+          if (touchingWater) {
+            // Water extinguishes nitro, some water turns to stone
+            grid[y][x] = null
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                const ny = y + dy
+                const nx = x + dx
+                if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
+                  if (grid[ny][nx] === 'water' && Math.random() < 0.3) {
+                    grid[ny][nx] = 'stone'
+                  }
+                }
+              }
+            }
+          } else if (touchingOther) {
+            // Explode in a big circle of fire
+            const explosionRadius = 8
+            for (let dy = -explosionRadius; dy <= explosionRadius; dy++) {
+              for (let dx = -explosionRadius; dx <= explosionRadius; dx++) {
+                if (dx * dx + dy * dy <= explosionRadius * explosionRadius) {
+                  const ny = y + dy
+                  const nx = x + dx
+                  if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
+                    // Don't destroy stone, turn water to stone
+                    if (grid[ny][nx] === 'water') {
+                      if (Math.random() < 0.5) {
+                        grid[ny][nx] = 'stone'
+                      }
+                    } else if (grid[ny][nx] !== 'stone') {
+                      grid[ny][nx] = 'fire'
+                    }
+                  }
+                }
+              }
+            }
+          } else {
+            // Fall like sand
+            if (y + 1 < rows && !grid[y + 1][x]) {
+              grid[y + 1][x] = 'nitro'
+              grid[y][x] = null
+            } else {
+              const goLeft = Math.random() < 0.5
+              const dx1 = goLeft ? -1 : 1
+              const dx2 = goLeft ? 1 : -1
+
+              if (x + dx1 >= 0 && x + dx1 < cols && y + 1 < rows && !grid[y + 1][x + dx1] && !grid[y][x + dx1]) {
+                grid[y + 1][x + dx1] = 'nitro'
+                grid[y][x] = null
+              } else if (x + dx2 >= 0 && x + dx2 < cols && y + 1 < rows && !grid[y + 1][x + dx2] && !grid[y][x + dx2]) {
+                grid[y + 1][x + dx2] = 'nitro'
+                grid[y][x] = null
+              }
+            }
+          }
         }
         // Stone and Plant are static - no movement
       }
@@ -502,7 +581,7 @@ function App() {
     }
   }, [initGrid, gameLoop])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro']
 
   return (
     <div className="app">

@@ -40,7 +40,17 @@ html, body, #root {
 .material-picker {
   display: flex;
   gap: 6px;
-  flex-wrap: wrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: 1;
+  min-width: 0;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.material-picker::-webkit-scrollbar {
+  display: none;
 }
 
 .material-btn {
@@ -56,6 +66,7 @@ html, body, #root {
   transition: all 0.15s ease;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+  flex-shrink: 0;
 }
 
 .material-btn:hover {
