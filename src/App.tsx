@@ -284,17 +284,64 @@ function App() {
             const target = grid[ny][x]
 
             if (target === 'sand') {
-              // Sand becomes glass
+              // Create spindly lightning pattern through sand
               grid[ny][x] = 'glass'
               grid[y][x] = null
               struck = true
-              // Branch chance
-              if (Math.random() < 0.4) {
-                const branchX = x + (Math.random() < 0.5 ? -1 : 1)
-                if (branchX >= 0 && branchX < cols && !grid[y][branchX]) {
-                  grid[y][branchX] = 'lightning'
+
+              // Create branching lightning tendrils through sand
+              const createTendril = (startX: number, startY: number, dirX: number, dirY: number, length: number) => {
+                let tx = startX
+                let ty = startY
+                for (let i = 0; i < length; i++) {
+                  // Wobble direction
+                  if (Math.random() < 0.3) dirX = dirX === 0 ? (Math.random() < 0.5 ? -1 : 1) : 0
+                  if (Math.random() < 0.2) dirY = Math.random() < 0.7 ? 1 : -1
+
+                  tx += dirX
+                  ty += dirY
+
+                  if (tx < 0 || tx >= cols || ty < 0 || ty >= rows) break
+                  if (grid[ty][tx] === 'sand') {
+                    grid[ty][tx] = 'glass'
+                    // Sub-branch chance
+                    if (Math.random() < 0.25 && length > 2) {
+                      createTendril(tx, ty, Math.random() < 0.5 ? -1 : 1, 1, Math.floor(length / 2))
+                    }
+                  } else if (grid[ty][tx] !== null && grid[ty][tx] !== 'glass') {
+                    break
+                  }
                 }
               }
+
+              // Main tendrils spreading from impact
+              const tendrilCount = 3 + Math.floor(Math.random() * 3)
+              for (let t = 0; t < tendrilCount; t++) {
+                const dirX = Math.random() < 0.5 ? -1 : 1
+                createTendril(x, ny, dirX, 1, 5 + Math.floor(Math.random() * 8))
+              }
+
+              // Shockwave - push sand away from impact
+              const shockRadius = 4
+              for (let sdy = -shockRadius; sdy <= shockRadius; sdy++) {
+                for (let sdx = -shockRadius; sdx <= shockRadius; sdx++) {
+                  const dist = Math.sqrt(sdx * sdx + sdy * sdy)
+                  if (dist > 0 && dist <= shockRadius) {
+                    const sx = x + sdx
+                    const sy = ny + sdy
+                    if (sx >= 0 && sx < cols && sy >= 0 && sy < rows && grid[sy][sx] === 'sand') {
+                      // Push sand outward
+                      const pushX = sx + Math.sign(sdx)
+                      const pushY = sy + Math.sign(sdy)
+                      if (pushX >= 0 && pushX < cols && pushY >= 0 && pushY < rows && !grid[pushY][pushX]) {
+                        grid[pushY][pushX] = 'sand'
+                        grid[sy][sx] = null
+                      }
+                    }
+                  }
+                }
+              }
+
               break
             } else if (target === 'water') {
               // Electrify water - spread lightning horizontally
