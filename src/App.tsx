@@ -3,28 +3,91 @@ import './App.css'
 
 type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning'
 type Tool = Material | 'erase'
-type Cell = Material | null
+
+// Use numeric IDs for faster comparisons
+const MAT = {
+  EMPTY: 0,
+  SAND: 1,
+  WATER: 2,
+  DIRT: 3,
+  STONE: 4,
+  PLANT: 5,
+  FIRE: 6,
+  GAS: 7,
+  FLUFF: 8,
+  BUG: 9,
+  PLASMA: 10,
+  NITRO: 11,
+  GLASS: 12,
+  LIGHTNING: 13,
+} as const
+
+const MATERIAL_TO_ID: Record<Material, number> = {
+  sand: MAT.SAND,
+  water: MAT.WATER,
+  dirt: MAT.DIRT,
+  stone: MAT.STONE,
+  plant: MAT.PLANT,
+  fire: MAT.FIRE,
+  gas: MAT.GAS,
+  fluff: MAT.FLUFF,
+  bug: MAT.BUG,
+  plasma: MAT.PLASMA,
+  nitro: MAT.NITRO,
+  glass: MAT.GLASS,
+  lightning: MAT.LIGHTNING,
+}
+
+// Pre-calculated RGB colors for static materials
+const STATIC_COLORS: Record<number, [number, number, number]> = {
+  [MAT.SAND]: [230, 200, 110],
+  [MAT.WATER]: [74, 144, 217],
+  [MAT.DIRT]: [139, 90, 43],
+  [MAT.STONE]: [102, 102, 102],
+  [MAT.PLANT]: [34, 139, 34],
+  [MAT.GAS]: [136, 136, 136],
+  [MAT.FLUFF]: [245, 230, 211],
+  [MAT.BUG]: [255, 105, 180],
+  [MAT.NITRO]: [57, 255, 20],
+  [MAT.GLASS]: [168, 216, 234],
+}
 
 const CELL_SIZE = 4
-const COLORS: Record<Material, string | ((x: number, y: number) => string)> = {
+
+// Pre-allocate for HSL to RGB conversion
+function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+  s /= 100
+  l /= 100
+  const a = s * Math.min(l, 1 - l)
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12
+    return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
+  }
+  return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)]
+}
+
+const BUTTON_COLORS: Record<Material, string> = {
   sand: '#e6c86e',
   water: '#4a90d9',
   dirt: '#8b5a2b',
   stone: '#666666',
   plant: '#228b22',
-  fire: () => `hsl(${Math.random() * 30 + 10}, 100%, ${50 + Math.random() * 20}%)`,
+  fire: '#ff6600',
   gas: '#888888',
   fluff: '#f5e6d3',
   bug: '#ff69b4',
-  plasma: () => `hsl(${Math.random() < 0.5 ? 280 + Math.random() * 20 : 320 + Math.random() * 20}, 100%, ${60 + Math.random() * 25}%)`,
+  plasma: '#c8a2c8',
   nitro: '#39ff14',
   glass: '#a8d8ea',
-  lightning: () => `hsl(${50 + Math.random() * 20}, 100%, ${80 + Math.random() * 20}%)`,
+  lightning: '#ffff88',
 }
+
+type Cell = Material | null
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const gridRef = useRef<Cell[][]>([])
+  const imageDataRef = useRef<ImageData | null>(null)
   const [tool, setTool] = useState<Tool>('sand')
   const [isDrawing, setIsDrawing] = useState(false)
   const [brushSize, setBrushSize] = useState(3)
@@ -59,6 +122,12 @@ function App() {
       }
     }
     gridRef.current = grid
+
+    // Pre-create ImageData for fast rendering
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      imageDataRef.current = ctx.createImageData(width, height)
+    }
   }, [])
 
   // Get cell position from screen coordinates
@@ -695,28 +764,69 @@ function App() {
     }
   }, [])
 
-  // Render grid to canvas
+  // Render grid to canvas using ImageData for performance
   const render = useCallback(() => {
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
-    if (!canvas || !ctx) return
+    const imageData = imageDataRef.current
+    if (!canvas || !ctx || !imageData) return
 
     const grid = gridRef.current
     const { cols, rows } = dimensionsRef.current
+    const data = imageData.data
+    const width = canvas.width
 
-    ctx.fillStyle = '#1a1a1a'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    // Fill with background color
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = 26     // R
+      data[i + 1] = 26 // G
+      data[i + 2] = 26 // B
+      data[i + 3] = 255 // A
+    }
 
-    for (let y = 0; y < rows; y++) {
-      for (let x = 0; x < cols; x++) {
-        const cell = grid[y][x]
-        if (cell) {
-          const colorVal = COLORS[cell]
-          ctx.fillStyle = typeof colorVal === 'function' ? colorVal(x, y) : colorVal
-          ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE)
+    // Draw particles
+    for (let cy = 0; cy < rows; cy++) {
+      for (let cx = 0; cx < cols; cx++) {
+        const cell = grid[cy][cx]
+        if (!cell) continue
+
+        // Get color RGB
+        let r: number, g: number, b: number
+        const staticColor = STATIC_COLORS[MATERIAL_TO_ID[cell]]
+        if (staticColor) {
+          [r, g, b] = staticColor
+        } else if (cell === 'fire') {
+          const h = Math.random() * 30 + 10
+          const l = 50 + Math.random() * 20
+          ;[r, g, b] = hslToRgb(h, 100, l)
+        } else if (cell === 'plasma') {
+          const h = Math.random() < 0.5 ? 280 + Math.random() * 20 : 320 + Math.random() * 20
+          const l = 60 + Math.random() * 25
+          ;[r, g, b] = hslToRgb(h, 100, l)
+        } else if (cell === 'lightning') {
+          const h = 50 + Math.random() * 20
+          const l = 80 + Math.random() * 20
+          ;[r, g, b] = hslToRgb(h, 100, l)
+        } else {
+          continue
+        }
+
+        // Fill CELL_SIZE x CELL_SIZE pixels
+        const startX = cx * CELL_SIZE
+        const startY = cy * CELL_SIZE
+        for (let py = 0; py < CELL_SIZE; py++) {
+          for (let px = 0; px < CELL_SIZE; px++) {
+            const pixelIndex = ((startY + py) * width + (startX + px)) * 4
+            data[pixelIndex] = r
+            data[pixelIndex + 1] = g
+            data[pixelIndex + 2] = b
+            data[pixelIndex + 3] = 255
+          }
         }
       }
     }
+
+    ctx.putImageData(imageData, 0, 0)
   }, [])
 
   // Game loop
@@ -807,22 +917,16 @@ function App() {
     <div className="app">
       <div className="controls">
         <div className="material-picker">
-          {materials.map((m) => {
-            const colorVal = COLORS[m]
-            const color = typeof colorVal === 'function'
-              ? (m === 'plasma' ? '#c8a2c8' : m === 'lightning' ? '#ffff88' : '#ff6600')
-              : colorVal
-            return (
-              <button
-                key={m}
-                className={`material-btn ${tool === m ? 'active' : ''}`}
-                onClick={() => setTool(m)}
-                style={{ '--material-color': color } as React.CSSProperties}
-              >
-                {m}
-              </button>
-            )
-          })}
+          {materials.map((m) => (
+            <button
+              key={m}
+              className={`material-btn ${tool === m ? 'active' : ''}`}
+              onClick={() => setTool(m)}
+              style={{ '--material-color': BUTTON_COLORS[m] } as React.CSSProperties}
+            >
+              {m}
+            </button>
+          ))}
         </div>
         <div className="action-btns">
           <button className="reset-btn" onClick={reset}>
