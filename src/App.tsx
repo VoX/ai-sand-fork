@@ -30,6 +30,7 @@ function App() {
   const [brushSize, setBrushSize] = useState(3)
   const animationRef = useRef<number>(0)
   const dimensionsRef = useRef({ cols: 0, rows: 0 })
+  const pointerPosRef = useRef<{ x: number; y: number } | null>(null)
 
   // Initialize grid
   const initGrid = useCallback(() => {
@@ -149,7 +150,7 @@ function App() {
     }
 
     // Process top to bottom for rising elements (fire, gas)
-    for (let y = 1; y < rows; y++) {
+    for (let y = 0; y < rows; y++) {
       const startX = Math.random() < 0.5 ? 0 : cols - 1
       const endX = startX === 0 ? cols : -1
       const stepX = startX === 0 ? 1 : -1
@@ -283,35 +284,33 @@ function App() {
             }
           }
         } else if (cell === 'lightning') {
-          // Lightning: strikes down fast, turns sand to glass, spreads in water
-          // Disappears after a bit
-          if (Math.random() < 0.15) {
+          // Lightning: strikes down, turns sand to glass, spreads in water
+          if (Math.random() < 0.2) {
             grid[y][x] = null
             continue
           }
 
-          // Strike downward FAST (check many cells for speed)
+          // Strike downward
           let struck = false
-          for (let dist = 1; dist <= 6; dist++) {
+          for (let dist = 1; dist <= 3; dist++) {
             const ny = y + dist
             if (ny >= rows) break
 
             const target = grid[ny][x]
 
             if (target === 'sand') {
-              // BIG lightning strike - create glass at impact
+              // Lightning strike - create glass at impact
               grid[ny][x] = 'glass'
               grid[y][x] = null
               struck = true
 
-              // Create multiple branching lightning tendrils through sand
+              // Create branching lightning tendrils through sand
               const createTendril = (startX: number, startY: number, dirX: number, dirY: number, length: number) => {
                 let tx = startX
                 let ty = startY
                 for (let i = 0; i < length; i++) {
-                  // Wobble direction more
-                  if (Math.random() < 0.4) dirX = Math.random() < 0.5 ? -1 : 1
-                  if (Math.random() < 0.3) dirY = Math.random() < 0.8 ? 1 : 0
+                  if (Math.random() < 0.3) dirX = Math.random() < 0.5 ? -1 : 1
+                  if (Math.random() < 0.2) dirY = Math.random() < 0.8 ? 1 : 0
 
                   tx += dirX
                   ty += dirY
@@ -319,9 +318,9 @@ function App() {
                   if (tx < 0 || tx >= cols || ty < 0 || ty >= rows) break
                   if (grid[ty][tx] === 'sand') {
                     grid[ty][tx] = 'glass'
-                    // Sub-branch often
-                    if (Math.random() < 0.35 && length > 3) {
-                      createTendril(tx, ty, Math.random() < 0.5 ? -1 : 1, 1, Math.floor(length * 0.7))
+                    // Sub-branch sometimes
+                    if (Math.random() < 0.15 && length > 3) {
+                      createTendril(tx, ty, Math.random() < 0.5 ? -1 : 1, 1, Math.floor(length * 0.5))
                     }
                   } else if (grid[ty][tx] !== null && grid[ty][tx] !== 'glass') {
                     break
@@ -329,31 +328,29 @@ function App() {
                 }
               }
 
-              // LOTS of main tendrils spreading from impact
-              const tendrilCount = 5 + Math.floor(Math.random() * 5)
+              // A few tendrils spreading from impact
+              const tendrilCount = 2 + Math.floor(Math.random() * 3)
               for (let t = 0; t < tendrilCount; t++) {
                 const dirX = Math.random() < 0.5 ? -1 : 1
-                createTendril(x, ny, dirX, 1, 10 + Math.floor(Math.random() * 15))
+                createTendril(x, ny, dirX, 1, 5 + Math.floor(Math.random() * 6))
               }
 
-              // Also create some upward tendrils
-              for (let t = 0; t < 2; t++) {
-                const dirX = Math.random() < 0.5 ? -1 : 1
-                let tx = x, ty = ny
-                for (let i = 0; i < 5 + Math.random() * 5; i++) {
-                  tx += dirX + (Math.random() < 0.3 ? (Math.random() < 0.5 ? -1 : 1) : 0)
-                  ty -= 1
-                  if (tx < 0 || tx >= cols || ty < 0) break
-                  if (grid[ty][tx] === 'sand') {
-                    grid[ty][tx] = 'glass'
-                  } else if (grid[ty][tx] !== null && grid[ty][tx] !== 'glass') {
-                    break
-                  }
+              // One upward tendril
+              const dirX = Math.random() < 0.5 ? -1 : 1
+              let tx = x, ty = ny
+              for (let i = 0; i < 3 + Math.random() * 3; i++) {
+                tx += dirX + (Math.random() < 0.2 ? (Math.random() < 0.5 ? -1 : 1) : 0)
+                ty -= 1
+                if (tx < 0 || tx >= cols || ty < 0) break
+                if (grid[ty][tx] === 'sand') {
+                  grid[ty][tx] = 'glass'
+                } else if (grid[ty][tx] !== null && grid[ty][tx] !== 'glass') {
+                  break
                 }
               }
 
-              // BIG shockwave - push sand away from impact
-              const shockRadius = 8
+              // Shockwave - push sand away from impact
+              const shockRadius = 5
               for (let sdy = -shockRadius; sdy <= shockRadius; sdy++) {
                 for (let sdx = -shockRadius; sdx <= shockRadius; sdx++) {
                   const distSq = sdx * sdx + sdy * sdy
@@ -361,18 +358,9 @@ function App() {
                     const sx = x + sdx
                     const sy = ny + sdy
                     if (sx >= 0 && sx < cols && sy >= 0 && sy < rows && grid[sy][sx] === 'sand') {
-                      // Push sand outward multiple cells
-                      const pushDist = Math.ceil((shockRadius - Math.sqrt(distSq)) / 2) + 1
-                      let pushX = sx, pushY = sy
-                      for (let p = 0; p < pushDist; p++) {
-                        const nextX = pushX + Math.sign(sdx)
-                        const nextY = pushY + Math.sign(sdy)
-                        if (nextX >= 0 && nextX < cols && nextY >= 0 && nextY < rows && !grid[nextY][nextX]) {
-                          pushX = nextX
-                          pushY = nextY
-                        } else break
-                      }
-                      if (pushX !== sx || pushY !== sy) {
+                      const pushX = sx + Math.sign(sdx)
+                      const pushY = sy + Math.sign(sdy)
+                      if (pushX >= 0 && pushX < cols && pushY >= 0 && pushY < rows && !grid[pushY][pushX]) {
                         grid[pushY][pushX] = 'sand'
                         grid[sy][sx] = null
                       }
@@ -446,29 +434,15 @@ function App() {
             }
           }
 
-          // If didn't hit anything, move down FAST and branch more
+          // If didn't hit anything, move down and occasionally branch
           if (!struck && y + 1 < rows && !grid[y + 1][x]) {
-            // Move multiple cells at once
-            let moveY = y
-            for (let m = 1; m <= 3; m++) {
-              if (y + m < rows && !grid[y + m][x]) {
-                moveY = y + m
-              } else break
-            }
-            grid[moveY][x] = 'lightning'
+            grid[y + 1][x] = 'lightning'
             grid[y][x] = null
-            // Branch more often while traveling
-            if (Math.random() < 0.35) {
+            // Sometimes branch while traveling
+            if (Math.random() < 0.15) {
               const branchX = x + (Math.random() < 0.5 ? -1 : 1)
               if (branchX >= 0 && branchX < cols && !grid[y][branchX]) {
                 grid[y][branchX] = 'lightning'
-              }
-            }
-            // Sometimes spawn extra bolt
-            if (Math.random() < 0.2) {
-              const extraX = x + (Math.random() < 0.5 ? -2 : 2)
-              if (extraX >= 0 && extraX < cols && !grid[y][extraX]) {
-                grid[y][extraX] = 'lightning'
               }
             }
           } else if (!struck) {
@@ -761,10 +735,12 @@ function App() {
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault()
     setIsDrawing(true)
+    pointerPosRef.current = { x: e.clientX, y: e.clientY }
     addParticles(e.clientX, e.clientY)
   }, [addParticles])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    pointerPosRef.current = { x: e.clientX, y: e.clientY }
     if (isDrawing) {
       addParticles(e.clientX, e.clientY)
     }
@@ -772,6 +748,15 @@ function App() {
 
   const handlePointerUp = useCallback(() => {
     setIsDrawing(false)
+    pointerPosRef.current = null
+  }, [])
+
+  // Handle pointer entering canvas while button is held
+  const handlePointerEnter = useCallback((e: React.PointerEvent) => {
+    if (e.buttons > 0) {
+      setIsDrawing(true)
+      pointerPosRef.current = { x: e.clientX, y: e.clientY }
+    }
   }, [])
 
   // Handle scroll wheel for brush size
@@ -803,6 +788,18 @@ function App() {
       window.removeEventListener('resize', handleResize)
     }
   }, [initGrid, gameLoop])
+
+  // Continuously add particles while holding mouse
+  useEffect(() => {
+    if (!isDrawing) return
+    const interval = setInterval(() => {
+      const pos = pointerPosRef.current
+      if (pos) {
+        addParticles(pos.x, pos.y)
+      }
+    }, 50)
+    return () => clearInterval(interval)
+  }, [isDrawing, addParticles])
 
   const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning']
 
@@ -845,8 +842,8 @@ function App() {
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
           onPointerCancel={handlePointerUp}
+          onPointerEnter={handlePointerEnter}
           onWheel={handleWheel}
           style={{ touchAction: 'none' }}
         />
