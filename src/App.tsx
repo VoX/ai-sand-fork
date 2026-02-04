@@ -55,7 +55,7 @@ const STATIC_COLORS: Record<number, [number, number, number]> = {
 const CELL_SIZE = 4
 
 // Pre-allocate for HSL to RGB conversion
-function hslToRgb(h: number, s: number, l: number): [number, number, number] {
+function hslToRgb(h: number, s: number, l: number): number {
   s /= 100
   l /= 100
   const a = s * Math.min(l, 1 - l)
@@ -63,8 +63,35 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
     const k = (n + h / 30) % 12
     return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
   }
-  return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)]
+  const r = Math.round(f(0) * 255)
+  const g = Math.round(f(8) * 255)
+  const b = Math.round(f(4) * 255)
+  // Return as ABGR for Uint32Array (little endian)
+  return (255 << 24) | (b << 16) | (g << 8) | r
 }
+
+// Pre-generate color palettes for dynamic materials (as ABGR uint32)
+const FIRE_COLORS: number[] = []
+const PLASMA_COLORS: number[] = []
+const LIGHTNING_COLORS: number[] = []
+
+for (let i = 0; i < 32; i++) {
+  // Fire: hue 10-40, lightness 50-70
+  FIRE_COLORS.push(hslToRgb(10 + (i / 32) * 30, 100, 50 + (i / 32) * 20))
+  // Plasma: hue 280-300 or 320-340, lightness 60-85
+  PLASMA_COLORS.push(hslToRgb(280 + (i / 32) * 20, 100, 60 + (i / 32) * 25))
+  PLASMA_COLORS.push(hslToRgb(320 + (i / 32) * 20, 100, 60 + (i / 32) * 25))
+  // Lightning: hue 50-70, lightness 80-100
+  LIGHTNING_COLORS.push(hslToRgb(50 + (i / 32) * 20, 100, 80 + (i / 32) * 20))
+}
+
+// Pre-calculate static colors as ABGR uint32
+const STATIC_COLORS_U32: Record<number, number> = {}
+for (const [id, [r, g, b]] of Object.entries(STATIC_COLORS)) {
+  STATIC_COLORS_U32[Number(id)] = (255 << 24) | (b << 16) | (g << 8) | r
+}
+
+const BG_COLOR_U32 = (255 << 24) | (26 << 16) | (26 << 8) | 26
 
 const BUTTON_COLORS: Record<Material, string> = {
   sand: '#e6c86e',
@@ -764,7 +791,7 @@ function App() {
     }
   }, [])
 
-  // Render grid to canvas using ImageData for performance
+  // Render grid to canvas using Uint32Array for maximum performance
   const render = useCallback(() => {
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
@@ -773,40 +800,33 @@ function App() {
 
     const grid = gridRef.current
     const { cols, rows } = dimensionsRef.current
-    const data = imageData.data
     const width = canvas.width
 
-    // Fill with background color
-    for (let i = 0; i < data.length; i += 4) {
-      data[i] = 26     // R
-      data[i + 1] = 26 // G
-      data[i + 2] = 26 // B
-      data[i + 3] = 255 // A
-    }
+    // Use Uint32Array view for 4x faster writes
+    const data32 = new Uint32Array(imageData.data.buffer)
+
+    // Fill with background color (single value write per pixel)
+    data32.fill(BG_COLOR_U32)
 
     // Draw particles
     for (let cy = 0; cy < rows; cy++) {
+      const row = grid[cy]
       for (let cx = 0; cx < cols; cx++) {
-        const cell = grid[cy][cx]
+        const cell = row[cx]
         if (!cell) continue
 
-        // Get color RGB
-        let r: number, g: number, b: number
-        const staticColor = STATIC_COLORS[MATERIAL_TO_ID[cell]]
+        // Get color as uint32
+        let color: number
+        const matId = MATERIAL_TO_ID[cell]
+        const staticColor = STATIC_COLORS_U32[matId]
         if (staticColor) {
-          [r, g, b] = staticColor
+          color = staticColor
         } else if (cell === 'fire') {
-          const h = Math.random() * 30 + 10
-          const l = 50 + Math.random() * 20
-          ;[r, g, b] = hslToRgb(h, 100, l)
+          color = FIRE_COLORS[(cx + cy) & 31]
         } else if (cell === 'plasma') {
-          const h = Math.random() < 0.5 ? 280 + Math.random() * 20 : 320 + Math.random() * 20
-          const l = 60 + Math.random() * 25
-          ;[r, g, b] = hslToRgb(h, 100, l)
+          color = PLASMA_COLORS[(cx + cy) & 63]
         } else if (cell === 'lightning') {
-          const h = 50 + Math.random() * 20
-          const l = 80 + Math.random() * 20
-          ;[r, g, b] = hslToRgb(h, 100, l)
+          color = LIGHTNING_COLORS[(cx + cy) & 31]
         } else {
           continue
         }
@@ -815,12 +835,9 @@ function App() {
         const startX = cx * CELL_SIZE
         const startY = cy * CELL_SIZE
         for (let py = 0; py < CELL_SIZE; py++) {
+          const rowStart = (startY + py) * width + startX
           for (let px = 0; px < CELL_SIZE; px++) {
-            const pixelIndex = ((startY + py) * width + (startX + px)) * 4
-            data[pixelIndex] = r
-            data[pixelIndex + 1] = g
-            data[pixelIndex + 2] = b
-            data[pixelIndex + 3] = 255
+            data32[rowStart + px] = color
           }
         }
       }
