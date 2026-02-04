@@ -27,6 +27,7 @@ function App() {
   const gridRef = useRef<Cell[][]>([])
   const [tool, setTool] = useState<Tool>('sand')
   const [isDrawing, setIsDrawing] = useState(false)
+  const [brushSize, setBrushSize] = useState(3)
   const animationRef = useRef<number>(0)
   const dimensionsRef = useRef({ cols: 0, rows: 0 })
 
@@ -82,11 +83,10 @@ function App() {
 
     const grid = gridRef.current
     const { cols, rows } = dimensionsRef.current
-    const radius = 3
 
-    for (let dy = -radius; dy <= radius; dy++) {
-      for (let dx = -radius; dx <= radius; dx++) {
-        if (dx * dx + dy * dy <= radius * radius) {
+    for (let dy = -brushSize; dy <= brushSize; dy++) {
+      for (let dx = -brushSize; dx <= brushSize; dx++) {
+        if (dx * dx + dy * dy <= brushSize * brushSize) {
           const nx = pos.x + dx
           const ny = pos.y + dy
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
@@ -99,7 +99,7 @@ function App() {
         }
       }
     }
-  }, [tool, getCellPos])
+  }, [tool, brushSize, getCellPos])
 
   // Physics update
   const updatePhysics = useCallback(() => {
@@ -159,6 +159,11 @@ function App() {
         if (!cell) continue
 
         if (cell === 'fire') {
+          // Fire escapes at ceiling
+          if (y === 0) {
+            grid[y][x] = null
+            continue
+          }
           // Fire: burns out randomly, rises, spreads to flammable materials
           if (Math.random() < 0.1) {
             // 10% chance to burn out and create gas
@@ -199,6 +204,11 @@ function App() {
             }
           }
         } else if (cell === 'gas') {
+          // Gas escapes at ceiling
+          if (y === 0) {
+            grid[y][x] = null
+            continue
+          }
           // Gas: rises and disperses
           if (Math.random() < 0.02) {
             // Slowly disappears
@@ -228,6 +238,11 @@ function App() {
             }
           }
         } else if (cell === 'plasma') {
+          // Plasma escapes at ceiling
+          if (y === 0) {
+            grid[y][x] = null
+            continue
+          }
           // Plasma: fire-like, destroys sand in chain reaction
           if (Math.random() < 0.08) {
             // Burns out slightly slower than fire
@@ -387,8 +402,25 @@ function App() {
               struck = true
               break
             } else if (target === 'nitro') {
-              // Triggers nitro explosion
+              // HUGE lightning-triggered nitro explosion
               grid[y][x] = null
+              const hugeRadius = 15
+              for (let edy = -hugeRadius; edy <= hugeRadius; edy++) {
+                for (let edx = -hugeRadius; edx <= hugeRadius; edx++) {
+                  if (edx * edx + edy * edy <= hugeRadius * hugeRadius) {
+                    const eny = ny + edy
+                    const enx = x + edx
+                    if (eny >= 0 && eny < rows && enx >= 0 && enx < cols) {
+                      if (grid[eny][enx] === 'water') {
+                        grid[eny][enx] = Math.random() < 0.7 ? 'stone' : null
+                      } else if (grid[eny][enx] !== 'stone' && grid[eny][enx] !== 'glass') {
+                        grid[eny][enx] = 'fire'
+                      }
+                    }
+                  }
+                }
+              }
+              struck = true
               break
             } else if (target === 'stone' || target === 'glass') {
               // Stops at stone/glass
@@ -742,6 +774,20 @@ function App() {
     setIsDrawing(false)
   }, [])
 
+  // Handle scroll wheel for brush size
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault()
+    setBrushSize(prev => {
+      if (e.deltaY > 0) {
+        // Scroll down = smaller
+        return Math.max(1, prev - 1)
+      } else {
+        // Scroll up = bigger
+        return Math.min(15, prev + 1)
+      }
+    })
+  }, [])
+
   // Initialize and start game loop
   useEffect(() => {
     initGrid()
@@ -801,6 +847,7 @@ function App() {
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
           onPointerCancel={handlePointerUp}
+          onWheel={handleWheel}
           style={{ touchAction: 'none' }}
         />
       </div>
