@@ -4,116 +4,74 @@ import './App.css'
 type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning'
 type Tool = Material | 'erase'
 
-// Use numeric IDs for faster comparisons
-const MAT = {
-  EMPTY: 0,
-  SAND: 1,
-  WATER: 2,
-  DIRT: 3,
-  STONE: 4,
-  PLANT: 5,
-  FIRE: 6,
-  GAS: 7,
-  FLUFF: 8,
-  BUG: 9,
-  PLASMA: 10,
-  NITRO: 11,
-  GLASS: 12,
-  LIGHTNING: 13,
-} as const
+// Numeric IDs for maximum performance
+const EMPTY = 0, SAND = 1, WATER = 2, DIRT = 3, STONE = 4, PLANT = 5
+const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13
 
 const MATERIAL_TO_ID: Record<Material, number> = {
-  sand: MAT.SAND,
-  water: MAT.WATER,
-  dirt: MAT.DIRT,
-  stone: MAT.STONE,
-  plant: MAT.PLANT,
-  fire: MAT.FIRE,
-  gas: MAT.GAS,
-  fluff: MAT.FLUFF,
-  bug: MAT.BUG,
-  plasma: MAT.PLASMA,
-  nitro: MAT.NITRO,
-  glass: MAT.GLASS,
-  lightning: MAT.LIGHTNING,
+  sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
+  fire: FIRE, gas: GAS, fluff: FLUFF, bug: BUG, plasma: PLASMA,
+  nitro: NITRO, glass: GLASS, lightning: LIGHTNING,
 }
 
-// Pre-calculated RGB colors for static materials
-const STATIC_COLORS: Record<number, [number, number, number]> = {
-  [MAT.SAND]: [230, 200, 110],
-  [MAT.WATER]: [74, 144, 217],
-  [MAT.DIRT]: [139, 90, 43],
-  [MAT.STONE]: [102, 102, 102],
-  [MAT.PLANT]: [34, 139, 34],
-  [MAT.GAS]: [136, 136, 136],
-  [MAT.FLUFF]: [245, 230, 211],
-  [MAT.BUG]: [255, 105, 180],
-  [MAT.NITRO]: [57, 255, 20],
-  [MAT.GLASS]: [168, 216, 234],
-}
+// Density for displacement (higher sinks through lower)
+const DENSITY = new Uint8Array([0, 3, 1, 3, 5, 0, 0, 0, 0, 0, 0, 2, 5, 0])
 
 const CELL_SIZE = 4
 
-// Pre-allocate for HSL to RGB conversion
-function hslToRgb(h: number, s: number, l: number): number {
-  s /= 100
-  l /= 100
+// Pre-calculate colors as ABGR uint32
+function hslToU32(h: number, s: number, l: number): number {
+  s /= 100; l /= 100
   const a = s * Math.min(l, 1 - l)
   const f = (n: number) => {
     const k = (n + h / 30) % 12
     return l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
   }
-  const r = Math.round(f(0) * 255)
-  const g = Math.round(f(8) * 255)
-  const b = Math.round(f(4) * 255)
-  // Return as ABGR for Uint32Array (little endian)
-  return (255 << 24) | (b << 16) | (g << 8) | r
+  return (255 << 24) | (Math.round(f(4) * 255) << 16) | (Math.round(f(8) * 255) << 8) | Math.round(f(0) * 255)
 }
 
-// Pre-generate color palettes for dynamic materials (as ABGR uint32)
-const FIRE_COLORS: number[] = []
-const PLASMA_COLORS: number[] = []
-const LIGHTNING_COLORS: number[] = []
+// Static colors as ABGR uint32
+const COLORS_U32 = new Uint32Array([
+  0xFF1A1A1A, // EMPTY (bg)
+  0xFF6EC8E6, // SAND
+  0xFFD9904A, // WATER
+  0xFF2B5A8B, // DIRT
+  0xFF666666, // STONE
+  0xFF228B22, // PLANT
+  0, // FIRE (dynamic)
+  0xFF888888, // GAS
+  0xFFD3E6F5, // FLUFF
+  0xFFB469FF, // BUG
+  0, // PLASMA (dynamic)
+  0xFF14FF39, // NITRO
+  0xFFEAD8A8, // GLASS
+  0, // LIGHTNING (dynamic)
+])
 
+// Dynamic color palettes
+const FIRE_COLORS = new Uint32Array(32)
+const PLASMA_COLORS = new Uint32Array(64)
+const LIGHTNING_COLORS = new Uint32Array(32)
 for (let i = 0; i < 32; i++) {
-  // Fire: hue 10-40, lightness 50-70
-  FIRE_COLORS.push(hslToRgb(10 + (i / 32) * 30, 100, 50 + (i / 32) * 20))
-  // Plasma: hue 280-300 or 320-340, lightness 60-85
-  PLASMA_COLORS.push(hslToRgb(280 + (i / 32) * 20, 100, 60 + (i / 32) * 25))
-  PLASMA_COLORS.push(hslToRgb(320 + (i / 32) * 20, 100, 60 + (i / 32) * 25))
-  // Lightning: hue 50-70, lightness 80-100
-  LIGHTNING_COLORS.push(hslToRgb(50 + (i / 32) * 20, 100, 80 + (i / 32) * 20))
+  FIRE_COLORS[i] = hslToU32(10 + i, 100, 50 + (i / 32) * 20)
+  LIGHTNING_COLORS[i] = hslToU32(50 + (i / 32) * 20, 100, 80 + (i / 32) * 20)
+}
+for (let i = 0; i < 64; i++) {
+  PLASMA_COLORS[i] = hslToU32(i < 32 ? 280 + i : 320 + (i - 32), 100, 60 + (i / 64) * 25)
 }
 
-// Pre-calculate static colors as ABGR uint32
-const STATIC_COLORS_U32: Record<number, number> = {}
-for (const [id, [r, g, b]] of Object.entries(STATIC_COLORS)) {
-  STATIC_COLORS_U32[Number(id)] = (255 << 24) | (b << 16) | (g << 8) | r
-}
-
-const BG_COLOR_U32 = (255 << 24) | (26 << 16) | (26 << 8) | 26
+const BG_COLOR = 0xFF1A1A1A
 
 const BUTTON_COLORS: Record<Material, string> = {
-  sand: '#e6c86e',
-  water: '#4a90d9',
-  dirt: '#8b5a2b',
-  stone: '#666666',
-  plant: '#228b22',
-  fire: '#ff6600',
-  gas: '#888888',
-  fluff: '#f5e6d3',
-  bug: '#ff69b4',
-  plasma: '#c8a2c8',
-  nitro: '#39ff14',
-  glass: '#a8d8ea',
+  sand: '#e6c86e', water: '#4a90d9', dirt: '#8b5a2b', stone: '#666666',
+  plant: '#228b22', fire: '#ff6600', gas: '#888888', fluff: '#f5e6d3',
+  bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
   lightning: '#ffff88',
 }
 
-type Cell = Material | null
-
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const gridRef = useRef<Cell[][]>([])
+  const gridRef = useRef<Uint8Array>(new Uint8Array(0))
   const imageDataRef = useRef<ImageData | null>(null)
   const [tool, setTool] = useState<Tool>('sand')
   const [isDrawing, setIsDrawing] = useState(false)
@@ -122,75 +80,52 @@ function App() {
   const dimensionsRef = useRef({ cols: 0, rows: 0 })
   const pointerPosRef = useRef<{ x: number; y: number } | null>(null)
 
-  // Initialize grid
   const initGrid = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-
     const container = canvas.parentElement
     if (!container) return
 
     const width = container.clientWidth
     const height = container.clientHeight
-
     canvas.width = width
     canvas.height = height
 
     const cols = Math.floor(width / CELL_SIZE)
     const rows = Math.floor(height / CELL_SIZE)
-
     dimensionsRef.current = { cols, rows }
+    gridRef.current = new Uint8Array(cols * rows)
 
-    const grid: Cell[][] = []
-    for (let y = 0; y < rows; y++) {
-      grid[y] = []
-      for (let x = 0; x < cols; x++) {
-        grid[y][x] = null
-      }
-    }
-    gridRef.current = grid
-
-    // Pre-create ImageData for fast rendering
     const ctx = canvas.getContext('2d')
-    if (ctx) {
-      imageDataRef.current = ctx.createImageData(width, height)
-    }
+    if (ctx) imageDataRef.current = ctx.createImageData(width, height)
   }, [])
 
-  // Get cell position from screen coordinates
   const getCellPos = useCallback((clientX: number, clientY: number) => {
     const canvas = canvasRef.current
     if (!canvas) return null
-
     const rect = canvas.getBoundingClientRect()
     const x = Math.floor((clientX - rect.left) / CELL_SIZE)
     const y = Math.floor((clientY - rect.top) / CELL_SIZE)
-
     const { cols, rows } = dimensionsRef.current
-    if (x >= 0 && x < cols && y >= 0 && y < rows) {
-      return { x, y }
-    }
+    if (x >= 0 && x < cols && y >= 0 && y < rows) return { x, y }
     return null
   }, [])
 
-  // Add particles at position (or erase)
   const addParticles = useCallback((clientX: number, clientY: number) => {
     const pos = getCellPos(clientX, clientY)
     if (!pos) return
-
-    const grid = gridRef.current
+    const g = gridRef.current
     const { cols, rows } = dimensionsRef.current
+    const matId = tool === 'erase' ? EMPTY : MATERIAL_TO_ID[tool]
 
     for (let dy = -brushSize; dy <= brushSize; dy++) {
       for (let dx = -brushSize; dx <= brushSize; dx++) {
         if (dx * dx + dy * dy <= brushSize * brushSize) {
-          const nx = pos.x + dx
-          const ny = pos.y + dy
+          const nx = pos.x + dx, ny = pos.y + dy
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-            if (tool === 'erase') {
-              grid[ny][nx] = null
-            } else if (!grid[ny][nx] && Math.random() > 0.3) {
-              grid[ny][nx] = tool
+            const idx = ny * cols + nx
+            if (tool === 'erase' || (g[idx] === EMPTY && Math.random() > 0.3)) {
+              g[idx] = matId
             }
           }
         }
@@ -198,640 +133,306 @@ function App() {
     }
   }, [tool, brushSize, getCellPos])
 
-  // Physics update
   const updatePhysics = useCallback(() => {
-    const grid = gridRef.current
+    const g = gridRef.current
     const { cols, rows } = dimensionsRef.current
+    const rand = Math.random
 
-    // Helper to check if a cell can be displaced by a heavier material
-    const canDisplace = (from: Cell, to: Cell): boolean => {
-      if (!to) return true
-      if (from === 'sand' && to === 'water') return true
-      if (from === 'dirt' && to === 'water') return true
-      if (from === 'stone' && to === 'water') return true
-      return false
-    }
+    // Helper: index from x,y
+    const idx = (x: number, y: number) => y * cols + x
 
-    // Helper to swap or move
-    const moveOrSwap = (fromY: number, fromX: number, toY: number, toX: number) => {
-      const from = grid[fromY][fromX]
-      const to = grid[toY][toX]
-      grid[toY][toX] = from
-      grid[fromY][fromX] = to
-    }
-
-    // Check neighbors for a material
-    const hasNeighbor = (y: number, x: number, mat: Material): boolean => {
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if (dy === 0 && dx === 0) continue
-          const ny = y + dy
-          const nx = x + dx
-          if (ny >= 0 && ny < rows && nx >= 0 && nx < cols && grid[ny][nx] === mat) {
-            return true
-          }
-        }
-      }
-      return false
-    }
-
-    // Check if flammable
-    const isFlammable = (cell: Cell): boolean => {
-      return cell === 'plant' || cell === 'gas' || cell === 'fluff' || cell === 'bug'
-    }
-
-    // Check if edible by bugs
-    const isEdible = (cell: Cell): boolean => {
-      return cell === 'dirt' || cell === 'plant'
-    }
-
-    // Process top to bottom for rising elements (fire, gas)
+    // Process rising elements (fire, gas, plasma) - top to bottom
     for (let y = 0; y < rows; y++) {
-      const startX = Math.random() < 0.5 ? 0 : cols - 1
-      const endX = startX === 0 ? cols : -1
-      const stepX = startX === 0 ? 1 : -1
+      const leftToRight = rand() < 0.5
+      for (let i = 0; i < cols; i++) {
+        const x = leftToRight ? i : cols - 1 - i
+        const p = idx(x, y)
+        const c = g[p]
+        if (c === EMPTY) continue
 
-      for (let x = startX; x !== endX; x += stepX) {
-        const cell = grid[y][x]
-        if (!cell) continue
-
-        if (cell === 'fire') {
-          // Fire escapes at ceiling
-          if (y === 0) {
-            grid[y][x] = null
-            continue
-          }
-          // Fire: burns out randomly, rises, spreads to flammable materials
-          if (Math.random() < 0.1) {
-            // 10% chance to burn out and create gas
-            grid[y][x] = Math.random() < 0.3 ? 'gas' : null
-            continue
-          }
-
-          // Spread fire to adjacent flammable materials
+        if (c === FIRE) {
+          if (y === 0) { g[p] = EMPTY; continue }
+          if (rand() < 0.1) { g[p] = rand() < 0.3 ? GAS : EMPTY; continue }
+          // Spread to flammable neighbors
           for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
               if (dy === 0 && dx === 0) continue
-              const ny = y + dy
-              const nx = x + dx
-              if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
-                if (isFlammable(grid[ny][nx]) && Math.random() < 0.3) {
-                  grid[ny][nx] = 'fire'
-                }
+              const nx = x + dx, ny = y + dy
+              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                const ni = idx(nx, ny), nc = g[ni]
+                if ((nc === PLANT || nc === FLUFF || nc === BUG || nc === GAS) && rand() < 0.3) g[ni] = FIRE
               }
             }
           }
-
-          // Fire rises
-          if (y > 0 && !grid[y - 1][x]) {
-            grid[y - 1][x] = 'fire'
-            grid[y][x] = null
-          } else {
-            // Try to rise diagonally
-            const goLeft = Math.random() < 0.5
-            const dx1 = goLeft ? -1 : 1
-            const dx2 = goLeft ? 1 : -1
-
-            if (y > 0 && x + dx1 >= 0 && x + dx1 < cols && !grid[y - 1][x + dx1]) {
-              grid[y - 1][x + dx1] = 'fire'
-              grid[y][x] = null
-            } else if (y > 0 && x + dx2 >= 0 && x + dx2 < cols && !grid[y - 1][x + dx2]) {
-              grid[y - 1][x + dx2] = 'fire'
-              grid[y][x] = null
-            }
-          }
-        } else if (cell === 'gas') {
-          // Gas escapes at ceiling
-          if (y === 0) {
-            grid[y][x] = null
-            continue
-          }
-          // Gas: rises and disperses
-          if (Math.random() < 0.02) {
-            // Slowly disappears
-            grid[y][x] = null
-            continue
-          }
-
           // Rise
-          if (y > 0 && !grid[y - 1][x]) {
-            grid[y - 1][x] = 'gas'
-            grid[y][x] = null
-          } else {
-            // Drift sideways
-            const goLeft = Math.random() < 0.5
-            const dx1 = goLeft ? -1 : 1
-            const dx2 = goLeft ? 1 : -1
-
-            if (y > 0 && x + dx1 >= 0 && x + dx1 < cols && !grid[y - 1][x + dx1]) {
-              grid[y - 1][x + dx1] = 'gas'
-              grid[y][x] = null
-            } else if (y > 0 && x + dx2 >= 0 && x + dx2 < cols && !grid[y - 1][x + dx2]) {
-              grid[y - 1][x + dx2] = 'gas'
-              grid[y][x] = null
-            } else if (x + dx1 >= 0 && x + dx1 < cols && !grid[y][x + dx1]) {
-              grid[y][x + dx1] = 'gas'
-              grid[y][x] = null
+          const up = idx(x, y - 1)
+          if (y > 0 && g[up] === EMPTY) { g[up] = FIRE; g[p] = EMPTY }
+          else {
+            const dx = rand() < 0.5 ? -1 : 1
+            if (y > 0 && x + dx >= 0 && x + dx < cols && g[idx(x + dx, y - 1)] === EMPTY) {
+              g[idx(x + dx, y - 1)] = FIRE; g[p] = EMPTY
             }
           }
-        } else if (cell === 'plasma') {
-          // Plasma escapes at ceiling
-          if (y === 0) {
-            grid[y][x] = null
-            continue
+        } else if (c === GAS) {
+          if (y === 0) { g[p] = EMPTY; continue }
+          if (rand() < 0.02) { g[p] = EMPTY; continue }
+          const up = idx(x, y - 1)
+          if (y > 0 && g[up] === EMPTY) { g[up] = GAS; g[p] = EMPTY }
+          else {
+            const dx = rand() < 0.5 ? -1 : 1
+            if (y > 0 && x + dx >= 0 && x + dx < cols && g[idx(x + dx, y - 1)] === EMPTY) {
+              g[idx(x + dx, y - 1)] = GAS; g[p] = EMPTY
+            } else if (x + dx >= 0 && x + dx < cols && g[idx(x + dx, y)] === EMPTY) {
+              g[idx(x + dx, y)] = GAS; g[p] = EMPTY
+            }
           }
-          // Plasma: fire-like, destroys sand in chain reaction
-          if (Math.random() < 0.08) {
-            // Burns out slightly slower than fire
-            grid[y][x] = null
-            continue
-          }
-
-          // Spread plasma to adjacent sand (chain reaction)
+        } else if (c === PLASMA) {
+          if (y === 0) { g[p] = EMPTY; continue }
+          if (rand() < 0.08) { g[p] = EMPTY; continue }
+          // Spread to sand
           for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
               if (dy === 0 && dx === 0) continue
-              const ny = y + dy
-              const nx = x + dx
-              if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
-                if (grid[ny][nx] === 'sand' && Math.random() < 0.4) {
-                  grid[ny][nx] = 'plasma'
-                }
+              const nx = x + dx, ny = y + dy
+              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[idx(nx, ny)] === SAND && rand() < 0.4) {
+                g[idx(nx, ny)] = PLASMA
               }
             }
           }
-
-          // Plasma rises like fire
-          if (y > 0 && !grid[y - 1][x]) {
-            grid[y - 1][x] = 'plasma'
-            grid[y][x] = null
-          } else {
-            // Try to rise diagonally
-            const goLeft = Math.random() < 0.5
-            const dx1 = goLeft ? -1 : 1
-            const dx2 = goLeft ? 1 : -1
-
-            if (y > 0 && x + dx1 >= 0 && x + dx1 < cols && !grid[y - 1][x + dx1]) {
-              grid[y - 1][x + dx1] = 'plasma'
-              grid[y][x] = null
-            } else if (y > 0 && x + dx2 >= 0 && x + dx2 < cols && !grid[y - 1][x + dx2]) {
-              grid[y - 1][x + dx2] = 'plasma'
-              grid[y][x] = null
+          const up = idx(x, y - 1)
+          if (y > 0 && g[up] === EMPTY) { g[up] = PLASMA; g[p] = EMPTY }
+          else {
+            const dx = rand() < 0.5 ? -1 : 1
+            if (y > 0 && x + dx >= 0 && x + dx < cols && g[idx(x + dx, y - 1)] === EMPTY) {
+              g[idx(x + dx, y - 1)] = PLASMA; g[p] = EMPTY
             }
           }
-        } else if (cell === 'lightning') {
-          // Lightning: strikes down, turns sand to glass, spreads in water
-          if (Math.random() < 0.2) {
-            grid[y][x] = null
-            continue
-          }
-
-          // Strike downward
+        } else if (c === LIGHTNING) {
+          if (rand() < 0.2) { g[p] = EMPTY; continue }
           let struck = false
-          for (let dist = 1; dist <= 3; dist++) {
+          for (let dist = 1; dist <= 3 && !struck; dist++) {
             const ny = y + dist
             if (ny >= rows) break
-
-            const target = grid[ny][x]
-
-            if (target === 'sand') {
-              // Lightning strike - create glass at impact
-              grid[ny][x] = 'glass'
-              grid[y][x] = null
-              struck = true
-
-              // Create branching lightning tendrils through sand
-              const createTendril = (startX: number, startY: number, dirX: number, dirY: number, length: number) => {
-                let tx = startX
-                let ty = startY
-                for (let i = 0; i < length; i++) {
-                  if (Math.random() < 0.3) dirX = Math.random() < 0.5 ? -1 : 1
-                  if (Math.random() < 0.2) dirY = Math.random() < 0.8 ? 1 : 0
-
-                  tx += dirX
-                  ty += dirY
-
-                  if (tx < 0 || tx >= cols || ty < 0 || ty >= rows) break
-                  if (grid[ty][tx] === 'sand') {
-                    grid[ty][tx] = 'glass'
-                    // Sub-branch sometimes
-                    if (Math.random() < 0.15 && length > 3) {
-                      createTendril(tx, ty, Math.random() < 0.5 ? -1 : 1, 1, Math.floor(length * 0.5))
-                    }
-                  } else if (grid[ty][tx] !== null && grid[ty][tx] !== 'glass') {
-                    break
-                  }
+            const ti = idx(x, ny), t = g[ti]
+            if (t === SAND) {
+              g[ti] = GLASS; g[p] = EMPTY; struck = true
+              // Simple tendrils
+              for (let branch = 0; branch < 3; branch++) {
+                let tx = x, ty = ny, dirX = rand() < 0.5 ? -1 : 1
+                for (let len = 0; len < 8; len++) {
+                  if (rand() < 0.3) dirX = rand() < 0.5 ? -1 : 1
+                  tx += dirX; ty += rand() < 0.8 ? 1 : 0
+                  if (tx < 0 || tx >= cols || ty >= rows) break
+                  const bi = idx(tx, ty)
+                  if (g[bi] === SAND) g[bi] = GLASS
+                  else if (g[bi] !== EMPTY && g[bi] !== GLASS) break
                 }
               }
-
-              // A few tendrils spreading from impact
-              const tendrilCount = 2 + Math.floor(Math.random() * 3)
-              for (let t = 0; t < tendrilCount; t++) {
-                const dirX = Math.random() < 0.5 ? -1 : 1
-                createTendril(x, ny, dirX, 1, 5 + Math.floor(Math.random() * 6))
-              }
-
-              // One upward tendril
-              const dirX = Math.random() < 0.5 ? -1 : 1
-              let tx = x, ty = ny
-              for (let i = 0; i < 3 + Math.random() * 3; i++) {
-                tx += dirX + (Math.random() < 0.2 ? (Math.random() < 0.5 ? -1 : 1) : 0)
-                ty -= 1
-                if (tx < 0 || tx >= cols || ty < 0) break
-                if (grid[ty][tx] === 'sand') {
-                  grid[ty][tx] = 'glass'
-                } else if (grid[ty][tx] !== null && grid[ty][tx] !== 'glass') {
-                  break
-                }
-              }
-
-              // Shockwave - push sand away from impact
-              const shockRadius = 5
-              for (let sdy = -shockRadius; sdy <= shockRadius; sdy++) {
-                for (let sdx = -shockRadius; sdx <= shockRadius; sdx++) {
-                  const distSq = sdx * sdx + sdy * sdy
-                  if (distSq > 0 && distSq <= shockRadius * shockRadius) {
-                    const sx = x + sdx
-                    const sy = ny + sdy
-                    if (sx >= 0 && sx < cols && sy >= 0 && sy < rows && grid[sy][sx] === 'sand') {
-                      const pushX = sx + Math.sign(sdx)
-                      const pushY = sy + Math.sign(sdy)
-                      if (pushX >= 0 && pushX < cols && pushY >= 0 && pushY < rows && !grid[pushY][pushX]) {
-                        grid[pushY][pushX] = 'sand'
-                        grid[sy][sx] = null
-                      }
-                    }
-                  }
-                }
-              }
-
-              break
-            } else if (target === 'water') {
-              // Electrify water - spread lightning horizontally MORE
-              grid[ny][x] = 'lightning'
-              grid[y][x] = null
-              // Spread wider in water
+            } else if (t === WATER) {
+              g[ti] = LIGHTNING; g[p] = EMPTY; struck = true
               for (let dx = -3; dx <= 3; dx++) {
                 const wx = x + dx
-                if (wx >= 0 && wx < cols && grid[ny][wx] === 'water' && Math.random() < 0.7) {
-                  grid[ny][wx] = 'lightning'
-                }
+                if (wx >= 0 && wx < cols && g[idx(wx, ny)] === WATER && rand() < 0.7) g[idx(wx, ny)] = LIGHTNING
               }
-              struck = true
-              break
-            } else if (target === 'plant' || target === 'fluff' || target === 'bug') {
-              // Burns flammable things
-              grid[ny][x] = 'fire'
-              grid[y][x] = null
-              struck = true
-              break
-            } else if (target === 'nitro') {
-              // HUGE lightning-triggered nitro explosion
-              grid[y][x] = null
-              const hugeRadius = 15
-              for (let edy = -hugeRadius; edy <= hugeRadius; edy++) {
-                for (let edx = -hugeRadius; edx <= hugeRadius; edx++) {
-                  if (edx * edx + edy * edy <= hugeRadius * hugeRadius) {
-                    const eny = ny + edy
-                    const enx = x + edx
-                    if (eny >= 0 && eny < rows && enx >= 0 && enx < cols) {
-                      if (grid[eny][enx] === 'water') {
-                        grid[eny][enx] = Math.random() < 0.7 ? 'stone' : null
-                      } else if (grid[eny][enx] !== 'stone' && grid[eny][enx] !== 'glass') {
-                        grid[eny][enx] = 'fire'
-                      }
+            } else if (t === PLANT || t === FLUFF || t === BUG) {
+              g[ti] = FIRE; g[p] = EMPTY; struck = true
+            } else if (t === NITRO) {
+              g[p] = EMPTY
+              const r = 15
+              for (let edy = -r; edy <= r; edy++) {
+                for (let edx = -r; edx <= r; edx++) {
+                  if (edx * edx + edy * edy <= r * r) {
+                    const ex = x + edx, ey = ny + edy
+                    if (ex >= 0 && ex < cols && ey >= 0 && ey < rows) {
+                      const ei = idx(ex, ey), ec = g[ei]
+                      if (ec === WATER) g[ei] = rand() < 0.7 ? STONE : EMPTY
+                      else if (ec !== STONE && ec !== GLASS) g[ei] = FIRE
                     }
                   }
                 }
               }
               struck = true
-              break
-            } else if (target === 'stone' || target === 'glass') {
-              // Stops at stone/glass
-              grid[y][x] = null
-              struck = true
-              break
-            } else if (target === 'dirt') {
-              // Passes through dirt, turning some to glass
-              if (Math.random() < 0.4) {
-                grid[ny][x] = 'glass'
-              }
-              grid[y][x] = null
-              struck = true
-              break
-            } else if (!target) {
-              // Move down through empty space
-              continue
-            } else {
-              // Hit something else, stop
-              grid[y][x] = null
-              struck = true
-              break
-            }
+            } else if (t === STONE || t === GLASS) {
+              g[p] = EMPTY; struck = true
+            } else if (t === DIRT) {
+              if (rand() < 0.4) g[ti] = GLASS
+              g[p] = EMPTY; struck = true
+            } else if (t === EMPTY) continue
+            else { g[p] = EMPTY; struck = true }
           }
-
-          // If didn't hit anything, move down and occasionally branch
-          if (!struck && y + 1 < rows && !grid[y + 1][x]) {
-            grid[y + 1][x] = 'lightning'
-            grid[y][x] = null
-            // Sometimes branch while traveling
-            if (Math.random() < 0.15) {
-              const branchX = x + (Math.random() < 0.5 ? -1 : 1)
-              if (branchX >= 0 && branchX < cols && !grid[y][branchX]) {
-                grid[y][branchX] = 'lightning'
-              }
+          if (!struck && y + 1 < rows && g[idx(x, y + 1)] === EMPTY) {
+            g[idx(x, y + 1)] = LIGHTNING; g[p] = EMPTY
+            if (rand() < 0.15) {
+              const bx = x + (rand() < 0.5 ? -1 : 1)
+              if (bx >= 0 && bx < cols && g[idx(bx, y)] === EMPTY) g[idx(bx, y)] = LIGHTNING
             }
-          } else if (!struck) {
-            grid[y][x] = null
-          }
+          } else if (!struck) g[p] = EMPTY
         }
       }
     }
 
-    // Process bottom to top for falling elements
+    // Process falling elements - bottom to top
     for (let y = rows - 2; y >= 0; y--) {
-      const startX = Math.random() < 0.5 ? 0 : cols - 1
-      const endX = startX === 0 ? cols : -1
-      const stepX = startX === 0 ? 1 : -1
+      const leftToRight = rand() < 0.5
+      for (let i = 0; i < cols; i++) {
+        const x = leftToRight ? i : cols - 1 - i
+        const p = idx(x, y)
+        const c = g[p]
+        if (c === EMPTY) continue
 
-      for (let x = startX; x !== endX; x += stepX) {
-        const cell = grid[y][x]
-        if (!cell) continue
+        const below = idx(x, y + 1)
+        const belowCell = g[below]
+        const canSink = (a: number, b: number) => b === EMPTY || (DENSITY[a] > DENSITY[b] && DENSITY[b] > 0)
 
-        if (cell === 'sand') {
-          if (canDisplace(cell, grid[y + 1][x])) {
-            moveOrSwap(y, x, y + 1, x)
+        if (c === SAND) {
+          if (canSink(SAND, belowCell)) {
+            g[below] = SAND; g[p] = belowCell
           } else {
-            const goLeft = Math.random() < 0.5
-            const dx1 = goLeft ? -1 : 1
-            const dx2 = goLeft ? 1 : -1
-
-            if (x + dx1 >= 0 && x + dx1 < cols && canDisplace(cell, grid[y + 1][x + dx1]) && !grid[y][x + dx1]) {
-              moveOrSwap(y, x, y + 1, x + dx1)
-            } else if (x + dx2 >= 0 && x + dx2 < cols && canDisplace(cell, grid[y + 1][x + dx2]) && !grid[y][x + dx2]) {
-              moveOrSwap(y, x, y + 1, x + dx2)
+            const dx = rand() < 0.5 ? -1 : 1
+            const nx1 = x + dx, nx2 = x - dx
+            if (nx1 >= 0 && nx1 < cols && canSink(SAND, g[idx(nx1, y + 1)]) && g[idx(nx1, y)] === EMPTY) {
+              g[idx(nx1, y + 1)] = SAND; g[p] = g[idx(nx1, y + 1)] === WATER ? WATER : EMPTY
+              if (belowCell === WATER) g[p] = WATER
+            } else if (nx2 >= 0 && nx2 < cols && canSink(SAND, g[idx(nx2, y + 1)]) && g[idx(nx2, y)] === EMPTY) {
+              g[idx(nx2, y + 1)] = SAND; g[p] = g[idx(nx2, y + 1)] === WATER ? WATER : EMPTY
             }
           }
-        } else if (cell === 'water') {
-          // Water touching plant near dirt = plant grows
-          if (hasNeighbor(y, x, 'plant') && Math.random() < 0.05) {
-            // Higher chance if dirt nearby
-            const nearDirt = hasNeighbor(y, x, 'dirt')
-            if (nearDirt || Math.random() < 0.3) {
-              grid[y][x] = 'plant'
-              continue
-            }
-          }
-
-          if (!grid[y + 1][x]) {
-            grid[y + 1][x] = cell
-            grid[y][x] = null
-          } else {
-            const goLeft = Math.random() < 0.5
-            const dx1 = goLeft ? -1 : 1
-            const dx2 = goLeft ? 1 : -1
-
-            if (x + dx1 >= 0 && x + dx1 < cols && !grid[y + 1][x + dx1]) {
-              grid[y + 1][x + dx1] = cell
-              grid[y][x] = null
-            } else if (x + dx2 >= 0 && x + dx2 < cols && !grid[y + 1][x + dx2]) {
-              grid[y + 1][x + dx2] = cell
-              grid[y][x] = null
-            } else if (x + dx1 >= 0 && x + dx1 < cols && !grid[y][x + dx1]) {
-              grid[y][x + dx1] = cell
-              grid[y][x] = null
-            } else if (x + dx2 >= 0 && x + dx2 < cols && !grid[y][x + dx2]) {
-              grid[y][x + dx2] = cell
-              grid[y][x] = null
-            }
-          }
-        } else if (cell === 'dirt') {
-          if (canDisplace(cell, grid[y + 1][x])) {
-            moveOrSwap(y, x, y + 1, x)
-          } else if (Math.random() < 0.3) {
-            const goLeft = Math.random() < 0.5
-            const dx1 = goLeft ? -1 : 1
-            const dx2 = goLeft ? 1 : -1
-
-            if (x + dx1 >= 0 && x + dx1 < cols && canDisplace(cell, grid[y + 1][x + dx1]) && !grid[y][x + dx1]) {
-              moveOrSwap(y, x, y + 1, x + dx1)
-            } else if (x + dx2 >= 0 && x + dx2 < cols && canDisplace(cell, grid[y + 1][x + dx2]) && !grid[y][x + dx2]) {
-              moveOrSwap(y, x, y + 1, x + dx2)
-            }
-          }
-        } else if (cell === 'fluff') {
-          // Fluff: falls slowly, drifts sideways
-          if (Math.random() < 0.2) {
-            // Only 20% chance to move each frame (slow fall)
-            if (!grid[y + 1][x]) {
-              grid[y + 1][x] = cell
-              grid[y][x] = null
-            } else {
-              // Drift sideways randomly
-              const goLeft = Math.random() < 0.5
-              const dx1 = goLeft ? -1 : 1
-              const dx2 = goLeft ? 1 : -1
-
-              if (x + dx1 >= 0 && x + dx1 < cols && !grid[y + 1][x + dx1]) {
-                grid[y + 1][x + dx1] = cell
-                grid[y][x] = null
-              } else if (x + dx2 >= 0 && x + dx2 < cols && !grid[y + 1][x + dx2]) {
-                grid[y + 1][x + dx2] = cell
-                grid[y][x] = null
-              } else if (x + dx1 >= 0 && x + dx1 < cols && !grid[y][x + dx1]) {
-                // Drift horizontally if can't fall
-                grid[y][x + dx1] = cell
-                grid[y][x] = null
-              }
-            }
-          }
-        } else if (cell === 'bug') {
-          // Bug: crawls around, eats dirt/plant, reproduces, flammable
-          if (Math.random() < 0.3) {
-            // 30% chance to act each frame
-
-            // First check if falling (no support below)
-            if (y + 1 < rows && !grid[y + 1][x]) {
-              grid[y + 1][x] = cell
-              grid[y][x] = null
-              continue
-            }
-
-            // Try to eat adjacent dirt/plant
-            const directions = [
-              { dx: 0, dy: 1 },  // down
-              { dx: -1, dy: 0 }, // left
-              { dx: 1, dy: 0 },  // right
-              { dx: 0, dy: -1 }, // up
-              { dx: -1, dy: 1 }, // down-left
-              { dx: 1, dy: 1 },  // down-right
-            ]
-
-            // Shuffle directions for randomness
-            for (let i = directions.length - 1; i > 0; i--) {
-              const j = Math.floor(Math.random() * (i + 1))
-              ;[directions[i], directions[j]] = [directions[j], directions[i]]
-            }
-
-            for (const dir of directions) {
-              const nx = x + dir.dx
-              const ny = y + dir.dy
+        } else if (c === WATER) {
+          // Check for plant growth
+          let nearPlant = false, nearDirt = false
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const nx = x + dx, ny = y + dy
               if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-                const target = grid[ny][nx]
+                const nc = g[idx(nx, ny)]
+                if (nc === PLANT) nearPlant = true
+                if (nc === DIRT) nearDirt = true
+              }
+            }
+          }
+          if (nearPlant && rand() < 0.05 && (nearDirt || rand() < 0.3)) { g[p] = PLANT; continue }
 
-                // Eat dirt or plant
-                if (isEdible(target)) {
-                  grid[ny][nx] = 'bug'
-                  // Chance to reproduce when eating
-                  if (Math.random() < 0.15) {
-                    // Leave a new bug behind
-                    grid[y][x] = 'bug'
-                  } else {
-                    grid[y][x] = null
-                  }
+          if (belowCell === EMPTY) { g[below] = WATER; g[p] = EMPTY }
+          else {
+            const dx = rand() < 0.5 ? -1 : 1
+            const nx1 = x + dx, nx2 = x - dx
+            if (nx1 >= 0 && nx1 < cols && g[idx(nx1, y + 1)] === EMPTY) { g[idx(nx1, y + 1)] = WATER; g[p] = EMPTY }
+            else if (nx2 >= 0 && nx2 < cols && g[idx(nx2, y + 1)] === EMPTY) { g[idx(nx2, y + 1)] = WATER; g[p] = EMPTY }
+            else if (nx1 >= 0 && nx1 < cols && g[idx(nx1, y)] === EMPTY) { g[idx(nx1, y)] = WATER; g[p] = EMPTY }
+            else if (nx2 >= 0 && nx2 < cols && g[idx(nx2, y)] === EMPTY) { g[idx(nx2, y)] = WATER; g[p] = EMPTY }
+          }
+        } else if (c === DIRT) {
+          if (canSink(DIRT, belowCell)) { g[below] = DIRT; g[p] = belowCell }
+          else if (rand() < 0.3) {
+            const dx = rand() < 0.5 ? -1 : 1
+            const nx = x + dx
+            if (nx >= 0 && nx < cols && canSink(DIRT, g[idx(nx, y + 1)]) && g[idx(nx, y)] === EMPTY) {
+              g[idx(nx, y + 1)] = DIRT; g[p] = g[idx(nx, y + 1)] === WATER ? WATER : EMPTY
+            }
+          }
+        } else if (c === FLUFF) {
+          if (rand() < 0.2 && belowCell === EMPTY) { g[below] = FLUFF; g[p] = EMPTY }
+        } else if (c === BUG) {
+          if (rand() < 0.3) {
+            if (belowCell === EMPTY) { g[below] = BUG; g[p] = EMPTY; continue }
+            // Try to eat or move
+            const dirs = [[0,1],[-1,0],[1,0],[0,-1],[-1,1],[1,1]]
+            for (let d = dirs.length - 1; d > 0; d--) {
+              const j = Math.floor(rand() * (d + 1));
+              [dirs[d], dirs[j]] = [dirs[j], dirs[d]]
+            }
+            for (const [dx, dy] of dirs) {
+              const nx = x + dx, ny = y + dy
+              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                const ni = idx(nx, ny), nc = g[ni]
+                if (nc === DIRT || nc === PLANT) {
+                  g[ni] = BUG
+                  g[p] = rand() < 0.15 ? BUG : EMPTY
                   break
-                }
-                // Climb on other bugs
-                else if (target === 'bug' && Math.random() < 0.3) {
-                  // Can stack on bugs, swap positions
-                  grid[ny][nx] = 'bug'
-                  grid[y][x] = 'bug'
-                  break
-                }
-                // Move to empty space
-                else if (!target && Math.random() < 0.5) {
-                  grid[ny][nx] = 'bug'
-                  grid[y][x] = null
+                } else if (nc === EMPTY && rand() < 0.5) {
+                  g[ni] = BUG; g[p] = EMPTY
                   break
                 }
               }
             }
           }
-        } else if (cell === 'nitro') {
-          // Nitro: falls, explodes on contact with particles (except water)
-          // Water extinguishes it and some water turns to stone
-
-          // Check for adjacent particles
-          let touchingWater = false
-          let touchingOther = false
-
+        } else if (c === NITRO) {
+          let touchWater = false, touchOther = false
           for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
               if (dy === 0 && dx === 0) continue
-              const ny = y + dy
-              const nx = x + dx
-              if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
-                const neighbor = grid[ny][nx]
-                if (neighbor === 'water') {
-                  touchingWater = true
-                } else if (neighbor && neighbor !== 'nitro' && neighbor !== 'fire' && neighbor !== 'gas' && neighbor !== 'lightning') {
-                  touchingOther = true
-                }
+              const nx = x + dx, ny = y + dy
+              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                const nc = g[idx(nx, ny)]
+                if (nc === WATER) touchWater = true
+                else if (nc !== EMPTY && nc !== NITRO && nc !== FIRE && nc !== GAS && nc !== LIGHTNING) touchOther = true
               }
             }
           }
-
-          if (touchingWater) {
-            // Water extinguishes nitro, some water turns to stone
-            grid[y][x] = null
+          if (touchWater) {
+            g[p] = EMPTY
             for (let dy = -1; dy <= 1; dy++) {
               for (let dx = -1; dx <= 1; dx++) {
-                const ny = y + dy
-                const nx = x + dx
-                if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
-                  if (grid[ny][nx] === 'water' && Math.random() < 0.3) {
-                    grid[ny][nx] = 'stone'
-                  }
+                const nx = x + dx, ny = y + dy
+                if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[idx(nx, ny)] === WATER && rand() < 0.3) {
+                  g[idx(nx, ny)] = STONE
                 }
               }
             }
-          } else if (touchingOther) {
-            // Explode in a big circle of fire
-            const explosionRadius = 8
-            for (let dy = -explosionRadius; dy <= explosionRadius; dy++) {
-              for (let dx = -explosionRadius; dx <= explosionRadius; dx++) {
-                if (dx * dx + dy * dy <= explosionRadius * explosionRadius) {
-                  const ny = y + dy
-                  const nx = x + dx
-                  if (ny >= 0 && ny < rows && nx >= 0 && nx < cols) {
-                    // Don't destroy stone, turn water to stone
-                    if (grid[ny][nx] === 'water') {
-                      if (Math.random() < 0.5) {
-                        grid[ny][nx] = 'stone'
-                      }
-                    } else if (grid[ny][nx] !== 'stone') {
-                      grid[ny][nx] = 'fire'
-                    }
+          } else if (touchOther) {
+            const r = 8
+            for (let edy = -r; edy <= r; edy++) {
+              for (let edx = -r; edx <= r; edx++) {
+                if (edx * edx + edy * edy <= r * r) {
+                  const ex = x + edx, ey = y + edy
+                  if (ex >= 0 && ex < cols && ey >= 0 && ey < rows) {
+                    const ei = idx(ex, ey), ec = g[ei]
+                    if (ec === WATER) { if (rand() < 0.5) g[ei] = STONE }
+                    else if (ec !== STONE) g[ei] = FIRE
                   }
                 }
               }
             }
           } else {
-            // Fall like sand
-            if (y + 1 < rows && !grid[y + 1][x]) {
-              grid[y + 1][x] = 'nitro'
-              grid[y][x] = null
-            } else {
-              const goLeft = Math.random() < 0.5
-              const dx1 = goLeft ? -1 : 1
-              const dx2 = goLeft ? 1 : -1
-
-              if (x + dx1 >= 0 && x + dx1 < cols && y + 1 < rows && !grid[y + 1][x + dx1] && !grid[y][x + dx1]) {
-                grid[y + 1][x + dx1] = 'nitro'
-                grid[y][x] = null
-              } else if (x + dx2 >= 0 && x + dx2 < cols && y + 1 < rows && !grid[y + 1][x + dx2] && !grid[y][x + dx2]) {
-                grid[y + 1][x + dx2] = 'nitro'
-                grid[y][x] = null
+            if (belowCell === EMPTY) { g[below] = NITRO; g[p] = EMPTY }
+            else {
+              const dx = rand() < 0.5 ? -1 : 1
+              const nx = x + dx
+              if (nx >= 0 && nx < cols && g[idx(nx, y + 1)] === EMPTY && g[idx(nx, y)] === EMPTY) {
+                g[idx(nx, y + 1)] = NITRO; g[p] = EMPTY
               }
             }
           }
         }
-        // Stone and Plant are static - no movement
       }
     }
   }, [])
 
-  // Render grid to canvas using Uint32Array for maximum performance
   const render = useCallback(() => {
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
     const imageData = imageDataRef.current
     if (!canvas || !ctx || !imageData) return
 
-    const grid = gridRef.current
+    const g = gridRef.current
     const { cols, rows } = dimensionsRef.current
     const width = canvas.width
-
-    // Use Uint32Array view for 4x faster writes
     const data32 = new Uint32Array(imageData.data.buffer)
 
-    // Fill with background color (single value write per pixel)
-    data32.fill(BG_COLOR_U32)
+    data32.fill(BG_COLOR)
 
-    // Draw particles
     for (let cy = 0; cy < rows; cy++) {
-      const row = grid[cy]
+      const rowOff = cy * cols
       for (let cx = 0; cx < cols; cx++) {
-        const cell = row[cx]
-        if (!cell) continue
+        const c = g[rowOff + cx]
+        if (c === EMPTY) continue
 
-        // Get color as uint32
         let color: number
-        const matId = MATERIAL_TO_ID[cell]
-        const staticColor = STATIC_COLORS_U32[matId]
-        if (staticColor) {
-          color = staticColor
-        } else if (cell === 'fire') {
-          color = FIRE_COLORS[(cx + cy) & 31]
-        } else if (cell === 'plasma') {
-          color = PLASMA_COLORS[(cx + cy) & 63]
-        } else if (cell === 'lightning') {
-          color = LIGHTNING_COLORS[(cx + cy) & 31]
-        } else {
-          continue
-        }
+        if (c === FIRE) color = FIRE_COLORS[(cx + cy) & 31]
+        else if (c === PLASMA) color = PLASMA_COLORS[(cx + cy) & 63]
+        else if (c === LIGHTNING) color = LIGHTNING_COLORS[(cx + cy) & 31]
+        else color = COLORS_U32[c]
 
-        // Fill CELL_SIZE x CELL_SIZE pixels
         const startX = cx * CELL_SIZE
         const startY = cy * CELL_SIZE
         for (let py = 0; py < CELL_SIZE; py++) {
@@ -842,23 +443,17 @@ function App() {
         }
       }
     }
-
     ctx.putImageData(imageData, 0, 0)
   }, [])
 
-  // Game loop
   const gameLoop = useCallback(() => {
     updatePhysics()
     render()
     animationRef.current = requestAnimationFrame(gameLoop)
   }, [updatePhysics, render])
 
-  // Reset game
-  const reset = useCallback(() => {
-    initGrid()
-  }, [initGrid])
+  const reset = useCallback(() => initGrid(), [initGrid])
 
-  // Handle pointer events
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault()
     setIsDrawing(true)
@@ -868,9 +463,7 @@ function App() {
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
     pointerPosRef.current = { x: e.clientX, y: e.clientY }
-    if (isDrawing) {
-      addParticles(e.clientX, e.clientY)
-    }
+    if (isDrawing) addParticles(e.clientX, e.clientY)
   }, [isDrawing, addParticles])
 
   const handlePointerUp = useCallback(() => {
@@ -878,7 +471,6 @@ function App() {
     pointerPosRef.current = null
   }, [])
 
-  // Handle pointer entering canvas while button is held
   const handlePointerEnter = useCallback((e: React.PointerEvent) => {
     if (e.buttons > 0) {
       setIsDrawing(true)
@@ -886,44 +478,27 @@ function App() {
     }
   }, [])
 
-  // Handle scroll wheel for brush size
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault()
-    setBrushSize(prev => {
-      if (e.deltaY > 0) {
-        // Scroll down = smaller
-        return Math.max(1, prev - 1)
-      } else {
-        // Scroll up = bigger
-        return Math.min(15, prev + 1)
-      }
-    })
+    setBrushSize(prev => e.deltaY > 0 ? Math.max(1, prev - 1) : Math.min(15, prev + 1))
   }, [])
 
-  // Initialize and start game loop
   useEffect(() => {
     initGrid()
     animationRef.current = requestAnimationFrame(gameLoop)
-
-    const handleResize = () => {
-      initGrid()
-    }
+    const handleResize = () => initGrid()
     window.addEventListener('resize', handleResize)
-
     return () => {
       cancelAnimationFrame(animationRef.current)
       window.removeEventListener('resize', handleResize)
     }
   }, [initGrid, gameLoop])
 
-  // Continuously add particles while holding mouse
   useEffect(() => {
     if (!isDrawing) return
     const interval = setInterval(() => {
       const pos = pointerPosRef.current
-      if (pos) {
-        addParticles(pos.x, pos.y)
-      }
+      if (pos) addParticles(pos.x, pos.y)
     }, 50)
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
@@ -946,15 +521,8 @@ function App() {
           ))}
         </div>
         <div className="action-btns">
-          <button className="reset-btn" onClick={reset}>
-            Reset
-          </button>
-          <button
-            className={`erase-btn ${tool === 'erase' ? 'active' : ''}`}
-            onClick={() => setTool('erase')}
-          >
-            Erase
-          </button>
+          <button className="reset-btn" onClick={reset}>Reset</button>
+          <button className={`erase-btn ${tool === 'erase' ? 'active' : ''}`} onClick={() => setTool('erase')}>Erase</button>
         </div>
       </div>
       <div className="canvas-container">
