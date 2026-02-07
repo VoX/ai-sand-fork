@@ -576,7 +576,7 @@ function App() {
             }
           }
         } else if (c === ALIEN) {
-          // Alien: organic terraformer - emergent with controlled duplication
+          // Alien: organic terraformer - emergent with duplication
           const r1 = rand()
           let nx = x, ny = y
           if (r1 < 0.25) ny = y - 1
@@ -589,26 +589,26 @@ function App() {
             const ni = idx(nx, ny), nc = g[ni]
             const r2 = rand()
 
-            if (nc === SAND) { g[ni] = ALIEN; g[p] = r2 < 0.45 ? GLASS : r2 < 0.9 ? PLANT : ALIEN; moved = true }
-            else if (nc === DIRT) { g[ni] = ALIEN; g[p] = r2 < 0.5 ? PLANT : r2 < 0.85 ? WATER : ALIEN; moved = true }
-            else if (nc === WATER) { g[ni] = ALIEN; g[p] = r2 < 0.4 ? SLIME : r2 < 0.9 ? PLANT : ALIEN; moved = true }
-            else if (nc === PLANT) { g[ni] = ALIEN; g[p] = r2 < 0.15 ? BUG : r2 < 0.92 ? PLANT : ALIEN; moved = true }
-            else if (nc === GLASS) { g[ni] = ALIEN; g[p] = FLUFF; moved = true }
-            else if (nc === FLUFF) { g[ni] = ALIEN; g[p] = r2 < 0.92 ? BUG : ALIEN; moved = true }
-            else if (nc === STONE && r2 < 0.08) { g[ni] = ALIEN; g[p] = r2 < 0.04 ? GLASS : DIRT; moved = true }
-            else if (nc === EMPTY) { g[ni] = ALIEN; g[p] = r2 < 0.08 ? PLANT : r2 < 0.12 ? SLIME : EMPTY; moved = true }
-            else if (nc === FIRE || nc === PLASMA) { g[ni] = ALIEN; g[p] = r2 < 0.08 ? ALIEN : r2 < 0.5 ? PLANT : SLIME; moved = true }
-            else if (nc === SLIME) { g[ni] = ALIEN; g[p] = r2 < 0.06 ? ALIEN : PLANT; moved = true }
+            if (nc === SAND) { g[ni] = ALIEN; g[p] = r2 < 0.4 ? GLASS : r2 < 0.82 ? PLANT : ALIEN; moved = true }
+            else if (nc === DIRT) { g[ni] = ALIEN; g[p] = r2 < 0.45 ? PLANT : r2 < 0.8 ? WATER : ALIEN; moved = true }
+            else if (nc === WATER) { g[ni] = ALIEN; g[p] = r2 < 0.35 ? SLIME : r2 < 0.82 ? PLANT : ALIEN; moved = true }
+            else if (nc === PLANT) { g[ni] = ALIEN; g[p] = r2 < 0.18 ? BUG : r2 < 0.88 ? PLANT : ALIEN; moved = true }
+            else if (nc === GLASS) { g[ni] = ALIEN; g[p] = r2 < 0.9 ? FLUFF : ALIEN; moved = true }
+            else if (nc === FLUFF) { g[ni] = ALIEN; g[p] = r2 < 0.85 ? BUG : ALIEN; moved = true }
+            else if (nc === STONE && r2 < 0.1) { g[ni] = ALIEN; g[p] = r2 < 0.05 ? GLASS : DIRT; moved = true }
+            else if (nc === EMPTY) { g[ni] = ALIEN; g[p] = r2 < 0.1 ? PLANT : r2 < 0.18 ? SLIME : r2 < 0.22 ? WATER : EMPTY; moved = true }
+            else if (nc === FIRE || nc === PLASMA) { g[ni] = ALIEN; g[p] = r2 < 0.12 ? ALIEN : r2 < 0.5 ? PLANT : SLIME; moved = true }
+            else if (nc === SLIME) { g[ni] = ALIEN; g[p] = r2 < 0.1 ? ALIEN : PLANT; moved = true }
           }
 
-          // Decay when stuck - aggressive to prevent buildup
-          if (!moved && r1 > 0.92) g[p] = EMPTY
+          // Decay when stuck
+          if (!moved && r1 > 0.93) g[p] = EMPTY
 
-          // Emit particles occasionally
-          if (r1 > 0.96) {
+          // Emit particles more often
+          if (r1 > 0.94) {
             const ex = x + ((r1 * 100 | 0) % 3) - 1, ey = y + ((r1 * 1000 | 0) % 3) - 1
             if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY) {
-              g[idx(ex, ey)] = r1 < 0.98 ? WATER : PLANT
+              g[idx(ex, ey)] = r1 < 0.97 ? WATER : r1 < 0.99 ? PLANT : SLIME
             }
           }
         } else if (c === QUARK) {
@@ -617,10 +617,10 @@ function App() {
           let nx = x, ny = y
 
           // Teleport or move erratically
-          if (r1 < 0.08) { nx = x + ((r1 * 50 | 0) % 5) - 2; ny = y + ((r1 * 500 | 0) % 5) - 2 }
-          else if (r1 < 0.22) ny = y - 1
-          else if (r1 < 0.4) ny = y + 1
-          else if (r1 < 0.6) nx = x + (r1 < 0.5 ? -1 : 1)
+          if (r1 < 0.1) { nx = x + ((r1 * 50 | 0) % 5) - 2; ny = y + ((r1 * 500 | 0) % 5) - 2 }
+          else if (r1 < 0.24) ny = y - 1
+          else if (r1 < 0.42) ny = y + 1
+          else if (r1 < 0.6) nx = x + (r1 < 0.51 ? -1 : 1)
           else if (r1 < 0.85) { nx = x + (r1 < 0.725 ? -1 : 1); ny = y + (r1 < 0.8 ? -1 : 1) }
 
           let moved = false
@@ -628,26 +628,26 @@ function App() {
             const ni = idx(nx, ny), nc = g[ni]
             const r2 = rand()
 
-            if (nc === PLANT) { g[ni] = QUARK; g[p] = r2 < 0.5 ? SAND : r2 < 0.8 ? STONE : FIRE; moved = true }
-            else if (nc === DIRT) { g[ni] = QUARK; g[p] = r2 < 0.4 ? SAND : r2 < 0.7 ? STONE : r2 < 0.9 ? GLASS : QUARK; moved = true }
-            else if (nc === WATER) { g[ni] = QUARK; g[p] = r2 < 0.3 ? GLASS : r2 < 0.6 ? SAND : r2 < 0.9 ? LIGHTNING : QUARK; moved = true }
-            else if (nc === GLASS) { g[ni] = QUARK; g[p] = r2 < 0.88 ? WATER : QUARK; moved = true }
-            else if (nc === SLIME) { g[ni] = QUARK; g[p] = r2 < 0.35 ? SAND : r2 < 0.6 ? WATER : PLASMA; moved = true }
-            else if (nc === BUG) { g[ni] = QUARK; g[p] = r2 < 0.3 ? FIRE : SAND; moved = true }
-            else if (nc === SAND) { g[ni] = QUARK; g[p] = r2 < 0.35 ? GLASS : r2 < 0.5 ? LIGHTNING : r2 < 0.92 ? SAND : QUARK; moved = true }
-            else if (nc === EMPTY) { g[ni] = QUARK; g[p] = r2 < 0.1 ? SAND : r2 < 0.15 ? LIGHTNING : EMPTY; moved = true }
-            else if (nc === FIRE || nc === PLASMA) { g[ni] = QUARK; g[p] = r2 < 0.15 ? QUARK : r2 < 0.45 ? LIGHTNING : r2 < 0.7 ? PLASMA : FIRE; moved = true }
+            if (nc === PLANT) { g[ni] = QUARK; g[p] = r2 < 0.45 ? SAND : r2 < 0.75 ? STONE : FIRE; moved = true }
+            else if (nc === DIRT) { g[ni] = QUARK; g[p] = r2 < 0.35 ? SAND : r2 < 0.6 ? STONE : r2 < 0.85 ? GLASS : QUARK; moved = true }
+            else if (nc === WATER) { g[ni] = QUARK; g[p] = r2 < 0.25 ? GLASS : r2 < 0.5 ? SAND : r2 < 0.85 ? LIGHTNING : QUARK; moved = true }
+            else if (nc === GLASS) { g[ni] = QUARK; g[p] = r2 < 0.82 ? WATER : QUARK; moved = true }
+            else if (nc === SLIME) { g[ni] = QUARK; g[p] = r2 < 0.3 ? SAND : r2 < 0.55 ? WATER : PLASMA; moved = true }
+            else if (nc === BUG) { g[ni] = QUARK; g[p] = r2 < 0.35 ? FIRE : SAND; moved = true }
+            else if (nc === SAND) { g[ni] = QUARK; g[p] = r2 < 0.3 ? GLASS : r2 < 0.5 ? LIGHTNING : r2 < 0.88 ? SAND : QUARK; moved = true }
+            else if (nc === EMPTY) { g[ni] = QUARK; g[p] = r2 < 0.12 ? SAND : r2 < 0.2 ? LIGHTNING : r2 < 0.24 ? GLASS : EMPTY; moved = true }
+            else if (nc === FIRE || nc === PLASMA) { g[ni] = QUARK; g[p] = r2 < 0.2 ? QUARK : r2 < 0.5 ? LIGHTNING : r2 < 0.75 ? PLASMA : FIRE; moved = true }
             else if (nc === ALIEN) { g[ni] = r2 < 0.5 ? GLASS : LIGHTNING; g[p] = r2 < 0.5 ? WATER : FIRE; moved = true }
-            else if (nc === STONE && r2 < 0.12) { g[ni] = QUARK; g[p] = r2 < 0.06 ? SAND : GLASS; moved = true }
-            else if (nc === QUARK) { g[ni] = r2 < 0.25 ? LIGHTNING : QUARK; g[p] = r2 < 0.2 ? PLASMA : QUARK; moved = true }
-            else if (nc === FLUFF) { g[ni] = QUARK; g[p] = r2 < 0.5 ? FIRE : SAND; moved = true }
+            else if (nc === STONE && r2 < 0.15) { g[ni] = QUARK; g[p] = r2 < 0.08 ? SAND : GLASS; moved = true }
+            else if (nc === QUARK) { g[ni] = r2 < 0.3 ? LIGHTNING : QUARK; g[p] = r2 < 0.25 ? PLASMA : QUARK; moved = true }
+            else if (nc === FLUFF) { g[ni] = QUARK; g[p] = r2 < 0.55 ? FIRE : SAND; moved = true }
           }
 
-          // Shoot lightning frequently
-          if (r1 > 0.93) {
+          // Shoot lightning more often
+          if (r1 > 0.9) {
             const lx = x + ((r1 * 700 | 0) % 7) - 3, ly = y + ((r1 * 500 | 0) % 5) - 2
             if (lx >= 0 && lx < cols && ly >= 0 && ly < rows && g[idx(lx, ly)] === EMPTY) {
-              g[idx(lx, ly)] = r1 > 0.98 ? PLASMA : LIGHTNING
+              g[idx(lx, ly)] = r1 > 0.97 ? PLASMA : LIGHTNING
             }
           }
 
