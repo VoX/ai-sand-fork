@@ -325,6 +325,19 @@ function App() {
             else if (nx2 >= 0 && nx2 < cols && g[idx(nx2, y)] === EMPTY) { g[idx(nx2, y)] = WATER; g[p] = EMPTY }
           }
         } else if (c === DIRT) {
+          // Check for plant growth - dirt touching plant can sprout
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dy === 0 && dx === 0) continue
+              const nx = x + dx, ny = y + dy
+              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                if (g[idx(nx, ny)] === PLANT && rand() < 0.008) {
+                  g[p] = PLANT
+                  continue
+                }
+              }
+            }
+          }
           if (canSink(DIRT, belowCell)) { g[below] = DIRT; g[p] = belowCell }
           else if (rand() < 0.3) {
             const dx = rand() < 0.5 ? -1 : 1
