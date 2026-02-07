@@ -233,13 +233,6 @@ function App() {
           const bni = idx(bnx, bny)
           const bc = g[bni]
 
-          // Hit stone - leave trail, remove stone
-          if (bc === STONE) {
-            g[bni] = EMPTY // Remove stone block
-            g[p] = BULLET_TRAIL // Bullet becomes trail
-            continue
-          }
-
           // Skip guns and other bullets (bullet disappears)
           if (bc === GUN || (bc >= BULLET_N && bc <= BULLET_NW)) {
             g[p] = BULLET_TRAIL
@@ -253,22 +246,21 @@ function App() {
             continue
           }
 
-          // Pass through plant and water (leave intact, bullet continues)
-          if (bc === PLANT || bc === WATER) {
+          // Pass through stone, plant, water - bullet continues, destroys material
+          if (bc === STONE || bc === PLANT || bc === WATER) {
+            g[bni] = c // Bullet moves into this cell
             g[p] = BULLET_TRAIL
-            // Bullet continues past
-            const pnx = bnx + bdx, pny = bny + bdy
-            if (pnx >= 0 && pnx < cols && pny >= 0 && pny < rows) {
-              const pni = idx(pnx, pny)
-              if (g[pni] === EMPTY || g[pni] === WATER || g[pni] === PLANT) {
-                g[pni] = c
-              }
-            }
             continue
           }
 
-          // Move bullet, leave trail
-          g[bni] = c
+          // Move bullet into empty space, leave trail
+          if (bc === EMPTY) {
+            g[bni] = c
+            g[p] = BULLET_TRAIL
+            continue
+          }
+
+          // Hit anything else - bullet stops
           g[p] = BULLET_TRAIL
           continue
         }
