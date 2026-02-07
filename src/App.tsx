@@ -601,13 +601,8 @@ function App() {
               g[p] = rand() < 0.7 ? PLANT : WATER
               moved = true
             } else if (nc === WATER) {
-              if (rand() < 0.1) {
-                // Water kills alien (10% chance)
-                g[p] = EMPTY
-              } else {
-                g[ni] = ALIEN
-                g[p] = rand() < 0.5 ? SLIME : PLANT
-              }
+              g[ni] = ALIEN
+              g[p] = rand() < 0.5 ? SLIME : PLANT
               moved = true
             } else if (nc === PLANT) {
               g[ni] = ALIEN
@@ -686,9 +681,9 @@ function App() {
               g[p] = rand() < 0.4 ? GLASS : SAND // Water becomes glass/sand
               moved = true
             } else if (nc === GLASS) {
-              // Dissolves glass into water!
+              // Dissolves glass into water - sometimes duplicates!
               g[ni] = QUARK
-              g[p] = WATER
+              g[p] = rand() < 0.15 ? QUARK : WATER // 15% chance to duplicate
               moved = true
             } else if (nc === SLIME) {
               g[ni] = QUARK
@@ -700,7 +695,10 @@ function App() {
               moved = true
             } else if (nc === SAND) {
               g[ni] = QUARK
-              g[p] = rand() < 0.3 ? GLASS : SAND // Sometimes vitrify sand
+              const r = rand()
+              if (r < 0.1) g[p] = QUARK // 10% duplicate
+              else if (r < 0.35) g[p] = GLASS // 25% vitrify
+              else g[p] = SAND
               moved = true
             } else if (nc === EMPTY) {
               g[ni] = QUARK
@@ -733,8 +731,8 @@ function App() {
             }
           }
 
-          // Occasionally shoot lightning
-          if (rand() < 0.008) {
+          // Frequently shoot lightning
+          if (rand() < 0.05) {
             const lx = x + Math.floor(rand() * 5) - 2
             const ly = y + Math.floor(rand() * 3) - 1
             if (lx >= 0 && lx < cols && ly >= 0 && ly < rows && g[idx(lx, ly)] === EMPTY) {
@@ -742,9 +740,9 @@ function App() {
             }
           }
 
-          // If stuck/idle, decay quickly
-          if (!moved && rand() < 0.04) {
-            g[p] = rand() < 0.3 ? SAND : EMPTY // Sometimes leave sand when dying
+          // If stuck/idle, decay (slower than alien)
+          if (!moved && rand() < 0.025) {
+            g[p] = rand() < 0.4 ? SAND : EMPTY // Often leave sand when dying
           }
         }
       }
