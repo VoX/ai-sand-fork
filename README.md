@@ -129,14 +129,81 @@ Slime eats → Dirt, Sand, Bug
 
 ### Bullet Behavior
 - Ignites: Gunpowder, Nitro
-- Passes through: Plant (leaves intact), Gun, other Bullets
-- Destroys: Everything else
+- Passes through: Plant (leaves intact)
+- Destroys: Everything else (except Stone, Tap, Gun)
+- Leaves: Ember trail behind for visibility
 
 ---
 
-## Mermaid Diagram
+## Interaction Diagrams
 
-See [mermaid.md](./mermaid.md) for visual interaction diagrams.
+### Fire Spread Network
+```mermaid
+flowchart LR
+    Fire((Fire)) -->|ignites| Plant
+    Fire -->|ignites| Fluff
+    Fire -->|ignites| Bug
+    Fire -->|ignites| Gas
+    Fire -->|ignites| Gunpowder
+    Fire -->|ignites| Flower
+    Fire -->|ignites| Hive
+    Fire -->|ignites| Nest
+    Lightning -->|creates| Fire
+    Ember -->|reignites| Plant
+    Gunpowder -->|explodes to| Fire
+```
+
+### Creature Food Chain
+```mermaid
+flowchart TD
+    Bird[Bird] -->|eats, spawns bird| Ant
+    Bird -->|eats, spawns bird| Bug
+    Bird -->|eats, spawns bird| Bee
+    Ant -->|eats| Dirt
+    Ant -->|eats| Plant
+    Ant -->|multiplies from| Fluff
+    Bug -->|eats| Dirt
+    Bug -->|eats| Plant
+    Bug -->|multiplies from| Fluff
+    Slime -->|eats| Dirt
+    Slime -->|eats| Bug
+```
+
+### Spawner Relationships
+```mermaid
+flowchart LR
+    Tap[Tap] -->|spawns| Water[Water]
+    Anthill[Anthill] -->|spawns| Ant[Ant]
+    Hive[Hive] -->|spawns| Bee[Bee]
+    Nest[Nest] -->|spawns| Bird[Bird]
+    Gun[Gun] -->|spawns| Bullet[Bullet]
+    Fire[Fire] -.->|destroys| Anthill
+    Fire -.->|destroys| Hive
+    Fire -.->|destroys| Nest
+```
+
+### Bee Ecosystem
+```mermaid
+flowchart LR
+    Bee[Bee] -->|pollinates| Plant[Plant]
+    Plant -->|becomes| Flower[Flower]
+    Bee -->|harvests| Flower
+    Flower -->|produces| Honey[Honey]
+    Hive -->|spawns| Bee
+```
+
+### Bullet Interactions
+```mermaid
+flowchart LR
+    Gun[Gun] -->|shoots| Bullet[Bullet]
+    Bullet -->|ignites| Gunpowder[Gunpowder]
+    Bullet -->|ignites| Nitro[Nitro]
+    Bullet -.->|passes through| Plant[Plant]
+    Bullet -->|destroys| Everything[All Other Particles]
+    Bullet -->|leaves| Ember[Ember Trail]
+```
+
+See [mermaid.md](./mermaid.md) for more detailed diagrams.
 
 ---
 

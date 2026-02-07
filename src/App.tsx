@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'bullet'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
@@ -10,17 +10,16 @@ const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12
 const CRYSTAL = 18, EMBER = 19, STATIC = 20 // Quark cycle particles
 const BIRD = 21, GUNPOWDER = 22, TAP = 23, ANTHILL = 24
 const BEE = 25, FLOWER = 26, HIVE = 27, HONEY = 28, NEST = 29, GUN = 30
-// Bullet directions - 8 directions (BULLET_E is the paintable one)
+// Bullet directions - 8 directions (internal only)
 const BULLET_N = 31, BULLET_NE = 32, BULLET_E = 33, BULLET_SE = 34
 const BULLET_S = 35, BULLET_SW = 36, BULLET_W = 37, BULLET_NW = 38
-const BULLET = BULLET_E // Default bullet direction for painting
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
   fire: FIRE, gas: GAS, fluff: FLUFF, bug: BUG, plasma: PLASMA,
   nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME, ant: ANT, alien: ALIEN, quark: QUARK,
   crystal: CRYSTAL, ember: EMBER, static: STATIC, bird: BIRD, gunpowder: GUNPOWDER, tap: TAP, anthill: ANTHILL,
-  bee: BEE, flower: FLOWER, hive: HIVE, honey: HONEY, nest: NEST, gun: GUN, bullet: BULLET,
+  bee: BEE, flower: FLOWER, hive: HIVE, honey: HONEY, nest: NEST, gun: GUN,
 }
 
 // Density for displacement (higher sinks through lower, 0 = doesn't displace)
@@ -102,7 +101,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
   lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a', alien: '#00ff00', quark: '#ff00ff',
   crystal: '#80d0ff', ember: '#ff4020', static: '#44ffff', bird: '#e8e8e8', gunpowder: '#303030', tap: '#c0c0c0', anthill: '#b08030',
-  bee: '#ffd800', flower: '#cc44ff', hive: '#e8b840', honey: '#ffa030', nest: '#a08080', gun: '#505050', bullet: '#ffdd00',
+  bee: '#ffd800', flower: '#cc44ff', hive: '#e8b840', honey: '#ffa030', nest: '#a08080', gun: '#505050',
 }
 
 function App() {
@@ -199,7 +198,7 @@ function App() {
         const c = g[p]
         if (c === EMPTY) continue
 
-        // Bullets: move in straight line, destroy most things, leave frame
+        // Bullets: move in straight line, destroy most things, leave visible trail
         if (c >= BULLET_N && c <= BULLET_NW) {
           // Direction vectors for each bullet type
           const dirs: Record<number, [number, number]> = {
@@ -214,54 +213,49 @@ function App() {
           }
           const [bdx, bdy] = dirs[c]
 
-          // Move multiple cells per frame (slow and visible)
-          const speed = 2
-          let bnx = x, bny = y
-          let exited = false
-          for (let step = 0; step < speed; step++) {
-            bnx += bdx
-            bny += bdy
+          // Move one cell at a time for smooth visible trail
+          const bnx = x + bdx, bny = y + bdy
 
-            // Leave frame - just disappear
-            if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) {
-              g[p] = EMPTY
-              exited = true
-              break
-            }
-
-            // Check what's in the path
-            const bni = idx(bnx, bny)
-            const bc = g[bni]
-
-            // Skip guns and other bullets entirely (don't destroy)
-            if (bc === GUN || (bc >= BULLET_N && bc <= BULLET_NW)) {
-              continue
-            }
-
-            // Ignite gunpowder and nitro
-            if (bc === GUNPOWDER || bc === NITRO) {
-              g[bni] = FIRE
-            }
-            // Pass through plant (leave intact)
-            else if (bc === PLANT) {
-              // Do nothing, plant stays
-            }
-            // Destroy everything else
-            else if (bc !== EMPTY) {
-              g[bni] = EMPTY
-            }
+          // Leave frame - just disappear, leave trail
+          if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) {
+            g[p] = EMBER // Leave trail
+            continue
           }
 
-          // Place bullet at final position if still in bounds and didn't exit
-          if (!exited && bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
-            const bni = idx(bnx, bny)
-            const bc = g[bni]
-            // Don't overwrite guns or other bullets
-            if (bc !== GUN && !(bc >= BULLET_N && bc <= BULLET_NW)) {
-              g[bni] = c // Bullet at new position
-            }
+          // Check what's at destination
+          const bni = idx(bnx, bny)
+          const bc = g[bni]
+
+          // Skip guns and other bullets (bullet disappears)
+          if (bc === GUN || (bc >= BULLET_N && bc <= BULLET_NW)) {
+            g[p] = EMBER
+            continue
           }
-          g[p] = EMPTY // Leave empty behind
+
+          // Ignite gunpowder and nitro
+          if (bc === GUNPOWDER || bc === NITRO) {
+            g[bni] = FIRE
+            g[p] = EMBER
+            continue
+          }
+
+          // Pass through plant (leave intact, bullet continues)
+          if (bc === PLANT) {
+            // Find next empty cell past plant
+            const pnx = bnx + bdx, pny = bny + bdy
+            if (pnx >= 0 && pnx < cols && pny >= 0 && pny < rows) {
+              const pni = idx(pnx, pny)
+              if (g[pni] === EMPTY) {
+                g[pni] = c
+              }
+            }
+            g[p] = EMBER
+            continue
+          }
+
+          // Move bullet, leave ember trail
+          g[bni] = c
+          g[p] = EMBER
           continue
         }
 
@@ -1173,20 +1167,24 @@ function App() {
             }
           }
         } else if (c === GUN) {
-          // Gun: spawns bullets rarely in random direction
+          // Gun: spawns bullets in random direction
 
-          // Spawn bullet very rarely (slower rate - about 1 every 5+ seconds)
-          if (rand() < 0.003) {
+          // Spawn bullet (about 1 every 2-3 seconds at 60fps)
+          if (rand() < 0.008) {
             // Pick random direction (0-7)
             const dir = Math.floor(rand() * 8)
             const bulletTypes = [BULLET_N, BULLET_NE, BULLET_E, BULLET_SE, BULLET_S, BULLET_SW, BULLET_W, BULLET_NW]
             const bulletType = bulletTypes[dir]
             const dirVecs: [number, number][] = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]]
             const [gdx, gdy] = dirVecs[dir]
-            // Spawn bullet 2 cells away so it doesn't overlap with gun
-            const gnx = x + gdx * 2, gny = y + gdy * 2
-            if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows && g[idx(gnx, gny)] === EMPTY) {
-              g[idx(gnx, gny)] = bulletType
+            // Spawn bullet 1 cell away in direction
+            const gnx = x + gdx, gny = y + gdy
+            if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows) {
+              const gi = idx(gnx, gny)
+              // Spawn into empty or destroy what's there (except stone/tap/gun)
+              if (g[gi] !== STONE && g[gi] !== TAP && g[gi] !== GUN) {
+                g[gi] = bulletType
+              }
             }
           }
         }
@@ -1294,7 +1292,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey', 'nest', 'gun', 'bullet']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey', 'nest', 'gun']
 
   return (
     <div className="app">
