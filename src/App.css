@@ -120,6 +120,13 @@ html, body, #root {
   border-color: #222;
 }
 
+.ctrl-btn.active {
+  background: #1a1a1a;
+  color: #e0e0e0;
+  border-color: #888;
+  box-shadow: 0 0 8px rgba(200, 200, 200, 0.3);
+}
+
 .ctrl-btn.erase.active {
   background: #1a1a1a;
   color: #ff4444;
