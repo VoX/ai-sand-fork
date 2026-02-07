@@ -719,65 +719,63 @@ function App() {
             }
           }
         } else if (c === BIRD) {
-          // Bird: slow-moving, dies if doesn't eat
+          // Bird: floats up, flies around, dies on fire or if hungry
 
-          // Hunger decay - birds disappear over time if not eating
-          if (rand() < 0.012) { g[p] = FLUFF; continue }
-
-          // Check for dangerous things - birds explode on fire
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
+          // Check for fire types first - explode and die
+          let dead = false
+          for (let dy = -1; dy <= 1 && !dead; dy++) {
+            for (let dx = -1; dx <= 1 && !dead; dx++) {
               if (dy === 0 && dx === 0) continue
               const nx = x + dx, ny = y + dy
               if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
                 const nc = g[idx(nx, ny)]
                 if (nc === FIRE || nc === PLASMA || nc === LIGHTNING || nc === EMBER) {
-                  // Explode into fire/ember particles
                   g[p] = FIRE
+                  // Small explosion
                   for (let ey = -1; ey <= 1; ey++) {
                     for (let ex = -1; ex <= 1; ex++) {
                       const bx = x + ex, by = y + ey
-                      if (bx >= 0 && bx < cols && by >= 0 && by < rows && g[idx(bx, by)] === EMPTY && rand() < 0.4) {
-                        g[idx(bx, by)] = rand() < 0.6 ? FIRE : EMBER
+                      if (bx >= 0 && bx < cols && by >= 0 && by < rows && g[idx(bx, by)] === EMPTY && rand() < 0.35) {
+                        g[idx(bx, by)] = FIRE
                       }
                     }
                   }
-                  continue
+                  dead = true
                 }
                 if (nc === ALIEN || nc === QUARK) {
                   g[p] = EMPTY
-                  continue
+                  dead = true
                 }
               }
             }
           }
+          if (dead) continue
 
-          // Birds move slowly - skip most updates
-          if (rand() < 0.7) continue
+          // Hunger - die after a while
+          if (rand() < 0.008) { g[p] = FLUFF; continue }
+
+          // Skip some updates for slower movement
+          if (rand() < 0.5) continue
 
           const r1 = rand()
           const r2 = rand()
 
-          // Floating movement - mostly hovering with occasional swoop
+          // Flying movement - strong upward bias, lots of sideways
           let dx = 0, dy = 0
-          if (r1 < 0.08) {
-            // Rare swoop down
-            dy = 2
-            dx = r2 < 0.5 ? -1 : 1
-          } else if (r1 < 0.35) {
-            // Float up slowly
+          if (r1 < 0.45) {
+            // Fly up (main behavior)
             dy = -1
             dx = r2 < 0.4 ? -1 : r2 < 0.8 ? 1 : 0
-          } else if (r1 < 0.55) {
-            // Glide sideways (level)
-            dx = r2 < 0.5 ? -1 : 1
-            dy = 0
           } else if (r1 < 0.7) {
-            // Drift down slowly
+            // Glide sideways
+            dx = r2 < 0.5 ? -1 : 1
+            dy = r2 < 0.3 ? -1 : 0
+          } else if (r1 < 0.85) {
+            // Swoop down briefly
             dy = 1
-            dx = r2 < 0.3 ? -1 : r2 < 0.6 ? 1 : 0
+            dx = r2 < 0.5 ? -1 : 1
           }
-          // else hover in place
+          // else hover
 
           if (dx === 0 && dy === 0) continue
 
@@ -785,18 +783,13 @@ function App() {
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
             const ni = idx(nx, ny), nc = g[ni]
 
-            // Eat ants/bugs - resets hunger by leaving behind plant (life)
             if (nc === ANT || nc === BUG) {
               g[ni] = BIRD
               g[p] = rand() < 0.4 ? PLANT : EMPTY
-            }
-            // Fly through empty
-            else if (nc === EMPTY) {
+            } else if (nc === EMPTY) {
               g[ni] = BIRD
               g[p] = EMPTY
-            }
-            // Scatter fluff
-            else if (nc === FLUFF) {
+            } else if (nc === FLUFF) {
               g[ni] = BIRD
               g[p] = EMPTY
             }
