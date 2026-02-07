@@ -1,17 +1,17 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
 const EMPTY = 0, SAND = 1, WATER = 2, DIRT = 3, STONE = 4, PLANT = 5
-const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13, SLIME = 14, ANT = 15
+const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13, SLIME = 14, ANT = 15, ALIEN = 16
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
   fire: FIRE, gas: GAS, fluff: FLUFF, bug: BUG, plasma: PLASMA,
-  nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME, ant: ANT,
+  nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME, ant: ANT, alien: ALIEN,
 }
 
 // Density for displacement (higher sinks through lower, 0 = doesn't displace)
@@ -48,6 +48,7 @@ const COLORS_U32 = new Uint32Array([
   0, // LIGHTNING (dynamic)
   0xFF32CD9A, // SLIME (yellowy green)
   0xFF1A2A6B, // ANT (brownish red)
+  0xFF00FF00, // ALIEN (lime green)
 ])
 
 // Dynamic color palettes
@@ -68,7 +69,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   sand: '#e6c86e', water: '#4a90d9', dirt: '#8b5a2b', stone: '#666666',
   plant: '#228b22', fire: '#ff6600', gas: '#888888', fluff: '#f5e6d3',
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
-  lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a',
+  lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a', alien: '#00ff00',
 }
 
 function App() {
@@ -288,7 +289,7 @@ function App() {
         const canSink = (a: number, b: number) => b === EMPTY || (DENSITY[a] > DENSITY[b] && DENSITY[b] > 0)
 
         if (c === SAND) {
-          if (canSink(SAND, belowCell) && (belowCell === EMPTY || rand() < 0.3)) {
+          if (canSink(SAND, belowCell) && (belowCell === EMPTY || rand() < 0.6)) {
             g[below] = SAND; g[p] = belowCell
           } else {
             const dx = rand() < 0.5 ? -1 : 1
@@ -297,11 +298,11 @@ function App() {
             if (nx1 >= 0 && nx1 < cols && g[idx(nx1, y)] === EMPTY) {
               const diagCell = g[diag1]
               if (diagCell === EMPTY) { g[diag1] = SAND; g[p] = EMPTY }
-              else if (diagCell === WATER && rand() < 0.3) { g[diag1] = SAND; g[p] = WATER }
+              else if (diagCell === WATER && rand() < 0.5) { g[diag1] = SAND; g[p] = WATER }
             } else if (nx2 >= 0 && nx2 < cols && g[idx(nx2, y)] === EMPTY) {
               const diagCell = g[diag2]
               if (diagCell === EMPTY) { g[diag2] = SAND; g[p] = EMPTY }
-              else if (diagCell === WATER && rand() < 0.3) { g[diag2] = SAND; g[p] = WATER }
+              else if (diagCell === WATER && rand() < 0.5) { g[diag2] = SAND; g[p] = WATER }
             }
           }
         } else if (c === WATER) {
@@ -341,14 +342,14 @@ function App() {
             }
           }
           if (touchingPlant && rand() < 0.001) { g[p] = PLANT; continue }
-          if (canSink(DIRT, belowCell) && (belowCell === EMPTY || rand() < 0.3)) { g[below] = DIRT; g[p] = belowCell }
-          else if (rand() < 0.2) {
+          if (canSink(DIRT, belowCell) && (belowCell === EMPTY || rand() < 0.5)) { g[below] = DIRT; g[p] = belowCell }
+          else if (rand() < 0.25) {
             const dx = rand() < 0.5 ? -1 : 1
             const nx = x + dx
             if (nx >= 0 && nx < cols && g[idx(nx, y)] === EMPTY) {
               const diagCell = g[idx(nx, y + 1)]
               if (diagCell === EMPTY) { g[idx(nx, y + 1)] = DIRT; g[p] = EMPTY }
-              else if (diagCell === WATER && rand() < 0.3) { g[idx(nx, y + 1)] = DIRT; g[p] = WATER }
+              else if (diagCell === WATER && rand() < 0.5) { g[idx(nx, y + 1)] = DIRT; g[p] = WATER }
             }
           }
         } else if (c === FLUFF) {
@@ -537,8 +538,8 @@ function App() {
             }
           }
 
-          // Try to eat/move in random direction
-          if (rand() < 0.4) {
+          // Try to eat/move in random direction (but not when floating on water)
+          if (rand() < 0.4 && belowCell !== WATER) {
             const dirs = [[0,1],[-1,0],[1,0],[0,-1],[-1,1],[1,1],[-1,-1],[1,-1]]
             for (let d = dirs.length - 1; d > 0; d--) {
               const j = Math.floor(rand() * (d + 1));
@@ -564,6 +565,83 @@ function App() {
             // Fall if not moving
             g[below] = ANT
             g[p] = EMPTY
+          } else if (belowCell === WATER && rand() < 0.15) {
+            // Drift sideways on water surface
+            const dx = rand() < 0.5 ? -1 : 1
+            const nx = x + dx
+            if (nx >= 0 && nx < cols && g[idx(nx, y)] === EMPTY && g[idx(nx, y + 1)] === WATER) {
+              g[idx(nx, y)] = ANT
+              g[p] = EMPTY
+            }
+          }
+        } else if (c === ALIEN) {
+          // Alien: weird terraforming creature, moves erratically, transforms materials
+
+          // Erratic movement - sometimes moves up, diagonally, or randomly
+          const moveDir = rand()
+          let nx = x, ny = y
+          if (moveDir < 0.2) { ny = y - 1 } // Up (defies gravity)
+          else if (moveDir < 0.4) { ny = y + 1 } // Down
+          else if (moveDir < 0.6) { nx = x + (rand() < 0.5 ? -1 : 1) } // Sideways
+          else if (moveDir < 0.8) { nx = x + (rand() < 0.5 ? -1 : 1); ny = y + (rand() < 0.5 ? -1 : 1) } // Diagonal
+          // else stay still
+
+          if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && (nx !== x || ny !== y)) {
+            const ni = idx(nx, ny), nc = g[ni]
+
+            // Terraforming: transform materials as it passes through
+            if (nc === SAND) {
+              g[ni] = ALIEN
+              g[p] = rand() < 0.6 ? GLASS : PLANT // Sand becomes glass or plant
+            } else if (nc === DIRT) {
+              g[ni] = ALIEN
+              g[p] = rand() < 0.7 ? PLANT : WATER // Dirt becomes plant or water
+            } else if (nc === WATER) {
+              g[ni] = ALIEN
+              g[p] = rand() < 0.5 ? SLIME : PLANT // Water becomes slime or plant
+            } else if (nc === PLANT) {
+              g[ni] = ALIEN
+              g[p] = rand() < 0.3 ? BUG : PLANT // Sometimes spawns bugs from plants
+            } else if (nc === STONE) {
+              // Can slowly phase through stone
+              if (rand() < 0.1) {
+                g[ni] = ALIEN
+                g[p] = rand() < 0.5 ? GLASS : STONE
+              }
+            } else if (nc === EMPTY) {
+              g[ni] = ALIEN
+              // Leave random trail behind
+              const trail = rand()
+              if (trail < 0.1) g[p] = PLANT
+              else if (trail < 0.15) g[p] = WATER
+              else if (trail < 0.2) g[p] = SLIME
+              else g[p] = EMPTY
+            } else if (nc === FIRE || nc === PLASMA) {
+              // Fire transforms alien into more aliens (reproduces in heat)
+              if (rand() < 0.3) {
+                g[ni] = ALIEN
+                g[p] = ALIEN
+              } else {
+                g[ni] = ALIEN
+                g[p] = EMPTY
+              }
+            } else if (nc === SLIME) {
+              g[ni] = ALIEN
+              g[p] = rand() < 0.4 ? ALIEN : SLIME // Absorbs slime, sometimes duplicates
+            }
+          }
+
+          // Sometimes spontaneously change direction and leave weird stuff
+          if (rand() < 0.05) {
+            // Emit random particle nearby
+            const ex = x + Math.floor(rand() * 3) - 1
+            const ey = y + Math.floor(rand() * 3) - 1
+            if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY) {
+              const emit = rand()
+              if (emit < 0.3) g[idx(ex, ey)] = WATER
+              else if (emit < 0.5) g[idx(ex, ey)] = PLANT
+              else if (emit < 0.7) g[idx(ex, ey)] = SLIME
+            }
           }
         }
       }
@@ -665,7 +743,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien']
 
   return (
     <div className="app">
