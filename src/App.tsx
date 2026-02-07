@@ -412,10 +412,20 @@ function App() {
           if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
             const bni = idx(bnx, bny), bnc = g[bni]
 
-            // Touch plant - chance to create flower
+            // Touch plant - chance to spawn flower nearby (not replacing plant)
             if (bnc === PLANT) {
               if (rand() < 0.08) {
-                g[bni] = FLOWER
+                // Find empty spot adjacent to plant to spawn flower
+                for (let fdy = -1; fdy <= 1; fdy++) {
+                  for (let fdx = -1; fdx <= 1; fdx++) {
+                    if (fdy === 0 && fdx === 0) continue
+                    const fnx = bnx + fdx, fny = bny + fdy
+                    if (fnx >= 0 && fnx < cols && fny >= 0 && fny < rows && g[idx(fnx, fny)] === EMPTY) {
+                      g[idx(fnx, fny)] = FLOWER
+                      break
+                    }
+                  }
+                }
               }
               // Bounce off plant
               continue
@@ -423,9 +433,9 @@ function App() {
               g[bni] = BEE
               g[p] = EMPTY
             } else if (bnc === FLOWER) {
-              // Bees make honey when touching flowers
+              // Bees make honey when touching flowers - slower consumption
               g[bni] = BEE
-              g[p] = rand() < 0.3 ? HONEY : FLOWER
+              g[p] = rand() < 0.1 ? HONEY : (rand() < 0.15 ? EMPTY : FLOWER) // 10% honey, 13.5% flower used up, rest flower stays
             }
           }
         }
