@@ -326,8 +326,8 @@ function App() {
           }
           if (dead) continue
 
-          // Hunger decay
-          if (rand() < 0.006) { g[p] = FLUFF; continue }
+          // Hunger decay (slow)
+          if (rand() < 0.003) { g[p] = FLUFF; continue }
 
           // Skip some updates
           if (rand() < 0.4) continue
@@ -360,7 +360,7 @@ function App() {
 
             if (bnc === ANT || bnc === BUG || bnc === BEE) {
               g[bni] = BIRD
-              g[p] = rand() < 0.4 ? PLANT : EMPTY
+              g[p] = BIRD // Eating spawns another bird
             } else if (bnc === EMPTY) {
               g[bni] = BIRD
               g[p] = EMPTY
@@ -549,6 +549,11 @@ function App() {
                   g[ni] = BUG
                   g[p] = rand() < 0.15 ? BUG : EMPTY
                   break
+                } else if (nc === FLUFF) {
+                  // Eating fluff causes multiplication
+                  g[ni] = BUG
+                  g[p] = BUG
+                  break
                 } else if (nc === EMPTY && rand() < 0.5) {
                   g[ni] = BUG; g[p] = EMPTY
                   break
@@ -717,9 +722,14 @@ function App() {
               if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
                 const ni = idx(nx, ny), nc = g[ni]
                 // Eat through most things (not water)
-                if (nc === SAND || nc === DIRT || nc === PLANT || nc === FLUFF || nc === BUG || nc === NITRO || nc === SLIME || nc === HONEY) {
+                if (nc === SAND || nc === DIRT || nc === PLANT || nc === BUG || nc === NITRO || nc === SLIME || nc === HONEY) {
                   g[ni] = ANT
                   g[p] = rand() < 0.4 ? DIRT : EMPTY
+                  break
+                } else if (nc === FLUFF) {
+                  // Eating fluff causes multiplication
+                  g[ni] = ANT
+                  g[p] = ANT
                   break
                 } else if (nc === EMPTY) {
                   g[ni] = ANT
