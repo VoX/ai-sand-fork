@@ -24,7 +24,7 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 | **Sand** | Tan | Falls, piles up, sinks through water |
 | **Water** | Blue | Flows, spreads sideways, enables plant growth |
 | **Dirt** | Brown | Falls slowly, can sprout plants when touching them |
-| **Stone** | Grey | Static, indestructible (except by gunpowder explosions) |
+| **Stone** | Grey | Static, destroyed by gunpowder explosions and bullets |
 | **Glass** | Light blue | Static, created when lightning strikes sand, can crystallize |
 
 ### Organic Elements
@@ -79,7 +79,8 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 ### Projectiles (Internal - not paintable)
 | Particle | Color | Behavior |
 |----------|-------|----------|
-| **Bullet** | Yellow-orange | Moves fast in straight line, destroys most particles, ignites gunpowder/nitro, passes through plants |
+| **Bullet** | Bright yellow | Moves in straight line, penetrates stone/plant/water, ignites gunpowder/nitro, leaves yellow trail |
+| **Bullet Trail** | Yellow (dimmer) | Fades quickly (~0.1 sec), marks bullet path |
 
 ---
 
@@ -128,10 +129,10 @@ Slime eats → Dirt, Sand, Bug
 - Creates: Fire, Stone (from water)
 
 ### Bullet Behavior
-- Ignites: Gunpowder, Nitro
-- Passes through: Plant (leaves intact)
-- Destroys: Everything else (except Stone, Tap, Gun)
-- Leaves: Ember trail behind for visibility
+- Ignites: Gunpowder, Nitro (then stops)
+- Penetrates: Stone, Plant, Water (destroys them, continues through)
+- Stops at: Dirt, Sand, other solid materials, Guns, other bullets
+- Leaves: Yellow bullet trail that fades quickly
 
 ---
 
@@ -198,12 +199,11 @@ flowchart LR
     Gun[Gun] -->|shoots| Bullet[Bullet]
     Bullet -->|ignites| Gunpowder[Gunpowder]
     Bullet -->|ignites| Nitro[Nitro]
-    Bullet -.->|passes through| Plant[Plant]
-    Bullet -->|destroys| Everything[All Other Particles]
-    Bullet -->|leaves| Ember[Ember Trail]
+    Bullet -->|penetrates| Stone[Stone]
+    Bullet -->|penetrates| Plant[Plant]
+    Bullet -->|penetrates| Water[Water]
+    Bullet -->|leaves| Trail[Bullet Trail]
 ```
-
-See [mermaid.md](./mermaid.md) for more detailed diagrams.
 
 ---
 
@@ -212,6 +212,7 @@ See [mermaid.md](./mermaid.md) for more detailed diagrams.
 ### Internal Particles
 Some particles are internal and not directly paintable:
 - **Bullets (8 directions):** BULLET_N, BULLET_NE, BULLET_E, BULLET_SE, BULLET_S, BULLET_SW, BULLET_W, BULLET_NW
+- **Bullet Trail:** Yellow fading trail left behind by bullets
 
 These are spawned by the Gun particle and track their own direction.
 
