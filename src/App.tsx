@@ -978,8 +978,8 @@ function App() {
           ))}
         </div>
         <div className="action-btns">
-          <button className={`ctrl-btn ${isPaused ? 'active' : 'disabled'}`} onClick={() => setIsPaused(false)} disabled={!isPaused}>▶</button>
-          <button className={`ctrl-btn ${isPaused ? 'disabled' : 'active'}`} onClick={() => setIsPaused(true)} disabled={isPaused}>⏸</button>
+          <button className={`ctrl-btn ${isPaused ? 'disabled' : 'active'}`} onClick={() => setIsPaused(false)} disabled={!isPaused}>▶</button>
+          <button className={`ctrl-btn ${isPaused ? 'active' : 'disabled'}`} onClick={() => setIsPaused(true)} disabled={isPaused}>⏸</button>
           <button className="ctrl-btn" onClick={reset}>↺</button>
           <button className={`ctrl-btn erase ${tool === 'erase' ? 'active' : ''}`} onClick={() => setTool(tool === 'erase' ? lastMaterialRef.current : 'erase')}>✕</button>
         </div>
