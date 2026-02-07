@@ -906,19 +906,21 @@ function App() {
           }
 
           if (ignited) {
-            // Explode - create fire in radius, chain reaction with other gunpowder
-            const r = 5
+            // Big explosion like nitro - destroys everything including stone
+            const r = 12
             for (let edy = -r; edy <= r; edy++) {
               for (let edx = -r; edx <= r; edx++) {
                 if (edx * edx + edy * edy <= r * r) {
                   const enx = x + edx, eny = y + edy
                   if (enx >= 0 && enx < cols && eny >= 0 && eny < rows) {
                     const ei = idx(enx, eny), ec = g[ei]
-                    if (ec === EMPTY) g[ei] = rand() < 0.6 ? FIRE : EMPTY
+                    if (ec === EMPTY) g[ei] = rand() < 0.7 ? FIRE : EMPTY
                     else if (ec === GUNPOWDER) g[ei] = FIRE // Chain reaction
-                    else if (ec === PLANT || ec === FLUFF || ec === BUG) g[ei] = FIRE
-                    else if (ec === WATER) g[ei] = rand() < 0.3 ? GAS : WATER
-                    else if (ec === SAND && rand() < 0.2) g[ei] = GLASS
+                    else if (ec === WATER) g[ei] = rand() < 0.5 ? GAS : EMPTY
+                    else if (ec === SAND) g[ei] = rand() < 0.4 ? GLASS : FIRE
+                    else if (ec === STONE) g[ei] = rand() < 0.7 ? EMPTY : FIRE // Destroys stone
+                    else if (ec === GLASS) g[ei] = rand() < 0.5 ? EMPTY : FIRE
+                    else if (ec !== TAP) g[ei] = FIRE // Everything else burns (except tap)
                   }
                 }
               }
