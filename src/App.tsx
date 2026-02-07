@@ -1,21 +1,22 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
 const EMPTY = 0, SAND = 1, WATER = 2, DIRT = 3, STONE = 4, PLANT = 5
-const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13
+const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13, SLIME = 14
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
   fire: FIRE, gas: GAS, fluff: FLUFF, bug: BUG, plasma: PLASMA,
-  nitro: NITRO, glass: GLASS, lightning: LIGHTNING,
+  nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME,
 }
 
-// Density for displacement (higher sinks through lower)
-const DENSITY = new Uint8Array([0, 3, 1, 3, 5, 0, 0, 0, 0, 0, 0, 2, 5, 0])
+// Density for displacement (higher sinks through lower, 0 = doesn't displace)
+// Slime is 0.5 density - floats on water (1)
+const DENSITY = new Uint8Array([0, 3, 1, 3, 5, 0, 0, 0, 0, 0, 0, 2, 5, 0, 0])
 
 const CELL_SIZE = 4
 
@@ -46,6 +47,7 @@ const COLORS_U32 = new Uint32Array([
   0xFF14FF39, // NITRO
   0xFFEAD8A8, // GLASS
   0, // LIGHTNING (dynamic)
+  0xFF32CD9A, // SLIME (yellowy green)
 ])
 
 // Dynamic color palettes
@@ -66,7 +68,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   sand: '#e6c86e', water: '#4a90d9', dirt: '#8b5a2b', stone: '#666666',
   plant: '#228b22', fire: '#ff6600', gas: '#888888', fluff: '#f5e6d3',
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
-  lightning: '#ffff88',
+  lightning: '#ffff88', slime: '#9acd32',
 }
 
 function App() {
@@ -403,6 +405,64 @@ function App() {
               }
             }
           }
+        } else if (c === SLIME) {
+          // Slime: eats dirt/sand/bugs, floats on water, leaves trail behind
+
+          // Float up through water
+          if (belowCell === WATER) {
+            // Check if there's water above to float into
+            if (y > 0) {
+              const above = idx(x, y - 1)
+              if (g[above] === WATER || g[above] === EMPTY) {
+                g[above] = SLIME
+                g[p] = rand() < 0.3 ? SLIME : WATER // Sometimes leave slime behind
+                continue
+              }
+            }
+          }
+
+          // Check for things to eat (dirt, sand, bugs)
+          let ate = false
+          for (let dy = -1; dy <= 1 && !ate; dy++) {
+            for (let dx = -1; dx <= 1 && !ate; dx++) {
+              if (dy === 0 && dx === 0) continue
+              const nx = x + dx, ny = y + dy
+              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                const ni = idx(nx, ny), nc = g[ni]
+                if ((nc === DIRT || nc === SAND || nc === BUG) && rand() < 0.15) {
+                  g[ni] = SLIME
+                  // Leave trail behind sometimes
+                  if (rand() > 0.4) g[p] = SLIME
+                  ate = true
+                }
+              }
+            }
+          }
+          if (ate) continue
+
+          // Fall down or slide
+          if (belowCell === EMPTY) {
+            g[below] = SLIME
+            g[p] = rand() < 0.25 ? SLIME : EMPTY // Leave trail
+          } else {
+            // Slide sideways (slimy movement)
+            const dx = rand() < 0.5 ? -1 : 1
+            const nx1 = x + dx, nx2 = x - dx
+            if (nx1 >= 0 && nx1 < cols) {
+              const side = idx(nx1, y)
+              const diag = idx(nx1, y + 1)
+              if (g[diag] === EMPTY) {
+                g[diag] = SLIME; g[p] = rand() < 0.2 ? SLIME : EMPTY
+              } else if (g[side] === EMPTY && rand() < 0.3) {
+                g[side] = SLIME; g[p] = rand() < 0.3 ? SLIME : EMPTY
+              }
+            } else if (nx2 >= 0 && nx2 < cols) {
+              const diag = idx(nx2, y + 1)
+              if (g[diag] === EMPTY) {
+                g[diag] = SLIME; g[p] = rand() < 0.2 ? SLIME : EMPTY
+              }
+            }
+          }
         }
       }
     }
@@ -503,7 +563,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime']
 
   return (
     <div className="app">
