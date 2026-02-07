@@ -340,7 +340,7 @@ function App() {
               }
             }
           }
-          if (touchingPlant && rand() < 0.005) { g[p] = PLANT; continue }
+          if (touchingPlant && rand() < 0.001) { g[p] = PLANT; continue }
           if (canSink(DIRT, belowCell) && (belowCell === EMPTY || rand() < 0.3)) { g[below] = DIRT; g[p] = belowCell }
           else if (rand() < 0.2) {
             const dx = rand() < 0.5 ? -1 : 1
@@ -438,18 +438,13 @@ function App() {
         } else if (c === SLIME) {
           // Slime: eats dirt/sand/bugs, floats on water
 
-          // Float up through water slowly
-          if (belowCell === WATER && rand() < 0.15) {
+          // Float up through water slowly (only rise through water, not into air)
+          if (belowCell === WATER && rand() < 0.2) {
             if (y > 0) {
               const above = idx(x, y - 1)
-              const aboveCell = g[above]
-              if (aboveCell === WATER) {
+              if (g[above] === WATER) {
                 g[above] = SLIME
                 g[p] = WATER
-                continue
-              } else if (aboveCell === EMPTY) {
-                g[above] = SLIME
-                g[p] = EMPTY
                 continue
               }
             }
@@ -510,18 +505,13 @@ function App() {
             }
           }
 
-          // Float up through water
-          if (belowCell === WATER && rand() < 0.35) {
+          // Float up through water (only rise through water, not into air)
+          if (belowCell === WATER && rand() < 0.3) {
             if (y > 0) {
               const above = idx(x, y - 1)
-              const aboveCell = g[above]
-              if (aboveCell === WATER) {
+              if (g[above] === WATER) {
                 g[above] = ANT
                 g[p] = WATER
-                continue
-              } else if (aboveCell === EMPTY) {
-                g[above] = ANT
-                g[p] = EMPTY
                 continue
               }
             }
