@@ -141,7 +141,7 @@ function App() {
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
             const idx = ny * cols + nx
             const spawnChance = matId === BIRD ? 0.8 : matId === ANT ? 0.6 : (matId === ALIEN || matId === QUARK) ? 0.92 : 0.3 // Spawn fewer birds/ants/aliens/quarks
-            if (tool === 'erase' || Math.random() > spawnChance) {
+            if ((tool === 'erase' || Math.random() > spawnChance) && g[idx] !== STONE) {
               g[idx] = matId
             }
           }
