@@ -288,7 +288,7 @@ function App() {
         const canSink = (a: number, b: number) => b === EMPTY || (DENSITY[a] > DENSITY[b] && DENSITY[b] > 0)
 
         if (c === SAND) {
-          if (canSink(SAND, belowCell)) {
+          if (canSink(SAND, belowCell) && (belowCell === EMPTY || rand() < 0.5)) {
             g[below] = SAND; g[p] = belowCell
           } else {
             const dx = rand() < 0.5 ? -1 : 1
@@ -338,8 +338,8 @@ function App() {
               }
             }
           }
-          if (canSink(DIRT, belowCell)) { g[below] = DIRT; g[p] = belowCell }
-          else if (rand() < 0.3) {
+          if (canSink(DIRT, belowCell) && rand() < 0.4) { g[below] = DIRT; g[p] = belowCell }
+          else if (rand() < 0.2) {
             const dx = rand() < 0.5 ? -1 : 1
             const nx = x + dx
             if (nx >= 0 && nx < cols && canSink(DIRT, g[idx(nx, y + 1)]) && g[idx(nx, y)] === EMPTY) {
@@ -422,15 +422,14 @@ function App() {
         } else if (c === SLIME) {
           // Slime: eats dirt/sand/bugs, floats on water
 
-          // Float up through water (slowly)
-          if (belowCell === WATER && rand() < 0.15) {
-            if (y > 0) {
-              const above = idx(x, y - 1)
-              if (g[above] === WATER || g[above] === EMPTY) {
-                g[above] = SLIME
-                g[p] = WATER
-                continue
-              }
+          // Float on water - move sideways or stay put
+          if (belowCell === WATER && rand() < 0.2) {
+            const dx = rand() < 0.5 ? -1 : 1
+            const nx = x + dx
+            if (nx >= 0 && nx < cols && g[idx(nx, y)] === EMPTY && g[idx(nx, y + 1)] === WATER) {
+              g[idx(nx, y)] = SLIME
+              g[p] = EMPTY
+              continue
             }
           }
 
