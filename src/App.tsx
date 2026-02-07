@@ -576,234 +576,141 @@ function App() {
             }
           }
         } else if (c === ALIEN) {
-          // Alien: chaotic organic terraformer
-
-          // Erratic movement - sometimes moves up, diagonally, or randomly
-          const moveDir = rand()
+          // Alien: organic terraformer - optimized
+          const r1 = rand()
           let nx = x, ny = y
-          if (moveDir < 0.25) { ny = y - 1 } // Up (defies gravity often)
-          else if (moveDir < 0.4) { ny = y + 1 } // Down
-          else if (moveDir < 0.6) { nx = x + (rand() < 0.5 ? -1 : 1) } // Sideways
-          else if (moveDir < 0.85) { nx = x + (rand() < 0.5 ? -1 : 1); ny = y + (rand() < 0.5 ? -1 : 1) } // Diagonal
-          // else stay still
+          if (r1 < 0.2) ny = y - 1
+          else if (r1 < 0.35) ny = y + 1
+          else if (r1 < 0.55) nx = x + (r1 < 0.45 ? -1 : 1)
+          else if (r1 < 0.8) { nx = x + (r1 < 0.675 ? -1 : 1); ny = y + (r1 < 0.725 ? -1 : 1) }
 
           let moved = false
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && (nx !== x || ny !== y)) {
             const ni = idx(nx, ny), nc = g[ni]
+            const r2 = rand()
 
-            // Terraforming: transform materials as it passes through
             if (nc === SAND) {
-              g[ni] = ALIEN
-              g[p] = rand() < 0.5 ? GLASS : PLANT
-              moved = true
+              g[ni] = ALIEN; g[p] = r2 < 0.5 ? GLASS : PLANT; moved = true
             } else if (nc === DIRT) {
               g[ni] = ALIEN
-              const r = rand()
-              if (r < 0.5) g[p] = PLANT
-              else if (r < 0.7) g[p] = WATER
-              else g[p] = ALIEN // Sometimes duplicate!
+              g[p] = r2 < 0.6 ? PLANT : r2 < 0.85 ? WATER : ALIEN
               moved = true
             } else if (nc === WATER) {
-              g[ni] = ALIEN
-              g[p] = rand() < 0.5 ? SLIME : PLANT
-              moved = true
+              g[ni] = ALIEN; g[p] = r2 < 0.5 ? SLIME : PLANT; moved = true
             } else if (nc === PLANT) {
               g[ni] = ALIEN
-              const r = rand()
-              if (r < 0.2) g[p] = BUG
-              else if (r < 0.35) g[p] = ALIEN // Duplicate in plants!
-              else g[p] = PLANT
+              g[p] = r2 < 0.15 ? BUG : r2 < 0.25 ? ALIEN : PLANT
               moved = true
             } else if (nc === GLASS) {
-              g[ni] = ALIEN
-              g[p] = FLUFF
-              moved = true
+              g[ni] = ALIEN; g[p] = FLUFF; moved = true
             } else if (nc === FLUFF) {
-              g[ni] = ALIEN
-              g[p] = rand() < 0.2 ? ALIEN : BUG // Fluff spawns bugs or more aliens
-              moved = true
-            } else if (nc === STONE && rand() < 0.15) {
-              g[ni] = ALIEN
-              g[p] = rand() < 0.5 ? GLASS : DIRT
-              moved = true
+              g[ni] = ALIEN; g[p] = r2 < 0.1 ? ALIEN : BUG; moved = true
+            } else if (nc === STONE && r2 < 0.1) {
+              g[ni] = ALIEN; g[p] = r2 < 0.05 ? GLASS : DIRT; moved = true
             } else if (nc === EMPTY) {
               g[ni] = ALIEN
-              const trail = rand()
-              if (trail < 0.15) g[p] = PLANT
-              else if (trail < 0.25) g[p] = WATER
-              else if (trail < 0.35) g[p] = SLIME
-              else g[p] = EMPTY
+              g[p] = r2 < 0.1 ? PLANT : r2 < 0.15 ? WATER : r2 < 0.2 ? SLIME : EMPTY
               moved = true
             } else if (nc === FIRE || nc === PLASMA) {
-              // Fire makes alien go crazy - high duplicate chance
-              if (rand() < 0.2) {
-                g[ni] = ALIEN
-                g[p] = ALIEN
-              } else {
-                g[ni] = ALIEN
-                g[p] = rand() < 0.5 ? PLANT : SLIME
-              }
-              moved = true
+              g[ni] = ALIEN; g[p] = r2 < 0.1 ? ALIEN : r2 < 0.5 ? PLANT : SLIME; moved = true
             } else if (nc === SLIME) {
-              g[ni] = ALIEN
-              g[p] = rand() < 0.15 ? ALIEN : PLANT // Absorb slime, sometimes duplicate
-              moved = true
+              g[ni] = ALIEN; g[p] = r2 < 0.08 ? ALIEN : PLANT; moved = true
             }
           }
 
-          // Lower decay - aliens persist longer
-          if (!moved && rand() < 0.02) {
-            g[p] = rand() < 0.3 ? PLANT : EMPTY
-          }
+          // Faster decay to prevent buildup
+          if (!moved && r1 > 0.96) g[p] = EMPTY
 
-          // More frequent emissions
-          if (rand() < 0.03) {
-            const ex = x + Math.floor(rand() * 3) - 1
-            const ey = y + Math.floor(rand() * 3) - 1
+          // Less frequent emissions
+          if (r1 > 0.98) {
+            const ex = x + ((r1 * 100 | 0) % 3) - 1
+            const ey = y + ((r1 * 1000 | 0) % 3) - 1
             if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY) {
-              const emit = rand()
-              if (emit < 0.3) g[idx(ex, ey)] = WATER
-              else if (emit < 0.6) g[idx(ex, ey)] = PLANT
-              else if (emit < 0.8) g[idx(ex, ey)] = SLIME
+              g[idx(ex, ey)] = r1 < 0.99 ? WATER : PLANT
             }
           }
         } else if (c === QUARK) {
-          // Quark: chaotic inorganic terraformer - shoots lightning, creates explosions
-
-          // Very erratic movement - can teleport short distances
-          const moveDir = rand()
+          // Quark: chaotic inorganic terraformer - optimized
+          const r1 = rand()
           let nx = x, ny = y
-          if (moveDir < 0.1) {
-            // Teleport! Jump 2-3 cells in random direction
-            nx = x + Math.floor(rand() * 5) - 2
-            ny = y + Math.floor(rand() * 5) - 2
-          } else if (moveDir < 0.25) { ny = y - 1 } // Up
-          else if (moveDir < 0.45) { ny = y + 1 } // Down
-          else if (moveDir < 0.65) { nx = x + (rand() < 0.5 ? -1 : 1) } // Sideways
-          else if (moveDir < 0.85) { nx = x + (rand() < 0.5 ? -1 : 1); ny = y + (rand() < 0.5 ? -1 : 1) } // Diagonal
+
+          // Movement with teleport using single random
+          if (r1 < 0.1) {
+            nx = x + ((r1 * 50 | 0) % 5) - 2
+            ny = y + ((r1 * 500 | 0) % 5) - 2
+          } else if (r1 < 0.25) ny = y - 1
+          else if (r1 < 0.45) ny = y + 1
+          else if (r1 < 0.65) nx = x + (r1 < 0.55 ? -1 : 1)
+          else if (r1 < 0.85) { nx = x + (r1 < 0.75 ? -1 : 1); ny = y + (r1 < 0.8 ? -1 : 1) }
 
           let moved = false
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && (nx !== x || ny !== y)) {
             const ni = idx(nx, ny), nc = g[ni]
+            const r2 = rand()
 
-            // Reverse terraforming: transform organic to inorganic
             if (nc === PLANT) {
               g[ni] = QUARK
-              const r = rand()
-              if (r < 0.5) g[p] = SAND
-              else if (r < 0.7) g[p] = STONE
-              else g[p] = FIRE // Sometimes ignite!
+              g[p] = r2 < 0.5 ? SAND : r2 < 0.7 ? STONE : FIRE
               moved = true
             } else if (nc === DIRT) {
               g[ni] = QUARK
-              const r = rand()
-              if (r < 0.4) g[p] = SAND
-              else if (r < 0.6) g[p] = STONE
-              else if (r < 0.75) g[p] = QUARK // Duplicate in dirt!
-              else g[p] = GLASS
+              g[p] = r2 < 0.4 ? SAND : r2 < 0.6 ? STONE : r2 < 0.75 ? QUARK : GLASS
               moved = true
             } else if (nc === WATER) {
               g[ni] = QUARK
-              const r = rand()
-              if (r < 0.3) g[p] = GLASS
-              else if (r < 0.5) g[p] = SAND
-              else if (r < 0.65) g[p] = QUARK // Duplicate in water!
-              else g[p] = LIGHTNING // Electrify water!
+              g[p] = r2 < 0.3 ? GLASS : r2 < 0.5 ? SAND : r2 < 0.65 ? QUARK : LIGHTNING
               moved = true
             } else if (nc === GLASS) {
-              // Dissolves glass into water - high duplicate chance!
-              g[ni] = QUARK
-              g[p] = rand() < 0.25 ? QUARK : WATER
-              moved = true
+              g[ni] = QUARK; g[p] = r2 < 0.25 ? QUARK : WATER; moved = true
             } else if (nc === SLIME) {
               g[ni] = QUARK
-              const r = rand()
-              if (r < 0.3) g[p] = SAND
-              else if (r < 0.5) g[p] = WATER
-              else g[p] = PLASMA // Slime becomes plasma!
+              g[p] = r2 < 0.3 ? SAND : r2 < 0.5 ? WATER : PLASMA
               moved = true
             } else if (nc === BUG) {
-              g[ni] = QUARK
-              g[p] = rand() < 0.3 ? FIRE : SAND // Bug ignites or becomes sand
-              moved = true
+              g[ni] = QUARK; g[p] = r2 < 0.3 ? FIRE : SAND; moved = true
             } else if (nc === SAND) {
               g[ni] = QUARK
-              const r = rand()
-              if (r < 0.15) g[p] = QUARK // Duplicate
-              else if (r < 0.4) g[p] = GLASS // Vitrify
-              else if (r < 0.5) g[p] = LIGHTNING // Electrify
-              else g[p] = SAND
+              g[p] = r2 < 0.15 ? QUARK : r2 < 0.4 ? GLASS : r2 < 0.5 ? LIGHTNING : SAND
               moved = true
             } else if (nc === EMPTY) {
               g[ni] = QUARK
-              const trail = rand()
-              if (trail < 0.2) g[p] = SAND
-              else if (trail < 0.3) g[p] = GLASS
-              else if (trail < 0.35) g[p] = LIGHTNING
-              else g[p] = EMPTY
+              g[p] = r2 < 0.2 ? SAND : r2 < 0.3 ? GLASS : r2 < 0.35 ? LIGHTNING : EMPTY
               moved = true
             } else if (nc === FIRE || nc === PLASMA) {
-              // Fire supercharges quark!
               g[ni] = QUARK
-              const r = rand()
-              if (r < 0.3) g[p] = QUARK // High duplicate in fire
-              else if (r < 0.5) g[p] = LIGHTNING
-              else if (r < 0.7) g[p] = PLASMA
-              else g[p] = FIRE
+              g[p] = r2 < 0.3 ? QUARK : r2 < 0.5 ? LIGHTNING : r2 < 0.7 ? PLASMA : FIRE
               moved = true
             } else if (nc === ALIEN) {
-              // Quark and alien annihilate - big reaction!
-              g[ni] = rand() < 0.5 ? GLASS : LIGHTNING
-              g[p] = rand() < 0.5 ? WATER : FIRE
-              // Spawn extra particles nearby
-              for (let ed = 0; ed < 2; ed++) {
-                const ex = x + Math.floor(rand() * 3) - 1
-                const ey = y + Math.floor(rand() * 3) - 1
-                if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY) {
-                  g[idx(ex, ey)] = rand() < 0.5 ? SAND : PLANT
-                }
+              g[ni] = r2 < 0.5 ? GLASS : LIGHTNING
+              g[p] = r2 < 0.5 ? WATER : FIRE
+              const ex = x + ((r2 * 100 | 0) % 3) - 1, ey = y + ((r2 * 1000 | 0) % 3) - 1
+              if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY) {
+                g[idx(ex, ey)] = r2 < 0.5 ? SAND : PLANT
               }
               moved = true
-            } else if (nc === STONE && rand() < 0.2) {
-              g[ni] = QUARK
-              g[p] = rand() < 0.5 ? SAND : GLASS
-              moved = true
+            } else if (nc === STONE && r2 < 0.2) {
+              g[ni] = QUARK; g[p] = r2 < 0.1 ? SAND : GLASS; moved = true
             } else if (nc === QUARK) {
-              // Quarks collide - chain reaction!
-              g[ni] = rand() < 0.3 ? LIGHTNING : QUARK
-              g[p] = rand() < 0.3 ? PLASMA : QUARK
+              g[ni] = r2 < 0.3 ? LIGHTNING : QUARK
+              g[p] = r2 < 0.3 ? PLASMA : QUARK
               moved = true
             } else if (nc === FLUFF) {
-              g[ni] = QUARK
-              g[p] = rand() < 0.5 ? FIRE : SAND // Fluff ignites or becomes sand
-              moved = true
+              g[ni] = QUARK; g[p] = r2 < 0.5 ? FIRE : SAND; moved = true
             }
           }
 
-          // Very frequently shoot lightning
-          if (rand() < 0.08) {
-            const lx = x + Math.floor(rand() * 7) - 3
-            const ly = y + Math.floor(rand() * 5) - 2
+          // Emit lightning or plasma using single roll
+          if (r1 > 0.92) {
+            const lx = x + ((r1 * 700 | 0) % 7) - 3
+            const ly = y + ((r1 * 500 | 0) % 5) - 2
             if (lx >= 0 && lx < cols && ly >= 0 && ly < rows && g[idx(lx, ly)] === EMPTY) {
-              g[idx(lx, ly)] = LIGHTNING
+              g[idx(lx, ly)] = r1 > 0.98 ? PLASMA : LIGHTNING
             }
           }
 
-          // Occasionally emit plasma burst
-          if (rand() < 0.02) {
-            const px = x + Math.floor(rand() * 3) - 1
-            const py = y + Math.floor(rand() * 3) - 1
-            if (px >= 0 && px < cols && py >= 0 && py < rows && g[idx(px, py)] === EMPTY) {
-              g[idx(px, py)] = PLASMA
-            }
-          }
-
-          // Lower decay - quarks persist
-          if (!moved && rand() < 0.02) {
-            const r = rand()
-            if (r < 0.3) g[p] = SAND
-            else if (r < 0.4) g[p] = LIGHTNING
-            else g[p] = EMPTY
+          // Decay when stuck
+          if (!moved && r1 > 0.98) {
+            g[p] = r1 > 0.994 ? SAND : r1 > 0.99 ? LIGHTNING : EMPTY
           }
         }
       }
