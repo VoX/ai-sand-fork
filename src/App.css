@@ -99,10 +99,20 @@ html, body, #root {
   cursor: pointer;
   transition: all 0.15s ease;
   -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
   user-select: none;
   display: flex;
   align-items: center;
   justify-content: center;
+  outline: none;
+}
+
+.ctrl-btn:focus {
+  outline: none;
+}
+
+.ctrl-btn:focus-visible {
+  outline: none;
 }
 
 .ctrl-btn:hover:not(.disabled) {
