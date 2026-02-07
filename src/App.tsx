@@ -88,6 +88,7 @@ function App() {
   const [tool, setTool] = useState<Tool>('sand')
   const [isDrawing, setIsDrawing] = useState(false)
   const [brushSize, setBrushSize] = useState(3)
+  const [isPaused, setIsPaused] = useState(false)
   const animationRef = useRef<number>(0)
   const dimensionsRef = useRef({ cols: 0, rows: 0 })
   const pointerPosRef = useRef<{ x: number; y: number } | null>(null)
@@ -837,10 +838,10 @@ function App() {
   }, [])
 
   const gameLoop = useCallback(() => {
-    updatePhysics()
+    if (!isPaused) updatePhysics()
     render()
     animationRef.current = requestAnimationFrame(gameLoop)
-  }, [updatePhysics, render])
+  }, [updatePhysics, render, isPaused])
 
   const reset = useCallback(() => initGrid(), [initGrid])
 
@@ -911,8 +912,10 @@ function App() {
           ))}
         </div>
         <div className="action-btns">
-          <button className="reset-btn" onClick={reset}>Reset</button>
-          <button className={`erase-btn ${tool === 'erase' ? 'active' : ''}`} onClick={() => setTool('erase')}>Erase</button>
+          <button className={`ctrl-btn ${isPaused ? '' : 'disabled'}`} onClick={() => setIsPaused(false)} disabled={!isPaused}>▶</button>
+          <button className={`ctrl-btn ${isPaused ? 'disabled' : ''}`} onClick={() => setIsPaused(true)} disabled={isPaused}>⏸</button>
+          <button className="ctrl-btn" onClick={reset}>↺</button>
+          <button className={`ctrl-btn erase ${tool === 'erase' ? 'active' : ''}`} onClick={() => setTool('erase')}>✕</button>
         </div>
       </div>
       <div className="canvas-container">

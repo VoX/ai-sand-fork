@@ -81,59 +81,50 @@ html, body, #root {
   box-shadow: 0 0 12px color-mix(in srgb, var(--material-color) 40%, transparent);
 }
 
-.reset-btn {
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 600;
-  background: #333;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  -webkit-tap-highlight-color: transparent;
-  user-select: none;
-}
-
-.reset-btn:hover {
-  background: #444;
-}
-
-.reset-btn:active {
-  background: #555;
-  transform: scale(0.98);
-}
-
 .action-btns {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
   flex-shrink: 0;
 }
 
-.erase-btn {
-  padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 600;
+.ctrl-btn {
+  width: 36px;
+  height: 36px;
+  font-size: 16px;
   background: #333;
   color: #fff;
   border: 2px solid #333;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.erase-btn:hover {
+.ctrl-btn:hover:not(.disabled) {
   background: #444;
 }
 
-.erase-btn.active {
+.ctrl-btn:active:not(.disabled) {
+  transform: scale(0.95);
+}
+
+.ctrl-btn.disabled {
+  background: #222;
+  color: #555;
+  cursor: default;
+  border-color: #222;
+}
+
+.ctrl-btn.erase.active {
   background: #1a1a1a;
   color: #ff4444;
   border-color: #ff4444;
-  box-shadow: 0 0 12px rgba(255, 68, 68, 0.4);
+  box-shadow: 0 0 8px rgba(255, 68, 68, 0.4);
 }
 
 .canvas-container {
@@ -173,18 +164,14 @@ html, body, #root {
     font-size: 12px;
   }
 
-  .reset-btn {
-    padding: 6px 12px;
-    font-size: 12px;
-  }
-
   .action-btns {
-    gap: 4px;
+    gap: 3px;
   }
 
-  .erase-btn {
-    padding: 6px 12px;
-    font-size: 12px;
+  .ctrl-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
   }
 }
 
