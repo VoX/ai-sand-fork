@@ -507,13 +507,13 @@ function App() {
             }
           }
 
-          // Float up through water - leave dirt trail
-          if (belowCell === WATER && rand() < 0.3) {
+          // Float up through water - leave dirt trail often
+          if (belowCell === WATER && rand() < 0.35) {
             if (y > 0) {
               const above = idx(x, y - 1)
               if (g[above] === WATER) {
                 g[above] = ANT
-                g[p] = rand() < 0.35 ? DIRT : WATER
+                g[p] = rand() < 0.5 ? DIRT : WATER
                 continue
               }
             }
@@ -589,16 +589,16 @@ function App() {
             const ni = idx(nx, ny), nc = g[ni]
             const r2 = rand()
 
-            if (nc === SAND) { g[ni] = ALIEN; g[p] = r2 < 0.3 ? GLASS : r2 < 0.65 ? PLANT : ALIEN; moved = true }
-            else if (nc === DIRT) { g[ni] = ALIEN; g[p] = r2 < 0.35 ? PLANT : r2 < 0.6 ? WATER : ALIEN; moved = true }
-            else if (nc === WATER) { g[ni] = ALIEN; g[p] = r2 < 0.25 ? SLIME : r2 < 0.65 ? PLANT : ALIEN; moved = true }
-            else if (nc === PLANT) { g[ni] = ALIEN; g[p] = r2 < 0.22 ? BUG : r2 < 0.7 ? PLANT : ALIEN; moved = true }
-            else if (nc === GLASS) { g[ni] = ALIEN; g[p] = r2 < 0.7 ? FLUFF : ALIEN; moved = true }
-            else if (nc === FLUFF) { g[ni] = ALIEN; g[p] = r2 < 0.65 ? BUG : ALIEN; moved = true }
+            if (nc === SAND) { g[ni] = ALIEN; g[p] = r2 < 0.28 ? GLASS : r2 < 0.6 ? PLANT : ALIEN; moved = true }
+            else if (nc === DIRT) { g[ni] = ALIEN; g[p] = r2 < 0.28 ? PLANT : r2 < 0.58 ? WATER : ALIEN; moved = true }
+            else if (nc === WATER) { g[ni] = ALIEN; g[p] = r2 < 0.12 ? SLIME : r2 < 0.4 ? PLANT : r2 < 0.65 ? WATER : ALIEN; moved = true }
+            else if (nc === PLANT) { g[ni] = ALIEN; g[p] = r2 < 0.2 ? BUG : r2 < 0.65 ? PLANT : ALIEN; moved = true }
+            else if (nc === GLASS) { g[ni] = ALIEN; g[p] = r2 < 0.65 ? FLUFF : ALIEN; moved = true }
+            else if (nc === FLUFF) { g[ni] = ALIEN; g[p] = r2 < 0.6 ? BUG : ALIEN; moved = true }
             else if (nc === STONE && r2 < 0.15) { g[ni] = ALIEN; g[p] = r2 < 0.08 ? GLASS : DIRT; moved = true }
-            else if (nc === EMPTY) { g[ni] = ALIEN; g[p] = r2 < 0.15 ? PLANT : r2 < 0.28 ? SLIME : r2 < 0.38 ? WATER : EMPTY; moved = true }
-            else if (nc === FIRE || nc === PLASMA) { g[ni] = ALIEN; g[p] = r2 < 0.25 ? ALIEN : r2 < 0.6 ? PLANT : SLIME; moved = true }
-            else if (nc === SLIME) { g[ni] = ALIEN; g[p] = r2 < 0.22 ? ALIEN : PLANT; moved = true }
+            else if (nc === EMPTY) { g[ni] = ALIEN; g[p] = r2 < 0.1 ? PLANT : r2 < 0.18 ? SLIME : r2 < 0.35 ? WATER : EMPTY; moved = true }
+            else if (nc === FIRE || nc === PLASMA) { g[ni] = ALIEN; g[p] = r2 < 0.3 ? ALIEN : r2 < 0.6 ? PLANT : SLIME; moved = true }
+            else if (nc === SLIME) { g[ni] = ALIEN; g[p] = r2 < 0.28 ? ALIEN : r2 < 0.45 ? WATER : PLANT; moved = true }
           }
 
           // Decay when stuck
@@ -628,19 +628,19 @@ function App() {
             const ni = idx(nx, ny), nc = g[ni]
             const r2 = rand()
 
-            if (nc === PLANT) { g[ni] = QUARK; g[p] = r2 < 0.35 ? SAND : r2 < 0.6 ? STONE : FIRE; moved = true }
-            else if (nc === DIRT) { g[ni] = QUARK; g[p] = r2 < 0.25 ? SAND : r2 < 0.45 ? STONE : r2 < 0.68 ? GLASS : QUARK; moved = true }
-            else if (nc === WATER) { g[ni] = QUARK; g[p] = r2 < 0.18 ? GLASS : r2 < 0.38 ? SAND : r2 < 0.68 ? LIGHTNING : QUARK; moved = true }
-            else if (nc === GLASS) { g[ni] = QUARK; g[p] = r2 < 0.65 ? WATER : QUARK; moved = true }
-            else if (nc === SLIME) { g[ni] = QUARK; g[p] = r2 < 0.2 ? SAND : r2 < 0.4 ? WATER : PLASMA; moved = true }
-            else if (nc === BUG) { g[ni] = QUARK; g[p] = r2 < 0.45 ? FIRE : SAND; moved = true }
-            else if (nc === SAND) { g[ni] = QUARK; g[p] = r2 < 0.25 ? GLASS : r2 < 0.45 ? LIGHTNING : r2 < 0.72 ? SAND : QUARK; moved = true }
-            else if (nc === EMPTY) { g[ni] = QUARK; g[p] = r2 < 0.18 ? SAND : r2 < 0.32 ? LIGHTNING : r2 < 0.42 ? GLASS : EMPTY; moved = true }
-            else if (nc === FIRE || nc === PLASMA) { g[ni] = QUARK; g[p] = r2 < 0.32 ? QUARK : r2 < 0.6 ? LIGHTNING : r2 < 0.85 ? PLASMA : FIRE; moved = true }
-            else if (nc === ALIEN) { g[ni] = r2 < 0.5 ? GLASS : LIGHTNING; g[p] = r2 < 0.5 ? WATER : FIRE; moved = true }
-            else if (nc === STONE && r2 < 0.2) { g[ni] = QUARK; g[p] = r2 < 0.12 ? SAND : GLASS; moved = true }
-            else if (nc === QUARK) { g[ni] = r2 < 0.4 ? LIGHTNING : QUARK; g[p] = r2 < 0.35 ? PLASMA : QUARK; moved = true }
-            else if (nc === FLUFF) { g[ni] = QUARK; g[p] = r2 < 0.65 ? FIRE : SAND; moved = true }
+            if (nc === PLANT) { g[ni] = QUARK; g[p] = r2 < 0.25 ? SAND : r2 < 0.45 ? STONE : r2 < 0.6 ? FIRE : QUARK; moved = true }
+            else if (nc === DIRT) { g[ni] = QUARK; g[p] = r2 < 0.18 ? SAND : r2 < 0.35 ? STONE : r2 < 0.52 ? GLASS : QUARK; moved = true }
+            else if (nc === WATER) { g[ni] = QUARK; g[p] = r2 < 0.1 ? GLASS : r2 < 0.22 ? SAND : r2 < 0.4 ? LIGHTNING : r2 < 0.58 ? WATER : QUARK; moved = true }
+            else if (nc === GLASS) { g[ni] = QUARK; g[p] = r2 < 0.55 ? WATER : QUARK; moved = true }
+            else if (nc === SLIME) { g[ni] = QUARK; g[p] = r2 < 0.12 ? SAND : r2 < 0.35 ? WATER : r2 < 0.6 ? PLASMA : QUARK; moved = true }
+            else if (nc === BUG) { g[ni] = QUARK; g[p] = r2 < 0.35 ? FIRE : r2 < 0.6 ? SAND : QUARK; moved = true }
+            else if (nc === SAND) { g[ni] = QUARK; g[p] = r2 < 0.2 ? GLASS : r2 < 0.38 ? LIGHTNING : r2 < 0.55 ? SAND : QUARK; moved = true }
+            else if (nc === EMPTY) { g[ni] = QUARK; g[p] = r2 < 0.12 ? SAND : r2 < 0.25 ? LIGHTNING : r2 < 0.35 ? GLASS : EMPTY; moved = true }
+            else if (nc === FIRE || nc === PLASMA) { g[ni] = QUARK; g[p] = r2 < 0.45 ? QUARK : r2 < 0.7 ? LIGHTNING : r2 < 0.9 ? PLASMA : FIRE; moved = true }
+            else if (nc === ALIEN) { g[ni] = r2 < 0.5 ? GLASS : LIGHTNING; g[p] = r2 < 0.6 ? WATER : FIRE; moved = true }
+            else if (nc === STONE && r2 < 0.25) { g[ni] = QUARK; g[p] = r2 < 0.15 ? SAND : GLASS; moved = true }
+            else if (nc === QUARK) { g[ni] = r2 < 0.45 ? LIGHTNING : QUARK; g[p] = r2 < 0.45 ? PLASMA : QUARK; moved = true }
+            else if (nc === FLUFF) { g[ni] = QUARK; g[p] = r2 < 0.5 ? FIRE : r2 < 0.7 ? SAND : QUARK; moved = true }
           }
 
           // Shoot lightning more often
