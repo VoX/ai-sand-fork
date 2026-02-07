@@ -156,6 +156,15 @@ function App() {
     const { cols, rows } = dimensionsRef.current
     const matId = tool === 'erase' ? EMPTY : MATERIAL_TO_ID[tool]
 
+    // Gun only spawns as single particle (one 4px block)
+    if (matId === GUN) {
+      const idx = pos.y * cols + pos.x
+      if (g[idx] !== STONE && g[idx] !== TAP && g[idx] !== GUN) {
+        g[idx] = GUN
+      }
+      return
+    }
+
     for (let dy = -brushSize; dy <= brushSize; dy++) {
       for (let dx = -brushSize; dx <= brushSize; dx++) {
         if (dx * dx + dy * dy <= brushSize * brushSize) {
@@ -189,7 +198,7 @@ function App() {
         const c = g[p]
         if (c === EMPTY) continue
 
-        // Bullets: move FAST in straight line, destroy everything, leave frame
+        // Bullets: move in straight line, destroy most things, leave frame
         if (c >= BULLET_N && c <= BULLET_NW) {
           // Direction vectors for each bullet type
           const dirs: Record<number, [number, number]> = {
@@ -204,9 +213,10 @@ function App() {
           }
           const [bdx, bdy] = dirs[c]
 
-          // Move multiple cells per frame for speed
-          const speed = 8
+          // Move multiple cells per frame (slower than before)
+          const speed = 4
           let bnx = x, bny = y
+          let exited = false
           for (let step = 0; step < speed; step++) {
             bnx += bdx
             bny += bdy
@@ -214,20 +224,39 @@ function App() {
             // Leave frame - just disappear
             if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) {
               g[p] = EMPTY
+              exited = true
               break
             }
 
-            // Destroy whatever is in the path (except gun)
+            // Check what's in the path
             const bni = idx(bnx, bny)
-            if (g[bni] !== GUN && g[bni] !== EMPTY) {
-              g[bni] = EMPTY // Destroy it
+            const bc = g[bni]
+
+            // Skip guns and other bullets entirely (don't destroy)
+            if (bc === GUN || (bc >= BULLET_N && bc <= BULLET_NW)) {
+              continue
+            }
+
+            // Ignite gunpowder and nitro
+            if (bc === GUNPOWDER || bc === NITRO) {
+              g[bni] = FIRE
+            }
+            // Pass through plant (leave intact)
+            else if (bc === PLANT) {
+              // Do nothing, plant stays
+            }
+            // Destroy everything else
+            else if (bc !== EMPTY) {
+              g[bni] = EMPTY
             }
           }
 
-          // Place bullet at final position if still in bounds
-          if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
+          // Place bullet at final position if still in bounds and didn't exit
+          if (!exited && bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
             const bni = idx(bnx, bny)
-            if (g[bni] !== GUN) {
+            const bc = g[bni]
+            // Don't overwrite guns or other bullets
+            if (bc !== GUN && !(bc >= BULLET_N && bc <= BULLET_NW)) {
               g[bni] = c // Bullet at new position
             }
           }
@@ -1145,8 +1174,8 @@ function App() {
         } else if (c === GUN) {
           // Gun: spawns bullets rarely in random direction
 
-          // Spawn bullet very rarely (about 1 every few seconds)
-          if (rand() < 0.008) {
+          // Spawn bullet very rarely (slower rate - about 1 every 5+ seconds)
+          if (rand() < 0.003) {
             // Pick random direction (0-7)
             const dir = Math.floor(rand() * 8)
             const bulletTypes = [BULLET_N, BULLET_NE, BULLET_E, BULLET_SE, BULLET_S, BULLET_SW, BULLET_W, BULLET_NW]
