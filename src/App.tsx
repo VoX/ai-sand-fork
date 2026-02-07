@@ -13,6 +13,7 @@ const BEE = 25, FLOWER = 26, HIVE = 27, HONEY = 28, NEST = 29, GUN = 30
 // Bullet directions - 8 directions (internal only)
 const BULLET_N = 31, BULLET_NE = 32, BULLET_E = 33, BULLET_SE = 34
 const BULLET_S = 35, BULLET_SW = 36, BULLET_W = 37, BULLET_NW = 38
+const BULLET_TRAIL = 39 // Yellow trail left by bullets
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
@@ -79,6 +80,7 @@ const COLORS_U32 = new Uint32Array([
   0xFF44FFFF, // BULLET_SW
   0xFF44FFFF, // BULLET_W
   0xFF44FFFF, // BULLET_NW
+  0xFF44DDFF, // BULLET_TRAIL (yellow, slightly dimmer)
 ])
 
 // Dynamic color palettes
@@ -219,9 +221,9 @@ function App() {
           // Move one cell at a time for smooth visible trail
           const bnx = x + bdx, bny = y + bdy
 
-          // Leave frame - disappear with static spark
+          // Leave frame - disappear with trail
           if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) {
-            g[p] = STATIC
+            g[p] = BULLET_TRAIL
             continue
           }
 
@@ -229,29 +231,29 @@ function App() {
           const bni = idx(bnx, bny)
           const bc = g[bni]
 
-          // Hit stone - turn to static, remove stone
+          // Hit stone - leave trail, remove stone
           if (bc === STONE) {
             g[bni] = EMPTY // Remove stone block
-            g[p] = STATIC // Bullet becomes static
+            g[p] = BULLET_TRAIL // Bullet becomes trail
             continue
           }
 
           // Skip guns and other bullets (bullet disappears)
           if (bc === GUN || (bc >= BULLET_N && bc <= BULLET_NW)) {
-            g[p] = STATIC
+            g[p] = BULLET_TRAIL
             continue
           }
 
           // Ignite gunpowder and nitro
           if (bc === GUNPOWDER || bc === NITRO) {
             g[bni] = FIRE
-            g[p] = STATIC
+            g[p] = BULLET_TRAIL
             continue
           }
 
           // Pass through plant and water (leave intact, bullet continues)
           if (bc === PLANT || bc === WATER) {
-            g[p] = STATIC
+            g[p] = BULLET_TRAIL
             // Bullet continues past
             const pnx = bnx + bdx, pny = bny + bdy
             if (pnx >= 0 && pnx < cols && pny >= 0 && pny < rows) {
@@ -263,9 +265,9 @@ function App() {
             continue
           }
 
-          // Move bullet, leave static trail
+          // Move bullet, leave trail
           g[bni] = c
-          g[p] = STATIC
+          g[p] = BULLET_TRAIL
           continue
         }
 
@@ -963,6 +965,17 @@ function App() {
             const nx = x + dx, ny = y + dy
             if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[idx(nx, ny)] === EMPTY) {
               g[idx(nx, ny)] = STATIC; g[p] = EMPTY
+            }
+          }
+        } else if (c === BULLET_TRAIL) {
+          // Bullet trail: like static but toned down, no sparking, faster decay
+          if (rand() < 0.08) { g[p] = EMPTY; continue } // Faster decay than static
+          // Gentle jitter (less than static)
+          if (rand() < 0.05) {
+            const dx = Math.floor(rand() * 3) - 1, dy = Math.floor(rand() * 3) - 1
+            const nx = x + dx, ny = y + dy
+            if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[idx(nx, ny)] === EMPTY) {
+              g[idx(nx, ny)] = BULLET_TRAIL; g[p] = EMPTY
             }
           }
         } else if (c === GLASS) {
