@@ -408,8 +408,8 @@ function App() {
         } else if (c === SLIME) {
           // Slime: eats dirt/sand/bugs, floats on water
 
-          // Float up through water
-          if (belowCell === WATER) {
+          // Float up through water (slowly)
+          if (belowCell === WATER && rand() < 0.15) {
             if (y > 0) {
               const above = idx(x, y - 1)
               if (g[above] === WATER || g[above] === EMPTY) {
@@ -475,8 +475,8 @@ function App() {
             }
           }
 
-          // Float up through water
-          if (belowCell === WATER) {
+          // Float up through water (slowly)
+          if (belowCell === WATER && rand() < 0.15) {
             if (y > 0) {
               const above = idx(x, y - 1)
               if (g[above] === WATER || g[above] === EMPTY) {
