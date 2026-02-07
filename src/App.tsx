@@ -90,6 +90,7 @@ function App() {
   const [brushSize, setBrushSize] = useState(3)
   const [isPaused, setIsPaused] = useState(false)
   const isPausedRef = useRef(false)
+  const lastMaterialRef = useRef<Material>('sand')
   const animationRef = useRef<number>(0)
   const dimensionsRef = useRef({ cols: 0, rows: 0 })
   const pointerPosRef = useRef<{ x: number; y: number } | null>(null)
@@ -910,7 +911,7 @@ function App() {
             <button
               key={m}
               className={`material-btn ${tool === m ? 'active' : ''}`}
-              onClick={() => setTool(m)}
+              onClick={() => { lastMaterialRef.current = m; setTool(m) }}
               style={{ '--material-color': BUTTON_COLORS[m] } as React.CSSProperties}
             >
               {m}
@@ -921,7 +922,7 @@ function App() {
           <button className={`ctrl-btn ${isPaused ? '' : 'disabled'}`} onClick={() => setIsPaused(false)} disabled={!isPaused}>▶</button>
           <button className={`ctrl-btn ${isPaused ? 'disabled' : ''}`} onClick={() => setIsPaused(true)} disabled={isPaused}>⏸</button>
           <button className="ctrl-btn" onClick={reset}>↺</button>
-          <button className={`ctrl-btn erase ${tool === 'erase' ? 'active' : ''}`} onClick={() => setTool(tool === 'erase' ? 'sand' : 'erase')}>✕</button>
+          <button className={`ctrl-btn erase ${tool === 'erase' ? 'active' : ''}`} onClick={() => setTool(tool === 'erase' ? lastMaterialRef.current : 'erase')}>✕</button>
         </div>
       </div>
       <div className="canvas-container">
