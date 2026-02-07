@@ -47,7 +47,7 @@ const COLORS_U32 = new Uint32Array([
   0xFFEAD8A8, // GLASS
   0, // LIGHTNING (dynamic)
   0xFF32CD9A, // SLIME (yellowy green)
-  0xFF0A1520, // ANT (dark dark brown)
+  0xFF1A2A6B, // ANT (brownish red)
 ])
 
 // Dynamic color palettes
@@ -68,7 +68,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   sand: '#e6c86e', water: '#4a90d9', dirt: '#8b5a2b', stone: '#666666',
   plant: '#228b22', fire: '#ff6600', gas: '#888888', fluff: '#f5e6d3',
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
-  lightning: '#ffff88', slime: '#9acd32', ant: '#20150a',
+  lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a',
 }
 
 function App() {
@@ -406,7 +406,7 @@ function App() {
             }
           }
         } else if (c === SLIME) {
-          // Slime: eats dirt/sand/bugs, floats on water, leaves trail behind
+          // Slime: eats dirt/sand/bugs, floats on water
 
           // Float up through water
           if (belowCell === WATER) {
@@ -430,7 +430,7 @@ function App() {
                 const ni = idx(nx, ny), nc = g[ni]
                 if ((nc === DIRT || nc === SAND || nc === BUG) && rand() < 0.15) {
                   g[ni] = SLIME
-                  g[p] = rand() < 0.08 ? SLIME : EMPTY // Rare trail
+                  g[p] = EMPTY
                   ate = true
                 }
               }
@@ -441,24 +441,21 @@ function App() {
           // Fall down or slide
           if (belowCell === EMPTY) {
             g[below] = SLIME
-            g[p] = rand() < 0.05 ? SLIME : EMPTY // Very rare trail
+            g[p] = EMPTY
           } else {
-            // Slide sideways (slimy movement)
+            // Slide sideways
             const dx = rand() < 0.5 ? -1 : 1
             const nx1 = x + dx, nx2 = x - dx
             if (nx1 >= 0 && nx1 < cols) {
-              const side = idx(nx1, y)
               const diag = idx(nx1, y + 1)
+              const side = idx(nx1, y)
               if (g[diag] === EMPTY) {
                 g[diag] = SLIME; g[p] = EMPTY
               } else if (g[side] === EMPTY && rand() < 0.3) {
-                g[side] = SLIME; g[p] = rand() < 0.05 ? SLIME : EMPTY
+                g[side] = SLIME; g[p] = EMPTY
               }
-            } else if (nx2 >= 0 && nx2 < cols) {
-              const diag = idx(nx2, y + 1)
-              if (g[diag] === EMPTY) {
-                g[diag] = SLIME; g[p] = EMPTY
-              }
+            } else if (nx2 >= 0 && nx2 < cols && g[idx(nx2, y + 1)] === EMPTY) {
+              g[idx(nx2, y + 1)] = SLIME; g[p] = EMPTY
             }
           }
         } else if (c === ANT) {
