@@ -56,7 +56,7 @@ const COLORS_U32 = new Uint32Array([
   0xFFFFE0A0, // CRYSTAL (cyan/ice)
   0xFF2040FF, // EMBER (orange-red in ABGR)
   0xFFFFFF44, // STATIC (electric cyan)
-  0xFF4080E0, // BIRD (warm brown/tan)
+  0xFFE8E8E8, // BIRD (light grey/white)
 ])
 
 // Dynamic color palettes
@@ -78,7 +78,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   plant: '#228b22', fire: '#ff6600', gas: '#888888', fluff: '#f5e6d3',
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
   lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a', alien: '#00ff00', quark: '#ff00ff',
-  crystal: '#a0e0ff', ember: '#ff4020', static: '#44ffff', bird: '#e08040',
+  crystal: '#a0e0ff', ember: '#ff4020', static: '#44ffff', bird: '#e8e8e8',
 }
 
 function App() {
@@ -719,42 +719,66 @@ function App() {
             }
           }
         } else if (c === BIRD) {
-          // Bird: flies around eating ants/bugs, wide-ranging random walk
+          // Bird: flies around eating ants/bugs, swoops down fast, hovers slow
 
-          // Check for fire/plasma - birds burn
+          // Check for dangerous things - birds disappear
           for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
               if (dy === 0 && dx === 0) continue
               const nx = x + dx, ny = y + dy
               if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-                if (g[idx(nx, ny)] === FIRE || g[idx(nx, ny)] === PLASMA) {
-                  g[p] = FIRE
+                const nc = g[idx(nx, ny)]
+                // Fire types kill birds
+                if (nc === FIRE || nc === PLASMA || nc === LIGHTNING || nc === EMBER) {
+                  g[p] = EMPTY
+                  continue
+                }
+                // Aliens eat birds
+                if (nc === ALIEN) {
+                  g[p] = EMPTY
+                  continue
+                }
+                // Quarks destroy birds
+                if (nc === QUARK) {
+                  g[p] = EMPTY
                   continue
                 }
               }
             }
           }
 
-          // Wide-ranging random walk using position-based bias that changes over time
-          // This creates long sweeping flights across the screen
           const r1 = rand()
           const r2 = rand()
           const r3 = rand()
 
-          // Create a direction bias based on position to avoid oscillation
-          // Use sin waves with different frequencies to create sweeping patterns
-          const time = (x * 7 + y * 11) % 100
-          const xBias = r1 < 0.3 ? -1 : r1 < 0.6 ? 1 : (time % 20 < 10 ? -1 : 1)
-          const yBias = r2 < 0.25 ? -2 : r2 < 0.45 ? -1 : r2 < 0.65 ? 0 : r2 < 0.85 ? 1 : 2
+          // Position-based phase creates long sweeping patterns
+          const phase = (x * 3 + y * 7) % 60
 
-          // Large movement jumps for wide coverage
-          let dx = xBias
-          let dy = yBias
+          let dx = 0, dy = 0
 
-          // Occasionally make big jumps (3-5 cells) for faster coverage
-          if (r3 < 0.15) {
-            dx = Math.floor(r1 * 7) - 3 // -3 to +3
-            dy = Math.floor(r2 * 5) - 2 // -2 to +2
+          // Swooping behavior - fast downward dives
+          if (r1 < 0.25) {
+            // Fast swoop down (2-4 cells)
+            dy = Math.floor(r2 * 3) + 2
+            dx = r3 < 0.5 ? -1 : 1
+          }
+          // Slow hover/glide
+          else if (r1 < 0.5) {
+            // Slow movement, slight drift
+            if (rand() < 0.4) { // Sometimes don't move at all (hovering)
+              dy = r2 < 0.4 ? -1 : r2 < 0.7 ? 0 : 1
+              dx = phase % 20 < 10 ? -1 : 1
+            }
+          }
+          // Regular flight with downward bias
+          else if (r1 < 0.8) {
+            dx = r2 < 0.35 ? -1 : r2 < 0.7 ? 1 : 0
+            dy = r3 < 0.3 ? -1 : r3 < 0.7 ? 1 : 2 // Bias toward going down
+          }
+          // Big diagonal swoop
+          else {
+            dx = Math.floor(r2 * 5) - 2 // -2 to +2
+            dy = Math.floor(r3 * 4) + 1 // +1 to +4 (always down or level)
           }
 
           const nx = x + dx, ny = y + dy
@@ -783,7 +807,6 @@ function App() {
             else if (nc === FLUFF) {
               g[ni] = BIRD
               g[p] = EMPTY
-              // Scatter the fluff somewhere nearby
               const fx = x + Math.floor(rand() * 5) - 2
               const fy = y + Math.floor(rand() * 5) - 2
               if (fx >= 0 && fx < cols && fy >= 0 && fy < rows && g[idx(fx, fy)] === EMPTY) {
@@ -791,35 +814,30 @@ function App() {
               }
               moved = true
             }
-            // Eat plants sometimes (berries?)
+            // Eat plants sometimes
             else if (nc === PLANT && r3 < 0.15) {
               g[ni] = BIRD
-              g[p] = r3 < 0.08 ? BIRD : EMPTY // Rare duplication from eating plants
+              g[p] = r3 < 0.08 ? BIRD : EMPTY
               moved = true
             }
-            // Avoid water - fly away
+            // Avoid water - fly up
             else if (nc === WATER) {
-              // Try to go up instead
               if (y > 0 && g[idx(x, y - 1)] === EMPTY) {
                 g[idx(x, y - 1)] = BIRD
                 g[p] = EMPTY
                 moved = true
               }
             }
-            // Perch on stone/dirt/glass briefly
-            else if ((nc === STONE || nc === DIRT || nc === GLASS) && r3 < 0.05) {
-              // Just stay perched, don't move
+            // Perch on solids briefly
+            else if ((nc === STONE || nc === DIRT || nc === GLASS) && r3 < 0.08) {
               moved = true
             }
           }
 
-          // If couldn't move in primary direction, try alternatives
+          // Try alternatives if blocked
           if (!moved) {
-            const altDirs = [[-1,-1],[1,-1],[0,-1],[-1,0],[1,0],[-1,1],[1,1],[0,1]]
-            for (let d = altDirs.length - 1; d > 0; d--) {
-              const j = Math.floor(rand() * (d + 1));
-              [altDirs[d], altDirs[j]] = [altDirs[j], altDirs[d]]
-            }
+            // Prioritize downward directions for swooping
+            const altDirs = [[0,1],[1,1],[-1,1],[1,0],[-1,0],[0,-1],[1,-1],[-1,-1]]
             for (const [adx, ady] of altDirs) {
               const anx = x + adx, any = y + ady
               if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
@@ -839,7 +857,7 @@ function App() {
             }
           }
 
-          // Birds die if completely stuck for too long (decay)
+          // Birds decay to fluff if stuck
           if (!moved && r1 > 0.98) g[p] = FLUFF
         }
       }
