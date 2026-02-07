@@ -280,6 +280,81 @@ function App() {
               if (bx >= 0 && bx < cols && g[idx(bx, y)] === EMPTY) g[idx(bx, y)] = LIGHTNING
             }
           } else if (!struck) g[p] = EMPTY
+        } else if (c === BIRD) {
+          // Bird: flies around the screen, rises and swoops
+
+          // Check for fire types - explode and die
+          let dead = false
+          for (let bdy = -1; bdy <= 1 && !dead; bdy++) {
+            for (let bdx = -1; bdx <= 1 && !dead; bdx++) {
+              if (bdy === 0 && bdx === 0) continue
+              const bnx = x + bdx, bny = y + bdy
+              if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
+                const bnc = g[idx(bnx, bny)]
+                if (bnc === FIRE || bnc === PLASMA || bnc === LIGHTNING || bnc === EMBER) {
+                  g[p] = FIRE
+                  for (let ey = -1; ey <= 1; ey++) {
+                    for (let ex = -1; ex <= 1; ex++) {
+                      const bx = x + ex, by = y + ey
+                      if (bx >= 0 && bx < cols && by >= 0 && by < rows && g[idx(bx, by)] === EMPTY && rand() < 0.35) {
+                        g[idx(bx, by)] = FIRE
+                      }
+                    }
+                  }
+                  dead = true
+                }
+                if (bnc === ALIEN || bnc === QUARK) {
+                  g[p] = EMPTY
+                  dead = true
+                }
+              }
+            }
+          }
+          if (dead) continue
+
+          // Hunger decay
+          if (rand() < 0.006) { g[p] = FLUFF; continue }
+
+          // Skip some updates
+          if (rand() < 0.4) continue
+
+          const r1 = rand()
+          const r2 = rand()
+
+          // Flying - mostly up and sideways, occasional swoop
+          let bdx = 0, bdy = 0
+          if (r1 < 0.5) {
+            // Fly up
+            bdy = -1
+            bdx = r2 < 0.35 ? -1 : r2 < 0.7 ? 1 : 0
+          } else if (r1 < 0.75) {
+            // Fly sideways
+            bdx = r2 < 0.5 ? -2 : 2
+            bdy = r2 < 0.4 ? -1 : 0
+          } else if (r1 < 0.9) {
+            // Swoop down
+            bdy = 1
+            bdx = r2 < 0.5 ? -1 : 1
+          }
+          // else hover
+
+          if (bdx === 0 && bdy === 0) continue
+
+          const bnx = x + bdx, bny = y + bdy
+          if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
+            const bni = idx(bnx, bny), bnc = g[bni]
+
+            if (bnc === ANT || bnc === BUG) {
+              g[bni] = BIRD
+              g[p] = rand() < 0.4 ? PLANT : EMPTY
+            } else if (bnc === EMPTY) {
+              g[bni] = BIRD
+              g[p] = EMPTY
+            } else if (bnc === FLUFF) {
+              g[bni] = BIRD
+              g[p] = EMPTY
+            }
+          }
         }
       }
     }
@@ -716,82 +791,6 @@ function App() {
                   break
                 }
               }
-            }
-          }
-        } else if (c === BIRD) {
-          // Bird: floats up, flies around, dies on fire or if hungry
-
-          // Check for fire types first - explode and die
-          let dead = false
-          for (let dy = -1; dy <= 1 && !dead; dy++) {
-            for (let dx = -1; dx <= 1 && !dead; dx++) {
-              if (dy === 0 && dx === 0) continue
-              const nx = x + dx, ny = y + dy
-              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-                const nc = g[idx(nx, ny)]
-                if (nc === FIRE || nc === PLASMA || nc === LIGHTNING || nc === EMBER) {
-                  g[p] = FIRE
-                  // Small explosion
-                  for (let ey = -1; ey <= 1; ey++) {
-                    for (let ex = -1; ex <= 1; ex++) {
-                      const bx = x + ex, by = y + ey
-                      if (bx >= 0 && bx < cols && by >= 0 && by < rows && g[idx(bx, by)] === EMPTY && rand() < 0.35) {
-                        g[idx(bx, by)] = FIRE
-                      }
-                    }
-                  }
-                  dead = true
-                }
-                if (nc === ALIEN || nc === QUARK) {
-                  g[p] = EMPTY
-                  dead = true
-                }
-              }
-            }
-          }
-          if (dead) continue
-
-          // Hunger - die after a while
-          if (rand() < 0.008) { g[p] = FLUFF; continue }
-
-          // Skip some updates for slower movement
-          if (rand() < 0.5) continue
-
-          const r1 = rand()
-          const r2 = rand()
-
-          // Flying movement - strong upward bias, lots of sideways
-          let dx = 0, dy = 0
-          if (r1 < 0.45) {
-            // Fly up (main behavior)
-            dy = -1
-            dx = r2 < 0.4 ? -1 : r2 < 0.8 ? 1 : 0
-          } else if (r1 < 0.7) {
-            // Glide sideways
-            dx = r2 < 0.5 ? -1 : 1
-            dy = r2 < 0.3 ? -1 : 0
-          } else if (r1 < 0.85) {
-            // Swoop down briefly
-            dy = 1
-            dx = r2 < 0.5 ? -1 : 1
-          }
-          // else hover
-
-          if (dx === 0 && dy === 0) continue
-
-          const nx = x + dx, ny = y + dy
-          if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-            const ni = idx(nx, ny), nc = g[ni]
-
-            if (nc === ANT || nc === BUG) {
-              g[ni] = BIRD
-              g[p] = rand() < 0.4 ? PLANT : EMPTY
-            } else if (nc === EMPTY) {
-              g[ni] = BIRD
-              g[p] = EMPTY
-            } else if (nc === FLUFF) {
-              g[ni] = BIRD
-              g[p] = EMPTY
             }
           }
         }
