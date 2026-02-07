@@ -119,6 +119,8 @@ function App() {
   const animationRef = useRef<number>(0)
   const dimensionsRef = useRef({ cols: 0, rows: 0 })
   const pointerPosRef = useRef<{ x: number; y: number } | null>(null)
+  const lastUpdateRef = useRef<number>(0)
+  const physicsAccumRef = useRef<number>(0)
 
   const initGrid = useCallback(() => {
     const canvas = canvasRef.current
@@ -1246,8 +1248,25 @@ function App() {
     ctx.putImageData(imageData, 0, 0)
   }, [])
 
-  const gameLoop = useCallback(() => {
-    if (!isPausedRef.current) updatePhysics()
+  const gameLoop = useCallback((timestamp: number) => {
+    // Fixed timestep physics (60 updates per second)
+    const PHYSICS_STEP = 1000 / 60
+
+    if (lastUpdateRef.current === 0) lastUpdateRef.current = timestamp
+    const delta = Math.min(timestamp - lastUpdateRef.current, 100) // Cap at 100ms to prevent spiral
+    lastUpdateRef.current = timestamp
+
+    if (!isPausedRef.current) {
+      physicsAccumRef.current += delta
+      // Run physics at fixed rate, catch up if behind (max 3 steps per frame)
+      let steps = 0
+      while (physicsAccumRef.current >= PHYSICS_STEP && steps < 3) {
+        updatePhysics()
+        physicsAccumRef.current -= PHYSICS_STEP
+        steps++
+      }
+    }
+
     render()
     animationRef.current = requestAnimationFrame(gameLoop)
   }, [updatePhysics, render])
@@ -1290,6 +1309,8 @@ function App() {
 
   useEffect(() => {
     initGrid()
+    lastUpdateRef.current = 0
+    physicsAccumRef.current = 0
     animationRef.current = requestAnimationFrame(gameLoop)
     const handleResize = () => initGrid()
     window.addEventListener('resize', handleResize)
