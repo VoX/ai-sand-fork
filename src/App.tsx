@@ -576,142 +576,71 @@ function App() {
             }
           }
         } else if (c === ALIEN) {
-          // Alien: organic terraformer - optimized
+          // Alien: organic terraformer - no duplication
           const r1 = rand()
+          if (r1 < 0.5) continue // Skip half the time for performance
           let nx = x, ny = y
-          if (r1 < 0.2) ny = y - 1
-          else if (r1 < 0.35) ny = y + 1
-          else if (r1 < 0.55) nx = x + (r1 < 0.45 ? -1 : 1)
-          else if (r1 < 0.8) { nx = x + (r1 < 0.675 ? -1 : 1); ny = y + (r1 < 0.725 ? -1 : 1) }
+          if (r1 < 0.6) ny = y - 1
+          else if (r1 < 0.7) ny = y + 1
+          else if (r1 < 0.85) nx = x + (r1 < 0.775 ? -1 : 1)
+          else { nx = x + (r1 < 0.925 ? -1 : 1); ny = y + (r1 < 0.95 ? -1 : 1) }
 
           let moved = false
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && (nx !== x || ny !== y)) {
             const ni = idx(nx, ny), nc = g[ni]
             const r2 = rand()
 
-            if (nc === SAND) {
-              g[ni] = ALIEN; g[p] = r2 < 0.5 ? GLASS : PLANT; moved = true
-            } else if (nc === DIRT) {
-              g[ni] = ALIEN
-              g[p] = r2 < 0.6 ? PLANT : r2 < 0.85 ? WATER : ALIEN
-              moved = true
-            } else if (nc === WATER) {
-              g[ni] = ALIEN; g[p] = r2 < 0.5 ? SLIME : PLANT; moved = true
-            } else if (nc === PLANT) {
-              g[ni] = ALIEN
-              g[p] = r2 < 0.15 ? BUG : r2 < 0.25 ? ALIEN : PLANT
-              moved = true
-            } else if (nc === GLASS) {
-              g[ni] = ALIEN; g[p] = FLUFF; moved = true
-            } else if (nc === FLUFF) {
-              g[ni] = ALIEN; g[p] = r2 < 0.1 ? ALIEN : BUG; moved = true
-            } else if (nc === STONE && r2 < 0.1) {
-              g[ni] = ALIEN; g[p] = r2 < 0.05 ? GLASS : DIRT; moved = true
-            } else if (nc === EMPTY) {
-              g[ni] = ALIEN
-              g[p] = r2 < 0.1 ? PLANT : r2 < 0.15 ? WATER : r2 < 0.2 ? SLIME : EMPTY
-              moved = true
-            } else if (nc === FIRE || nc === PLASMA) {
-              g[ni] = ALIEN; g[p] = r2 < 0.1 ? ALIEN : r2 < 0.5 ? PLANT : SLIME; moved = true
-            } else if (nc === SLIME) {
-              g[ni] = ALIEN; g[p] = r2 < 0.08 ? ALIEN : PLANT; moved = true
-            }
+            if (nc === SAND) { g[ni] = ALIEN; g[p] = r2 < 0.5 ? GLASS : PLANT; moved = true }
+            else if (nc === DIRT) { g[ni] = ALIEN; g[p] = r2 < 0.7 ? PLANT : WATER; moved = true }
+            else if (nc === WATER) { g[ni] = ALIEN; g[p] = r2 < 0.5 ? SLIME : PLANT; moved = true }
+            else if (nc === PLANT) { g[ni] = ALIEN; g[p] = r2 < 0.2 ? BUG : PLANT; moved = true }
+            else if (nc === GLASS) { g[ni] = ALIEN; g[p] = FLUFF; moved = true }
+            else if (nc === FLUFF) { g[ni] = ALIEN; g[p] = BUG; moved = true }
+            else if (nc === STONE && r2 < 0.05) { g[ni] = ALIEN; g[p] = DIRT; moved = true }
+            else if (nc === EMPTY) { g[ni] = ALIEN; g[p] = EMPTY; moved = true }
+            else if (nc === FIRE || nc === PLASMA) { g[ni] = ALIEN; g[p] = r2 < 0.5 ? PLANT : SLIME; moved = true }
+            else if (nc === SLIME) { g[ni] = ALIEN; g[p] = PLANT; moved = true }
           }
 
-          // Faster decay to prevent buildup
-          if (!moved && r1 > 0.96) g[p] = EMPTY
-
-          // Less frequent emissions
-          if (r1 > 0.98) {
-            const ex = x + ((r1 * 100 | 0) % 3) - 1
-            const ey = y + ((r1 * 1000 | 0) % 3) - 1
-            if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY) {
-              g[idx(ex, ey)] = r1 < 0.99 ? WATER : PLANT
-            }
-          }
+          // High decay
+          if (!moved && r1 > 0.9) g[p] = EMPTY
         } else if (c === QUARK) {
-          // Quark: chaotic inorganic terraformer - optimized
+          // Quark: inorganic terraformer - minimal duplication
           const r1 = rand()
+          if (r1 < 0.5) continue // Skip half the time for performance
           let nx = x, ny = y
 
-          // Movement with teleport using single random
-          if (r1 < 0.1) {
-            nx = x + ((r1 * 50 | 0) % 5) - 2
-            ny = y + ((r1 * 500 | 0) % 5) - 2
-          } else if (r1 < 0.25) ny = y - 1
-          else if (r1 < 0.45) ny = y + 1
-          else if (r1 < 0.65) nx = x + (r1 < 0.55 ? -1 : 1)
-          else if (r1 < 0.85) { nx = x + (r1 < 0.75 ? -1 : 1); ny = y + (r1 < 0.8 ? -1 : 1) }
+          if (r1 < 0.55) { nx = x + ((r1 * 50 | 0) % 5) - 2; ny = y + ((r1 * 500 | 0) % 5) - 2 }
+          else if (r1 < 0.65) ny = y - 1
+          else if (r1 < 0.8) ny = y + 1
+          else if (r1 < 0.9) nx = x + (r1 < 0.85 ? -1 : 1)
+          else { nx = x + (r1 < 0.95 ? -1 : 1); ny = y + (r1 < 0.975 ? -1 : 1) }
 
           let moved = false
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && (nx !== x || ny !== y)) {
             const ni = idx(nx, ny), nc = g[ni]
             const r2 = rand()
 
-            if (nc === PLANT) {
-              g[ni] = QUARK
-              g[p] = r2 < 0.5 ? SAND : r2 < 0.7 ? STONE : FIRE
-              moved = true
-            } else if (nc === DIRT) {
-              g[ni] = QUARK
-              g[p] = r2 < 0.4 ? SAND : r2 < 0.6 ? STONE : r2 < 0.75 ? QUARK : GLASS
-              moved = true
-            } else if (nc === WATER) {
-              g[ni] = QUARK
-              g[p] = r2 < 0.3 ? GLASS : r2 < 0.5 ? SAND : r2 < 0.65 ? QUARK : LIGHTNING
-              moved = true
-            } else if (nc === GLASS) {
-              g[ni] = QUARK; g[p] = r2 < 0.25 ? QUARK : WATER; moved = true
-            } else if (nc === SLIME) {
-              g[ni] = QUARK
-              g[p] = r2 < 0.3 ? SAND : r2 < 0.5 ? WATER : PLASMA
-              moved = true
-            } else if (nc === BUG) {
-              g[ni] = QUARK; g[p] = r2 < 0.3 ? FIRE : SAND; moved = true
-            } else if (nc === SAND) {
-              g[ni] = QUARK
-              g[p] = r2 < 0.15 ? QUARK : r2 < 0.4 ? GLASS : r2 < 0.5 ? LIGHTNING : SAND
-              moved = true
-            } else if (nc === EMPTY) {
-              g[ni] = QUARK
-              g[p] = r2 < 0.2 ? SAND : r2 < 0.3 ? GLASS : r2 < 0.35 ? LIGHTNING : EMPTY
-              moved = true
-            } else if (nc === FIRE || nc === PLASMA) {
-              g[ni] = QUARK
-              g[p] = r2 < 0.3 ? QUARK : r2 < 0.5 ? LIGHTNING : r2 < 0.7 ? PLASMA : FIRE
-              moved = true
-            } else if (nc === ALIEN) {
-              g[ni] = r2 < 0.5 ? GLASS : LIGHTNING
-              g[p] = r2 < 0.5 ? WATER : FIRE
-              const ex = x + ((r2 * 100 | 0) % 3) - 1, ey = y + ((r2 * 1000 | 0) % 3) - 1
-              if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY) {
-                g[idx(ex, ey)] = r2 < 0.5 ? SAND : PLANT
-              }
-              moved = true
-            } else if (nc === STONE && r2 < 0.2) {
-              g[ni] = QUARK; g[p] = r2 < 0.1 ? SAND : GLASS; moved = true
-            } else if (nc === QUARK) {
-              g[ni] = r2 < 0.3 ? LIGHTNING : QUARK
-              g[p] = r2 < 0.3 ? PLASMA : QUARK
-              moved = true
-            } else if (nc === FLUFF) {
-              g[ni] = QUARK; g[p] = r2 < 0.5 ? FIRE : SAND; moved = true
-            }
+            if (nc === PLANT) { g[ni] = QUARK; g[p] = r2 < 0.5 ? SAND : r2 < 0.8 ? STONE : FIRE; moved = true }
+            else if (nc === DIRT) { g[ni] = QUARK; g[p] = r2 < 0.5 ? SAND : r2 < 0.8 ? STONE : GLASS; moved = true }
+            else if (nc === WATER) { g[ni] = QUARK; g[p] = r2 < 0.4 ? GLASS : r2 < 0.7 ? SAND : LIGHTNING; moved = true }
+            else if (nc === GLASS) { g[ni] = QUARK; g[p] = WATER; moved = true }
+            else if (nc === SLIME) { g[ni] = QUARK; g[p] = r2 < 0.4 ? SAND : r2 < 0.7 ? WATER : PLASMA; moved = true }
+            else if (nc === BUG) { g[ni] = QUARK; g[p] = r2 < 0.3 ? FIRE : SAND; moved = true }
+            else if (nc === SAND) { g[ni] = QUARK; g[p] = r2 < 0.4 ? GLASS : r2 < 0.6 ? LIGHTNING : SAND; moved = true }
+            else if (nc === EMPTY) { g[ni] = QUARK; g[p] = EMPTY; moved = true }
+            else if (nc === FIRE || nc === PLASMA) { g[ni] = QUARK; g[p] = r2 < 0.4 ? LIGHTNING : r2 < 0.7 ? PLASMA : FIRE; moved = true }
+            else if (nc === ALIEN) { g[ni] = r2 < 0.5 ? GLASS : LIGHTNING; g[p] = r2 < 0.5 ? WATER : FIRE; moved = true }
+            else if (nc === STONE && r2 < 0.1) { g[ni] = QUARK; g[p] = GLASS; moved = true }
+            else if (nc === QUARK) { g[ni] = r2 < 0.2 ? LIGHTNING : QUARK; g[p] = QUARK; moved = true }
+            else if (nc === FLUFF) { g[ni] = QUARK; g[p] = r2 < 0.5 ? FIRE : SAND; moved = true }
           }
 
-          // Emit lightning or plasma using single roll
-          if (r1 > 0.92) {
-            const lx = x + ((r1 * 700 | 0) % 7) - 3
-            const ly = y + ((r1 * 500 | 0) % 5) - 2
-            if (lx >= 0 && lx < cols && ly >= 0 && ly < rows && g[idx(lx, ly)] === EMPTY) {
-              g[idx(lx, ly)] = r1 > 0.98 ? PLASMA : LIGHTNING
-            }
-          }
+          // Occasional lightning
+          if (r1 > 0.97 && y + 1 < rows && g[idx(x, y + 1)] === EMPTY) g[idx(x, y + 1)] = LIGHTNING
 
-          // Decay when stuck
-          if (!moved && r1 > 0.98) {
-            g[p] = r1 > 0.994 ? SAND : r1 > 0.99 ? LIGHTNING : EMPTY
-          }
+          // High decay
+          if (!moved && r1 > 0.9) g[p] = EMPTY
         }
       }
     }
