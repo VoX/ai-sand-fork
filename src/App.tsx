@@ -7,6 +7,7 @@ type Tool = Material | 'erase'
 // Numeric IDs for maximum performance
 const EMPTY = 0, SAND = 1, WATER = 2, DIRT = 3, STONE = 4, PLANT = 5
 const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13, SLIME = 14, ANT = 15, ALIEN = 16, QUARK = 17
+const CRYSTAL = 18, EMBER = 19, STATIC = 20 // Quark cycle particles
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
@@ -50,6 +51,9 @@ const COLORS_U32 = new Uint32Array([
   0xFF1A2A6B, // ANT (brownish red)
   0xFF00FF00, // ALIEN (lime green)
   0xFFFF00FF, // QUARK (magenta)
+  0xFFFFE0A0, // CRYSTAL (cyan/ice)
+  0xFF2040FF, // EMBER (orange-red in ABGR)
+  0xFFFFFF44, // STATIC (electric cyan)
 ])
 
 // Dynamic color palettes
@@ -157,7 +161,7 @@ function App() {
 
         if (c === FIRE) {
           if (y === 0) { g[p] = EMPTY; continue }
-          if (rand() < 0.1) { g[p] = rand() < 0.3 ? GAS : EMPTY; continue }
+          if (rand() < 0.1) { g[p] = rand() < 0.25 ? GAS : rand() < 0.15 ? EMBER : EMPTY; continue }
           // Spread to flammable neighbors
           for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
@@ -213,7 +217,7 @@ function App() {
             }
           }
         } else if (c === LIGHTNING) {
-          if (rand() < 0.2) { g[p] = EMPTY; continue }
+          if (rand() < 0.2) { g[p] = rand() < 0.2 ? STATIC : EMPTY; continue }
           let struck = false
           for (let dist = 1; dist <= 3 && !struck; dist++) {
             const ny = y + dist
@@ -628,31 +632,88 @@ function App() {
             const ni = idx(nx, ny), nc = g[ni]
             const r2 = rand()
 
-            if (nc === PLANT) { g[ni] = QUARK; g[p] = r2 < 0.12 ? SAND : r2 < 0.35 ? GLASS : r2 < 0.5 ? FIRE : QUARK; moved = true }
-            else if (nc === DIRT) { g[ni] = QUARK; g[p] = r2 < 0.1 ? SAND : r2 < 0.35 ? GLASS : r2 < 0.48 ? STONE : QUARK; moved = true }
-            else if (nc === WATER) { g[ni] = QUARK; g[p] = r2 < 0.35 ? GLASS : r2 < 0.48 ? LIGHTNING : QUARK; moved = true }
-            else if (nc === GLASS) { g[ni] = QUARK; g[p] = r2 < 0.4 ? WATER : QUARK; moved = true }
-            else if (nc === SLIME) { g[ni] = QUARK; g[p] = r2 < 0.2 ? GLASS : r2 < 0.4 ? WATER : r2 < 0.55 ? PLASMA : QUARK; moved = true }
-            else if (nc === BUG) { g[ni] = QUARK; g[p] = r2 < 0.2 ? FIRE : r2 < 0.4 ? GLASS : QUARK; moved = true }
-            else if (nc === SAND) { g[ni] = QUARK; g[p] = r2 < 0.35 ? GLASS : r2 < 0.5 ? LIGHTNING : QUARK; moved = true }
-            else if (nc === EMPTY) { g[ni] = QUARK; g[p] = r2 < 0.2 ? GLASS : r2 < 0.35 ? LIGHTNING : r2 < 0.45 ? SAND : EMPTY; moved = true }
-            else if (nc === FIRE || nc === PLASMA) { g[ni] = QUARK; g[p] = r2 < 0.55 ? QUARK : r2 < 0.75 ? LIGHTNING : r2 < 0.9 ? PLASMA : FIRE; moved = true }
-            else if (nc === ALIEN) { g[ni] = r2 < 0.65 ? GLASS : LIGHTNING; g[p] = r2 < 0.4 ? WATER : QUARK; moved = true }
-            else if (nc === STONE && r2 < 0.35) { g[ni] = QUARK; g[p] = r2 < 0.25 ? GLASS : SAND; moved = true }
-            else if (nc === QUARK) { g[ni] = r2 < 0.55 ? LIGHTNING : QUARK; g[p] = r2 < 0.55 ? PLASMA : QUARK; moved = true }
-            else if (nc === FLUFF) { g[ni] = QUARK; g[p] = r2 < 0.3 ? FIRE : r2 < 0.55 ? GLASS : QUARK; moved = true }
+            if (nc === PLANT) { g[ni] = QUARK; g[p] = r2 < 0.2 ? SAND : r2 < 0.4 ? STONE : r2 < 0.55 ? EMBER : QUARK; moved = true }
+            else if (nc === DIRT) { g[ni] = QUARK; g[p] = r2 < 0.2 ? SAND : r2 < 0.45 ? STONE : r2 < 0.55 ? EMBER : QUARK; moved = true }
+            else if (nc === WATER) { g[ni] = QUARK; g[p] = r2 < 0.2 ? STATIC : r2 < 0.4 ? LIGHTNING : r2 < 0.55 ? SAND : QUARK; moved = true }
+            else if (nc === GLASS) { g[ni] = QUARK; g[p] = r2 < 0.4 ? CRYSTAL : r2 < 0.55 ? SAND : QUARK; moved = true }
+            else if (nc === SLIME) { g[ni] = QUARK; g[p] = r2 < 0.25 ? EMBER : r2 < 0.45 ? PLASMA : r2 < 0.55 ? SAND : QUARK; moved = true }
+            else if (nc === BUG) { g[ni] = QUARK; g[p] = r2 < 0.3 ? EMBER : r2 < 0.5 ? FIRE : QUARK; moved = true }
+            else if (nc === SAND) { g[ni] = QUARK; g[p] = r2 < 0.25 ? STONE : r2 < 0.45 ? LIGHTNING : QUARK; moved = true }
+            else if (nc === EMPTY) { g[ni] = QUARK; g[p] = r2 < 0.15 ? STATIC : r2 < 0.28 ? LIGHTNING : r2 < 0.38 ? SAND : EMPTY; moved = true }
+            else if (nc === FIRE || nc === PLASMA) { g[ni] = QUARK; g[p] = r2 < 0.45 ? QUARK : r2 < 0.65 ? EMBER : r2 < 0.85 ? PLASMA : FIRE; moved = true }
+            else if (nc === ALIEN) { g[ni] = r2 < 0.5 ? CRYSTAL : LIGHTNING; g[p] = r2 < 0.5 ? STATIC : QUARK; moved = true }
+            else if (nc === STONE && r2 < 0.35) { g[ni] = QUARK; g[p] = r2 < 0.25 ? SAND : EMBER; moved = true }
+            else if (nc === QUARK) { g[ni] = r2 < 0.5 ? LIGHTNING : QUARK; g[p] = r2 < 0.5 ? STATIC : QUARK; moved = true }
+            else if (nc === FLUFF) { g[ni] = QUARK; g[p] = r2 < 0.35 ? EMBER : r2 < 0.55 ? FIRE : QUARK; moved = true }
+            else if (nc === CRYSTAL) { g[ni] = QUARK; g[p] = r2 < 0.35 ? SAND : r2 < 0.55 ? STONE : QUARK; moved = true }
+            else if (nc === EMBER) { g[ni] = QUARK; g[p] = r2 < 0.4 ? FIRE : r2 < 0.55 ? PLASMA : QUARK; moved = true }
+            else if (nc === STATIC) { g[ni] = QUARK; g[p] = r2 < 0.45 ? LIGHTNING : QUARK; moved = true }
           }
 
-          // Shoot lightning more often
-          if (r1 > 0.9) {
+          // Shoot lightning/static/ember
+          if (r1 > 0.88) {
             const lx = x + ((r1 * 700 | 0) % 7) - 3, ly = y + ((r1 * 500 | 0) % 5) - 2
             if (lx >= 0 && lx < cols && ly >= 0 && ly < rows && g[idx(lx, ly)] === EMPTY) {
-              g[idx(lx, ly)] = r1 > 0.97 ? PLASMA : LIGHTNING
+              g[idx(lx, ly)] = r1 > 0.97 ? PLASMA : r1 > 0.94 ? STATIC : r1 > 0.91 ? EMBER : LIGHTNING
             }
           }
 
           // Decay when stuck
           if (!moved && r1 > 0.94) g[p] = r1 > 0.97 ? LIGHTNING : EMPTY
+        } else if (c === CRYSTAL) {
+          // Crystal: grows from glass, quark food
+          if (rand() < 0.008) { g[p] = SAND; continue } // Slow decay to sand
+          // Spread to adjacent glass
+          if (rand() < 0.02) {
+            const dx = Math.floor(rand() * 3) - 1, dy = Math.floor(rand() * 3) - 1
+            const nx = x + dx, ny = y + dy
+            if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[idx(nx, ny)] === GLASS) {
+              g[idx(nx, ny)] = CRYSTAL
+            }
+          }
+        } else if (c === EMBER) {
+          // Ember: glowing coal, quark food
+          if (rand() < 0.03) { g[p] = rand() < 0.3 ? SAND : EMPTY; continue }
+          // Can reignite nearby flammables
+          if (rand() < 0.01) {
+            const dx = Math.floor(rand() * 3) - 1, dy = Math.floor(rand() * 3) - 1
+            const nx = x + dx, ny = y + dy
+            if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+              const nc = g[idx(nx, ny)]
+              if (nc === PLANT || nc === FLUFF) g[idx(nx, ny)] = FIRE
+            }
+          }
+          // Fall slowly
+          if (belowCell === EMPTY && rand() < 0.3) { g[below] = EMBER; g[p] = EMPTY }
+        } else if (c === STATIC) {
+          // Static: electrical residue, quark food
+          if (rand() < 0.04) { g[p] = EMPTY; continue }
+          // Can spark into lightning
+          if (rand() < 0.008) {
+            g[p] = LIGHTNING
+          }
+          // Jitter around
+          if (rand() < 0.1) {
+            const dx = Math.floor(rand() * 3) - 1, dy = Math.floor(rand() * 3) - 1
+            const nx = x + dx, ny = y + dy
+            if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[idx(nx, ny)] === EMPTY) {
+              g[idx(nx, ny)] = STATIC; g[p] = EMPTY
+            }
+          }
+        } else if (c === GLASS) {
+          // Glass can slowly crystallize
+          if (rand() < 0.002) {
+            // Check if crystal nearby to seed growth
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                const nx = x + dx, ny = y + dy
+                if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[idx(nx, ny)] === CRYSTAL) {
+                  g[p] = CRYSTAL
+                  break
+                }
+              }
+            }
+          }
         }
       }
     }
