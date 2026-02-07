@@ -260,7 +260,7 @@ function App() {
             const pnx = bnx + bdx, pny = bny + bdy
             if (pnx >= 0 && pnx < cols && pny >= 0 && pny < rows) {
               const pni = idx(pnx, pny)
-              if (g[pni] === EMPTY || g[pni] === WATER) {
+              if (g[pni] === EMPTY || g[pni] === WATER || g[pni] === PLANT) {
                 g[pni] = c
               }
             }
