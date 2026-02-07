@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
@@ -9,18 +9,18 @@ const EMPTY = 0, SAND = 1, WATER = 2, DIRT = 3, STONE = 4, PLANT = 5
 const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13, SLIME = 14, ANT = 15, ALIEN = 16, QUARK = 17
 const CRYSTAL = 18, EMBER = 19, STATIC = 20 // Quark cycle particles
 const BIRD = 21, GUNPOWDER = 22, TAP = 23, ANTHILL = 24
-const BEE = 25, FLOWER = 26, HIVE = 27
+const BEE = 25, FLOWER = 26, HIVE = 27, HONEY = 28
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
   fire: FIRE, gas: GAS, fluff: FLUFF, bug: BUG, plasma: PLASMA,
   nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME, ant: ANT, alien: ALIEN, quark: QUARK,
   crystal: CRYSTAL, ember: EMBER, static: STATIC, bird: BIRD, gunpowder: GUNPOWDER, tap: TAP, anthill: ANTHILL,
-  bee: BEE, flower: FLOWER, hive: HIVE,
+  bee: BEE, flower: FLOWER, hive: HIVE, honey: HONEY,
 }
 
 // Density for displacement (higher sinks through lower, 0 = doesn't displace)
-const DENSITY = new Uint8Array([0, 3, 1, 3, 5, 0, 0, 0, 0, 0, 0, 2, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3]) // index 22 = GUNPOWDER
+const DENSITY = new Uint8Array([0, 3, 1, 3, 5, 0, 0, 0, 0, 0, 0, 2, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 2]) // index 22 = GUNPOWDER, 28 = HONEY
 
 const CELL_SIZE = 4
 
@@ -65,6 +65,7 @@ const COLORS_U32 = new Uint32Array([
   0xFF00D8FF, // BEE (bright yellow)
   0xFFCC66FF, // FLOWER (pink-purple)
   0xFF40B8E8, // HIVE (honey/amber)
+  0xFF30A0FF, // HONEY (orange-gold)
 ])
 
 // Dynamic color palettes
@@ -87,7 +88,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
   lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a', alien: '#00ff00', quark: '#ff00ff',
   crystal: '#a0e0ff', ember: '#ff4020', static: '#44ffff', bird: '#e8e8e8', gunpowder: '#303030', tap: '#c0c0c0', anthill: '#b08030',
-  bee: '#ffd800', flower: '#ff66cc', hive: '#e8b840',
+  bee: '#ffd800', flower: '#ff66cc', hive: '#e8b840', honey: '#ffa030',
 }
 
 function App() {
@@ -421,9 +422,9 @@ function App() {
               g[bni] = BEE
               g[p] = EMPTY
             } else if (bnc === FLOWER) {
-              // Bees love flowers, pass through
+              // Bees make honey when touching flowers
               g[bni] = BEE
-              g[p] = FLOWER
+              g[p] = rand() < 0.3 ? HONEY : FLOWER
             }
           }
         }
@@ -533,7 +534,7 @@ function App() {
               const nx = x + dx, ny = y + dy
               if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
                 const ni = idx(nx, ny), nc = g[ni]
-                if (nc === DIRT || nc === PLANT) {
+                if (nc === DIRT || nc === PLANT || nc === HONEY) {
                   g[ni] = BUG
                   g[p] = rand() < 0.15 ? BUG : EMPTY
                   break
@@ -705,7 +706,7 @@ function App() {
               if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
                 const ni = idx(nx, ny), nc = g[ni]
                 // Eat through most things (not water)
-                if (nc === SAND || nc === DIRT || nc === PLANT || nc === FLUFF || nc === BUG || nc === NITRO || nc === SLIME) {
+                if (nc === SAND || nc === DIRT || nc === PLANT || nc === FLUFF || nc === BUG || nc === NITRO || nc === SLIME || nc === HONEY) {
                   g[ni] = ANT
                   g[p] = rand() < 0.4 ? DIRT : EMPTY
                   break
@@ -1001,6 +1002,39 @@ function App() {
               g[idx(hnx, hny)] = BEE
             }
           }
+        } else if (c === HONEY) {
+          // Honey: very slow flowing liquid, sinks in water, fire turns to ember
+
+          // Check for fire types - turns to ember
+          for (let hdy = -1; hdy <= 1; hdy++) {
+            for (let hdx = -1; hdx <= 1; hdx++) {
+              if (hdy === 0 && hdx === 0) continue
+              const hnx = x + hdx, hny = y + hdy
+              if (hnx >= 0 && hnx < cols && hny >= 0 && hny < rows) {
+                const hnc = g[idx(hnx, hny)]
+                if (hnc === FIRE || hnc === PLASMA || hnc === LIGHTNING) {
+                  g[p] = EMBER
+                  continue
+                }
+              }
+            }
+          }
+
+          // Very slow movement - only move 10% of the time
+          if (rand() > 0.1) continue
+
+          // Fall slowly, sink through water
+          if (canSink(HONEY, belowCell) && (belowCell === EMPTY || rand() < 0.4)) {
+            g[below] = HONEY; g[p] = belowCell
+          } else if (rand() < 0.3) {
+            // Slow sideways flow
+            const hdx = rand() < 0.5 ? -1 : 1
+            const hnx1 = x + hdx, hnx2 = x - hdx
+            if (hnx1 >= 0 && hnx1 < cols && g[idx(hnx1, y + 1)] === EMPTY) { g[idx(hnx1, y + 1)] = HONEY; g[p] = EMPTY }
+            else if (hnx2 >= 0 && hnx2 < cols && g[idx(hnx2, y + 1)] === EMPTY) { g[idx(hnx2, y + 1)] = HONEY; g[p] = EMPTY }
+            else if (hnx1 >= 0 && hnx1 < cols && g[idx(hnx1, y)] === EMPTY) { g[idx(hnx1, y)] = HONEY; g[p] = EMPTY }
+            else if (hnx2 >= 0 && hnx2 < cols && g[idx(hnx2, y)] === EMPTY) { g[idx(hnx2, y)] = HONEY; g[p] = EMPTY }
+          }
         }
       }
     }
@@ -1106,7 +1140,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey']
 
   return (
     <div className="app">
