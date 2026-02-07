@@ -921,7 +921,7 @@ function App() {
           <button className={`ctrl-btn ${isPaused ? '' : 'disabled'}`} onClick={() => setIsPaused(false)} disabled={!isPaused}>▶</button>
           <button className={`ctrl-btn ${isPaused ? 'disabled' : ''}`} onClick={() => setIsPaused(true)} disabled={isPaused}>⏸</button>
           <button className="ctrl-btn" onClick={reset}>↺</button>
-          <button className={`ctrl-btn erase ${tool === 'erase' ? 'active' : ''}`} onClick={() => setTool('erase')}>✕</button>
+          <button className={`ctrl-btn erase ${tool === 'erase' ? 'active' : ''}`} onClick={() => setTool(tool === 'erase' ? 'sand' : 'erase')}>✕</button>
         </div>
       </div>
       <div className="canvas-container">
