@@ -539,8 +539,8 @@ function App() {
             }
           }
 
-          // Try to eat/move in random direction
-          if (rand() < 0.45) {
+          // Try to eat/move in random direction (not water)
+          if (rand() < 0.4 && belowCell !== WATER) {
             const dirs = [[0,1],[-1,0],[1,0],[0,-1],[-1,1],[1,1],[-1,-1],[1,-1]]
             for (let d = dirs.length - 1; d > 0; d--) {
               const j = Math.floor(rand() * (d + 1));
@@ -550,14 +550,10 @@ function App() {
               const nx = x + dx, ny = y + dy
               if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
                 const ni = idx(nx, ny), nc = g[ni]
-                // Eat through most things including water
+                // Eat through most things (not water)
                 if (nc === SAND || nc === DIRT || nc === PLANT || nc === FLUFF || nc === BUG || nc === NITRO || nc === SLIME) {
                   g[ni] = ANT
                   g[p] = rand() < 0.4 ? DIRT : EMPTY
-                  break
-                } else if (nc === WATER) {
-                  g[ni] = ANT
-                  g[p] = rand() < 0.6 ? DIRT : EMPTY // Ants drink water and leave dirt
                   break
                 } else if (nc === EMPTY) {
                   g[ni] = ANT
