@@ -127,7 +127,7 @@ function App() {
           const nx = pos.x + dx, ny = pos.y + dy
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
             const idx = ny * cols + nx
-            const spawnChance = matId === ANT ? 0.6 : 0.3 // Spawn fewer ants
+            const spawnChance = matId === ANT ? 0.6 : matId === ALIEN ? 0.92 : 0.3 // Spawn fewer ants/aliens
             if (tool === 'erase' || (g[idx] === EMPTY && Math.random() > spawnChance)) {
               g[idx] = matId
             }
@@ -617,8 +617,8 @@ function App() {
               else if (trail < 0.2) g[p] = SLIME
               else g[p] = EMPTY
             } else if (nc === FIRE || nc === PLASMA) {
-              // Fire transforms alien into more aliens (reproduces in heat)
-              if (rand() < 0.3) {
+              // Fire transforms alien - rarely reproduces
+              if (rand() < 0.05) {
                 g[ni] = ALIEN
                 g[p] = ALIEN
               } else {
@@ -627,20 +627,18 @@ function App() {
               }
             } else if (nc === SLIME) {
               g[ni] = ALIEN
-              g[p] = rand() < 0.4 ? ALIEN : SLIME // Absorbs slime, sometimes duplicates
+              g[p] = rand() < 0.1 ? ALIEN : EMPTY // Rarely duplicates from slime
             }
           }
 
-          // Sometimes spontaneously change direction and leave weird stuff
-          if (rand() < 0.05) {
-            // Emit random particle nearby
+          // Rarely emit random particle nearby
+          if (rand() < 0.01) {
             const ex = x + Math.floor(rand() * 3) - 1
             const ey = y + Math.floor(rand() * 3) - 1
             if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY) {
               const emit = rand()
-              if (emit < 0.3) g[idx(ex, ey)] = WATER
-              else if (emit < 0.5) g[idx(ex, ey)] = PLANT
-              else if (emit < 0.7) g[idx(ex, ey)] = SLIME
+              if (emit < 0.4) g[idx(ex, ey)] = WATER
+              else if (emit < 0.7) g[idx(ex, ey)] = PLANT
             }
           }
         }
