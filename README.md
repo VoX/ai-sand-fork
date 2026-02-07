@@ -1,4 +1,20 @@
-# React + TypeScript + Vite
+# Wheats.app - Falling Sand Game
+
+A falling sand physics simulation game built with React + TypeScript + Vite.
+
+## Development Workflow
+
+**Important: Always build and push after making changes!**
+
+```bash
+bun run build && git add -A && git commit -m "Your message" && git push -u origin <branch-name>
+```
+
+The game builds to `/docs` folder for GitHub Pages deployment.
+
+---
+
+## React + TypeScript + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
