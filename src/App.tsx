@@ -635,8 +635,8 @@ function App() {
             }
           }
 
-          // If stuck/idle, slowly decay (~0.5% per frame = gone in ~5-10 seconds)
-          if (!moved && rand() < 0.005) {
+          // If stuck/idle, decay quickly (~4% per frame = ~90% gone in 1 second)
+          if (!moved && rand() < 0.04) {
             g[p] = EMPTY
           }
 
