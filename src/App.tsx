@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
@@ -9,18 +9,21 @@ const EMPTY = 0, SAND = 1, WATER = 2, DIRT = 3, STONE = 4, PLANT = 5
 const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13, SLIME = 14, ANT = 15, ALIEN = 16, QUARK = 17
 const CRYSTAL = 18, EMBER = 19, STATIC = 20 // Quark cycle particles
 const BIRD = 21, GUNPOWDER = 22, TAP = 23, ANTHILL = 24
-const BEE = 25, FLOWER = 26, HIVE = 27, HONEY = 28, NEST = 29
+const BEE = 25, FLOWER = 26, HIVE = 27, HONEY = 28, NEST = 29, GUN = 30
+// Bullet directions (internal, not paintable) - 8 directions
+const BULLET_N = 31, BULLET_NE = 32, BULLET_E = 33, BULLET_SE = 34
+const BULLET_S = 35, BULLET_SW = 36, BULLET_W = 37, BULLET_NW = 38
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
   fire: FIRE, gas: GAS, fluff: FLUFF, bug: BUG, plasma: PLASMA,
   nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME, ant: ANT, alien: ALIEN, quark: QUARK,
   crystal: CRYSTAL, ember: EMBER, static: STATIC, bird: BIRD, gunpowder: GUNPOWDER, tap: TAP, anthill: ANTHILL,
-  bee: BEE, flower: FLOWER, hive: HIVE, honey: HONEY, nest: NEST,
+  bee: BEE, flower: FLOWER, hive: HIVE, honey: HONEY, nest: NEST, gun: GUN,
 }
 
 // Density for displacement (higher sinks through lower, 0 = doesn't displace)
-const DENSITY = new Uint8Array([0, 3, 1, 3, 5, 0, 0, 0, 0, 0, 0, 2, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 2, 0]) // index 22 = GUNPOWDER, 28 = HONEY, 29 = NEST
+const DENSITY = new Uint8Array([0, 3, 1, 3, 5, 0, 0, 0, 0, 0, 0, 2, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 2, 0, 0]) // index 22 = GUNPOWDER, 28 = HONEY, 29 = NEST, 30 = GUN
 
 const CELL_SIZE = 4
 
@@ -67,6 +70,15 @@ const COLORS_U32 = new Uint32Array([
   0xFF40B8E8, // HIVE (honey/amber)
   0xFF30A0FF, // HONEY (orange-gold)
   0xFF8080A0, // NEST (brownish grey, like twigs)
+  0xFF505050, // GUN (dark grey, distinct)
+  0xFF00CCFF, // BULLET_N (yellow-orange)
+  0xFF00CCFF, // BULLET_NE
+  0xFF00CCFF, // BULLET_E
+  0xFF00CCFF, // BULLET_SE
+  0xFF00CCFF, // BULLET_S
+  0xFF00CCFF, // BULLET_SW
+  0xFF00CCFF, // BULLET_W
+  0xFF00CCFF, // BULLET_NW
 ])
 
 // Dynamic color palettes
@@ -89,7 +101,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
   lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a', alien: '#00ff00', quark: '#ff00ff',
   crystal: '#80d0ff', ember: '#ff4020', static: '#44ffff', bird: '#e8e8e8', gunpowder: '#303030', tap: '#c0c0c0', anthill: '#b08030',
-  bee: '#ffd800', flower: '#cc44ff', hive: '#e8b840', honey: '#ffa030', nest: '#a08080',
+  bee: '#ffd800', flower: '#cc44ff', hive: '#e8b840', honey: '#ffa030', nest: '#a08080', gun: '#505050',
 }
 
 function App() {
@@ -176,6 +188,52 @@ function App() {
         const p = idx(x, y)
         const c = g[p]
         if (c === EMPTY) continue
+
+        // Bullets: move FAST in straight line, destroy everything, leave frame
+        if (c >= BULLET_N && c <= BULLET_NW) {
+          // Direction vectors for each bullet type
+          const dirs: Record<number, [number, number]> = {
+            [BULLET_N]: [0, -1],
+            [BULLET_NE]: [1, -1],
+            [BULLET_E]: [1, 0],
+            [BULLET_SE]: [1, 1],
+            [BULLET_S]: [0, 1],
+            [BULLET_SW]: [-1, 1],
+            [BULLET_W]: [-1, 0],
+            [BULLET_NW]: [-1, -1],
+          }
+          const [bdx, bdy] = dirs[c]
+
+          // Move multiple cells per frame for speed
+          const speed = 8
+          let bnx = x, bny = y
+          for (let step = 0; step < speed; step++) {
+            bnx += bdx
+            bny += bdy
+
+            // Leave frame - just disappear
+            if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) {
+              g[p] = EMPTY
+              break
+            }
+
+            // Destroy whatever is in the path (except gun)
+            const bni = idx(bnx, bny)
+            if (g[bni] !== GUN && g[bni] !== EMPTY) {
+              g[bni] = EMPTY // Destroy it
+            }
+          }
+
+          // Place bullet at final position if still in bounds
+          if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
+            const bni = idx(bnx, bny)
+            if (g[bni] !== GUN) {
+              g[bni] = c // Bullet at new position
+            }
+          }
+          g[p] = EMPTY // Leave empty behind
+          continue
+        }
 
         if (c === FIRE) {
           if (y === 0) { g[p] = EMPTY; continue }
@@ -1084,6 +1142,22 @@ function App() {
               g[idx(nnx, nny)] = BIRD
             }
           }
+        } else if (c === GUN) {
+          // Gun: spawns bullets rarely in random direction
+
+          // Spawn bullet very rarely (about 1 every few seconds)
+          if (rand() < 0.008) {
+            // Pick random direction (0-7)
+            const dir = Math.floor(rand() * 8)
+            const bulletTypes = [BULLET_N, BULLET_NE, BULLET_E, BULLET_SE, BULLET_S, BULLET_SW, BULLET_W, BULLET_NW]
+            const bulletType = bulletTypes[dir]
+            const dirVecs: [number, number][] = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]]
+            const [gdx, gdy] = dirVecs[dir]
+            const gnx = x + gdx, gny = y + gdy
+            if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows) {
+              g[idx(gnx, gny)] = bulletType
+            }
+          }
         }
       }
     }
@@ -1189,7 +1263,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey', 'nest']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey', 'nest', 'gun']
 
   return (
     <div className="app">
