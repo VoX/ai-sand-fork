@@ -489,15 +489,14 @@ function App() {
             }
           }
 
-          // Float up through water (slowly)
-          if (belowCell === WATER && rand() < 0.15) {
-            if (y > 0) {
-              const above = idx(x, y - 1)
-              if (g[above] === WATER || g[above] === EMPTY) {
-                g[above] = ANT
-                g[p] = WATER
-                continue
-              }
+          // Float on water - move sideways or stay put
+          if (belowCell === WATER && rand() < 0.2) {
+            const dx = rand() < 0.5 ? -1 : 1
+            const nx = x + dx
+            if (nx >= 0 && nx < cols && g[idx(nx, y)] === EMPTY && g[idx(nx, y + 1)] === WATER) {
+              g[idx(nx, y)] = ANT
+              g[p] = EMPTY
+              continue
             }
           }
 
