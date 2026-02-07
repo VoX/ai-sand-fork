@@ -507,13 +507,13 @@ function App() {
             }
           }
 
-          // Float up through water (only rise through water, not into air)
+          // Float up through water - leave dirt trail
           if (belowCell === WATER && rand() < 0.3) {
             if (y > 0) {
               const above = idx(x, y - 1)
               if (g[above] === WATER) {
                 g[above] = ANT
-                g[p] = WATER
+                g[p] = rand() < 0.35 ? DIRT : WATER
                 continue
               }
             }
@@ -566,13 +566,13 @@ function App() {
             // Fall if not moving
             g[below] = ANT
             g[p] = EMPTY
-          } else if (belowCell === WATER && rand() < 0.15) {
-            // Drift sideways on water surface
+          } else if (belowCell === WATER && rand() < 0.2) {
+            // Drift sideways on water surface - leave dirt
             const dx = rand() < 0.5 ? -1 : 1
             const nx = x + dx
             if (nx >= 0 && nx < cols && g[idx(nx, y)] === EMPTY && g[idx(nx, y + 1)] === WATER) {
               g[idx(nx, y)] = ANT
-              g[p] = EMPTY
+              g[p] = rand() < 0.3 ? DIRT : EMPTY
             }
           }
         } else if (c === ALIEN) {
