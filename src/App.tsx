@@ -360,7 +360,7 @@ function App() {
 
             if (bnc === ANT || bnc === BUG || bnc === BEE) {
               g[bni] = BIRD
-              g[p] = BIRD // Eating spawns another bird
+              g[p] = rand() < 0.6 ? BIRD : PLANT // Eating spawns another bird, sometimes leaves plant
             } else if (bnc === EMPTY) {
               g[bni] = BIRD
               g[p] = EMPTY
