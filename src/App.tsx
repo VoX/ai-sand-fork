@@ -758,22 +758,26 @@ function App() {
           const r1 = rand()
           const r2 = rand()
 
-          // Simple movement - mostly gliding with occasional swoop
+          // Floating movement - mostly hovering with occasional swoop
           let dx = 0, dy = 0
-          if (r1 < 0.15) {
-            // Swoop down
+          if (r1 < 0.08) {
+            // Rare swoop down
             dy = 2
             dx = r2 < 0.5 ? -1 : 1
-          } else if (r1 < 0.4) {
-            // Glide sideways
+          } else if (r1 < 0.35) {
+            // Float up slowly
+            dy = -1
+            dx = r2 < 0.4 ? -1 : r2 < 0.8 ? 1 : 0
+          } else if (r1 < 0.55) {
+            // Glide sideways (level)
             dx = r2 < 0.5 ? -1 : 1
-            dy = r2 < 0.3 ? -1 : 0
+            dy = 0
           } else if (r1 < 0.7) {
             // Drift down slowly
             dy = 1
             dx = r2 < 0.3 ? -1 : r2 < 0.6 ? 1 : 0
           }
-          // else stay still (perching)
+          // else hover in place
 
           if (dx === 0 && dy === 0) continue
 
