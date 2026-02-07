@@ -249,20 +249,18 @@ function App() {
             continue
           }
 
-          // Pass through plant, water - bullet continues
-          if (bc === PLANT || bc === WATER) {
+          // Pass through soft/transparent materials fully
+          if (bc === PLANT || bc === WATER || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS) {
             g[bni] = c
             g[p] = BULLET_TRAIL
             continue
           }
 
-          // Stone - bullet penetrates but may stop (~4-6 blocks avg)
-          if (bc === STONE) {
+          // Penetrate solid materials with limit (~4-6 blocks avg)
+          if (bc === STONE || bc === DIRT || bc === SAND) {
             if (rand() < 0.2) {
-              // Bullet stopped by stone
               g[p] = BULLET_TRAIL
             } else {
-              // Bullet continues through
               g[bni] = c
               g[p] = BULLET_TRAIL
             }
@@ -592,13 +590,13 @@ function App() {
             continue
           }
 
-          if (bc === PLANT || bc === WATER) {
+          if (bc === PLANT || bc === WATER || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS) {
             g[bni] = c
             g[p] = BULLET_TRAIL
             continue
           }
 
-          if (bc === STONE) {
+          if (bc === STONE || bc === DIRT || bc === SAND) {
             if (rand() < 0.2) {
               g[p] = BULLET_TRAIL
             } else {

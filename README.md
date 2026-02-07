@@ -79,7 +79,7 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 ### Projectiles (Internal - not paintable)
 | Particle | Color | Behavior |
 |----------|-------|----------|
-| **Bullet** | Bright yellow | Moves in straight line, penetrates stone/plant/water, ignites gunpowder/nitro, leaves yellow trail |
+| **Bullet** | Bright yellow | Moves in straight line, passes through soft materials, penetrates solids (4-6 blocks), ignites explosives |
 | **Bullet Trail** | Yellow (dimmer) | Fades quickly (~0.1 sec), marks bullet path |
 
 ---
@@ -129,10 +129,11 @@ Slime eats → Dirt, Sand, Bug
 - Creates: Fire, Stone (from water)
 
 ### Bullet Behavior
-- Ignites: Gunpowder, Nitro (then stops)
-- Penetrates: Stone, Plant, Water (destroys them, continues through)
-- Stops at: Dirt, Sand, other solid materials, Guns, other bullets
-- Leaves: Yellow bullet trail that fades quickly
+- **Ignites:** Gunpowder, Nitro (then stops)
+- **Passes through fully:** Plant, Water, Flower, Glass, Fluff, Gas
+- **Penetrates with limit (~4-6 blocks):** Stone, Dirt, Sand
+- **Stops at:** Guns, other bullets, creatures, spawners
+- **Leaves:** Yellow bullet trail that fades quickly
 
 ---
 
@@ -199,9 +200,24 @@ flowchart LR
     Gun[Gun] -->|shoots| Bullet[Bullet]
     Bullet -->|ignites| Gunpowder[Gunpowder]
     Bullet -->|ignites| Nitro[Nitro]
-    Bullet -->|penetrates| Stone[Stone]
-    Bullet -->|penetrates| Plant[Plant]
-    Bullet -->|penetrates| Water[Water]
+
+    subgraph PassThrough[Passes Through Fully]
+        Plant[Plant]
+        Water[Water]
+        Flower[Flower]
+        Glass[Glass]
+        Fluff[Fluff]
+        Gas[Gas]
+    end
+
+    subgraph Penetrates[Penetrates 4-6 Blocks]
+        Stone[Stone]
+        Dirt[Dirt]
+        Sand[Sand]
+    end
+
+    Bullet -.->|through| PassThrough
+    Bullet -->|penetrates| Penetrates
     Bullet -->|leaves| Trail[Bullet Trail]
 ```
 
