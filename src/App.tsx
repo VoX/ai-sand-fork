@@ -1,17 +1,17 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
 const EMPTY = 0, SAND = 1, WATER = 2, DIRT = 3, STONE = 4, PLANT = 5
-const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13, SLIME = 14, ANT = 15, ALIEN = 16
+const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13, SLIME = 14, ANT = 15, ALIEN = 16, QUARK = 17
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
   fire: FIRE, gas: GAS, fluff: FLUFF, bug: BUG, plasma: PLASMA,
-  nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME, ant: ANT, alien: ALIEN,
+  nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME, ant: ANT, alien: ALIEN, quark: QUARK,
 }
 
 // Density for displacement (higher sinks through lower, 0 = doesn't displace)
@@ -49,6 +49,7 @@ const COLORS_U32 = new Uint32Array([
   0xFF32CD9A, // SLIME (yellowy green)
   0xFF1A2A6B, // ANT (brownish red)
   0xFF00FF00, // ALIEN (lime green)
+  0xFFFF00FF, // QUARK (magenta)
 ])
 
 // Dynamic color palettes
@@ -69,7 +70,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   sand: '#e6c86e', water: '#4a90d9', dirt: '#8b5a2b', stone: '#666666',
   plant: '#228b22', fire: '#ff6600', gas: '#888888', fluff: '#f5e6d3',
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
-  lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a', alien: '#00ff00',
+  lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a', alien: '#00ff00', quark: '#ff00ff',
 }
 
 function App() {
@@ -127,7 +128,7 @@ function App() {
           const nx = pos.x + dx, ny = pos.y + dy
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
             const idx = ny * cols + nx
-            const spawnChance = matId === ANT ? 0.6 : matId === ALIEN ? 0.92 : 0.3 // Spawn fewer ants/aliens
+            const spawnChance = matId === ANT ? 0.6 : (matId === ALIEN || matId === QUARK) ? 0.92 : 0.3 // Spawn fewer ants/aliens/quarks
             if (tool === 'erase' || (g[idx] === EMPTY && Math.random() > spawnChance)) {
               g[idx] = matId
             }
@@ -600,8 +601,8 @@ function App() {
               g[p] = rand() < 0.7 ? PLANT : WATER
               moved = true
             } else if (nc === WATER) {
-              if (rand() < 0.5) {
-                // Water kills alien
+              if (rand() < 0.1) {
+                // Water kills alien (10% chance)
                 g[p] = EMPTY
               } else {
                 g[ni] = ALIEN
@@ -654,6 +655,96 @@ function App() {
               if (emit < 0.4) g[idx(ex, ey)] = WATER
               else if (emit < 0.7) g[idx(ex, ey)] = PLANT
             }
+          }
+        } else if (c === QUARK) {
+          // Quark: opposite of alien - inorganic terraformer, leaves sand, dissolves glass to water
+
+          // Erratic movement - more chaotic than alien
+          const moveDir = rand()
+          let nx = x, ny = y
+          if (moveDir < 0.15) { ny = y - 1 } // Up
+          else if (moveDir < 0.35) { ny = y + 1 } // Down (more likely to fall)
+          else if (moveDir < 0.55) { nx = x + (rand() < 0.5 ? -1 : 1) } // Sideways
+          else if (moveDir < 0.75) { nx = x + (rand() < 0.5 ? -1 : 1); ny = y + (rand() < 0.5 ? -1 : 1) } // Diagonal
+          // else stay still
+
+          let moved = false
+          if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && (nx !== x || ny !== y)) {
+            const ni = idx(nx, ny), nc = g[ni]
+
+            // Reverse terraforming: transform organic to inorganic
+            if (nc === PLANT) {
+              g[ni] = QUARK
+              g[p] = rand() < 0.7 ? SAND : STONE // Plant becomes sand/stone
+              moved = true
+            } else if (nc === DIRT) {
+              g[ni] = QUARK
+              g[p] = rand() < 0.6 ? SAND : STONE // Dirt becomes sand/stone
+              moved = true
+            } else if (nc === WATER) {
+              g[ni] = QUARK
+              g[p] = rand() < 0.4 ? GLASS : SAND // Water becomes glass/sand
+              moved = true
+            } else if (nc === GLASS) {
+              // Dissolves glass into water!
+              g[ni] = QUARK
+              g[p] = WATER
+              moved = true
+            } else if (nc === SLIME) {
+              g[ni] = QUARK
+              g[p] = rand() < 0.5 ? SAND : WATER // Slime dissolves
+              moved = true
+            } else if (nc === BUG) {
+              g[ni] = QUARK
+              g[p] = SAND // Bug becomes sand
+              moved = true
+            } else if (nc === SAND) {
+              g[ni] = QUARK
+              g[p] = rand() < 0.3 ? GLASS : SAND // Sometimes vitrify sand
+              moved = true
+            } else if (nc === EMPTY) {
+              g[ni] = QUARK
+              const trail = rand()
+              if (trail < 0.2) g[p] = SAND
+              else if (trail < 0.25) g[p] = GLASS
+              else g[p] = EMPTY
+              moved = true
+            } else if (nc === FIRE || nc === PLASMA) {
+              // Fire makes quark unstable - might duplicate or die
+              if (rand() < 0.1) {
+                g[ni] = QUARK
+                g[p] = QUARK
+              } else if (rand() < 0.3) {
+                g[p] = EMPTY // Dies in fire sometimes
+              } else {
+                g[ni] = QUARK
+                g[p] = LIGHTNING // Releases lightning!
+              }
+              moved = true
+            } else if (nc === ALIEN) {
+              // Quark and alien annihilate each other, leaving interesting stuff
+              g[ni] = rand() < 0.5 ? GLASS : PLANT
+              g[p] = rand() < 0.5 ? WATER : SAND
+              moved = true
+            } else if (nc === STONE && rand() < 0.15) {
+              g[ni] = QUARK
+              g[p] = rand() < 0.5 ? SAND : GLASS
+              moved = true
+            }
+          }
+
+          // Occasionally shoot lightning
+          if (rand() < 0.008) {
+            const lx = x + Math.floor(rand() * 5) - 2
+            const ly = y + Math.floor(rand() * 3) - 1
+            if (lx >= 0 && lx < cols && ly >= 0 && ly < rows && g[idx(lx, ly)] === EMPTY) {
+              g[idx(lx, ly)] = LIGHTNING
+            }
+          }
+
+          // If stuck/idle, decay quickly
+          if (!moved && rand() < 0.04) {
+            g[p] = rand() < 0.3 ? SAND : EMPTY // Sometimes leave sand when dying
           }
         }
       }
@@ -755,7 +846,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark']
 
   return (
     <div className="app">
