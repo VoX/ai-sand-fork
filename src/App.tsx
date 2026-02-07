@@ -71,14 +71,14 @@ const COLORS_U32 = new Uint32Array([
   0xFF30A0FF, // HONEY (orange-gold)
   0xFF8080A0, // NEST (brownish grey, like twigs)
   0xFF505050, // GUN (dark grey, distinct)
-  0xFF00DDFF, // BULLET_N (bright yellow)
-  0xFF00DDFF, // BULLET_NE
-  0xFF00DDFF, // BULLET_E
-  0xFF00DDFF, // BULLET_SE
-  0xFF00DDFF, // BULLET_S
-  0xFF00DDFF, // BULLET_SW
-  0xFF00DDFF, // BULLET_W
-  0xFF00DDFF, // BULLET_NW
+  0xFF44FFFF, // BULLET_N (bright white-yellow, very visible)
+  0xFF44FFFF, // BULLET_NE
+  0xFF44FFFF, // BULLET_E
+  0xFF44FFFF, // BULLET_SE
+  0xFF44FFFF, // BULLET_S
+  0xFF44FFFF, // BULLET_SW
+  0xFF44FFFF, // BULLET_W
+  0xFF44FFFF, // BULLET_NW
 ])
 
 // Dynamic color palettes
@@ -201,24 +201,27 @@ function App() {
         // Bullets: move in straight line, destroy most things, leave visible trail
         if (c >= BULLET_N && c <= BULLET_NW) {
           // Direction vectors for each bullet type
-          const dirs: Record<number, [number, number]> = {
-            [BULLET_N]: [0, -1],
-            [BULLET_NE]: [1, -1],
-            [BULLET_E]: [1, 0],
-            [BULLET_SE]: [1, 1],
-            [BULLET_S]: [0, 1],
-            [BULLET_SW]: [-1, 1],
-            [BULLET_W]: [-1, 0],
-            [BULLET_NW]: [-1, -1],
+          const bulletDirs: [number, number][] = [
+            [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]
+          ]
+          const dirIdx = c - BULLET_N
+          const [bdx, bdy] = bulletDirs[dirIdx]
+
+          // Skip if we'd process this bullet twice (moving in scan direction)
+          // Only process if moving against scan or vertically
+          if (bdx !== 0) {
+            const movingRight = bdx > 0
+            if (movingRight === leftToRight) {
+              continue // Skip, will be processed when scan goes other way
+            }
           }
-          const [bdx, bdy] = dirs[c]
 
           // Move one cell at a time for smooth visible trail
           const bnx = x + bdx, bny = y + bdy
 
-          // Leave frame - just disappear, leave trail
+          // Leave frame - disappear with static spark
           if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) {
-            g[p] = EMBER // Leave trail
+            g[p] = STATIC
             continue
           }
 
@@ -226,36 +229,43 @@ function App() {
           const bni = idx(bnx, bny)
           const bc = g[bni]
 
+          // Hit stone - turn to static, remove stone
+          if (bc === STONE) {
+            g[bni] = EMPTY // Remove stone block
+            g[p] = STATIC // Bullet becomes static
+            continue
+          }
+
           // Skip guns and other bullets (bullet disappears)
           if (bc === GUN || (bc >= BULLET_N && bc <= BULLET_NW)) {
-            g[p] = EMBER
+            g[p] = STATIC
             continue
           }
 
           // Ignite gunpowder and nitro
           if (bc === GUNPOWDER || bc === NITRO) {
             g[bni] = FIRE
-            g[p] = EMBER
+            g[p] = STATIC
             continue
           }
 
-          // Pass through plant (leave intact, bullet continues)
-          if (bc === PLANT) {
-            // Find next empty cell past plant
+          // Pass through plant and water (leave intact, bullet continues)
+          if (bc === PLANT || bc === WATER) {
+            g[p] = STATIC
+            // Bullet continues past
             const pnx = bnx + bdx, pny = bny + bdy
             if (pnx >= 0 && pnx < cols && pny >= 0 && pny < rows) {
               const pni = idx(pnx, pny)
-              if (g[pni] === EMPTY) {
+              if (g[pni] === EMPTY || g[pni] === WATER) {
                 g[pni] = c
               }
             }
-            g[p] = EMBER
             continue
           }
 
-          // Move bullet, leave ember trail
+          // Move bullet, leave static trail
           g[bni] = c
-          g[p] = EMBER
+          g[p] = STATIC
           continue
         }
 
@@ -1181,8 +1191,9 @@ function App() {
             const gnx = x + gdx, gny = y + gdy
             if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows) {
               const gi = idx(gnx, gny)
-              // Spawn into empty or destroy what's there (except stone/tap/gun)
-              if (g[gi] !== STONE && g[gi] !== TAP && g[gi] !== GUN) {
+              const gc = g[gi]
+              // Can shoot through water/plant/empty, blocked by sand/stone/dirt/etc
+              if (gc === EMPTY || gc === WATER || gc === PLANT) {
                 g[gi] = bulletType
               }
             }
