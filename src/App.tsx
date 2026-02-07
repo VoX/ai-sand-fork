@@ -236,8 +236,8 @@ function App() {
           const bni = idx(bnx, bny)
           const bc = g[bni]
 
-          // Skip guns and other bullets (bullet disappears)
-          if (bc === GUN || (bc >= BULLET_N && bc <= BULLET_NW)) {
+          // Skip guns (bullet stops)
+          if (bc === GUN) {
             g[p] = BULLET_TRAIL
             continue
           }
@@ -249,8 +249,15 @@ function App() {
             continue
           }
 
-          // Pass through soft/transparent materials fully
-          if (bc === PLANT || bc === WATER || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS) {
+          // Destroy creatures - bullet continues
+          if (bc === BUG || bc === ANT || bc === BIRD || bc === BEE || bc === SLIME) {
+            g[bni] = c
+            g[p] = BULLET_TRAIL
+            continue
+          }
+
+          // Pass through soft/transparent materials and other bullets fully
+          if (bc === PLANT || bc === WATER || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS || (bc >= BULLET_N && bc <= BULLET_NW) || bc === BULLET_TRAIL) {
             g[bni] = c
             g[p] = BULLET_TRAIL
             continue
@@ -579,7 +586,7 @@ function App() {
           const bni = idx(bnx, bny)
           const bc = g[bni]
 
-          if (bc === GUN || (bc >= BULLET_N && bc <= BULLET_NW)) {
+          if (bc === GUN) {
             g[p] = BULLET_TRAIL
             continue
           }
@@ -590,7 +597,13 @@ function App() {
             continue
           }
 
-          if (bc === PLANT || bc === WATER || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS) {
+          if (bc === BUG || bc === ANT || bc === BIRD || bc === BEE || bc === SLIME) {
+            g[bni] = c
+            g[p] = BULLET_TRAIL
+            continue
+          }
+
+          if (bc === PLANT || bc === WATER || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS || (bc >= BULLET_N && bc <= BULLET_NW) || bc === BULLET_TRAIL) {
             g[bni] = c
             g[p] = BULLET_TRAIL
             continue

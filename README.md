@@ -130,9 +130,10 @@ Slime eats → Dirt, Sand, Bug
 
 ### Bullet Behavior
 - **Ignites:** Gunpowder, Nitro (then stops)
-- **Passes through fully:** Plant, Water, Flower, Glass, Fluff, Gas
+- **Destroys:** Bug, Ant, Bird, Bee, Slime (continues through)
+- **Passes through fully:** Plant, Water, Flower, Glass, Fluff, Gas, other bullets
 - **Penetrates with limit (~4-6 blocks):** Stone, Dirt, Sand
-- **Stops at:** Guns, other bullets, creatures, spawners
+- **Stops at:** Guns, spawners
 - **Leaves:** Yellow bullet trail that fades quickly
 
 ---
@@ -201,6 +202,14 @@ flowchart LR
     Bullet -->|ignites| Gunpowder[Gunpowder]
     Bullet -->|ignites| Nitro[Nitro]
 
+    subgraph Destroys[Destroys Creatures]
+        Bug[Bug]
+        Ant[Ant]
+        Bird[Bird]
+        Bee[Bee]
+        Slime[Slime]
+    end
+
     subgraph PassThrough[Passes Through Fully]
         Plant[Plant]
         Water[Water]
@@ -208,6 +217,7 @@ flowchart LR
         Glass[Glass]
         Fluff[Fluff]
         Gas[Gas]
+        OtherBullets[Other Bullets]
     end
 
     subgraph Penetrates[Penetrates 4-6 Blocks]
@@ -216,6 +226,7 @@ flowchart LR
         Sand[Sand]
     end
 
+    Bullet -->|kills| Destroys
     Bullet -.->|through| PassThrough
     Bullet -->|penetrates| Penetrates
     Bullet -->|leaves| Trail[Bullet Trail]
