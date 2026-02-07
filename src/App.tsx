@@ -126,7 +126,7 @@ function App() {
           const nx = pos.x + dx, ny = pos.y + dy
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
             const idx = ny * cols + nx
-            const spawnChance = matId === ANT ? 0.85 : 0.3 // Spawn fewer ants
+            const spawnChance = matId === ANT ? 0.6 : 0.3 // Spawn fewer ants
             if (tool === 'erase' || (g[idx] === EMPTY && Math.random() > spawnChance)) {
               g[idx] = matId
             }
@@ -288,16 +288,20 @@ function App() {
         const canSink = (a: number, b: number) => b === EMPTY || (DENSITY[a] > DENSITY[b] && DENSITY[b] > 0)
 
         if (c === SAND) {
-          if (canSink(SAND, belowCell) && (belowCell === EMPTY || rand() < 0.5)) {
+          if (canSink(SAND, belowCell) && (belowCell === EMPTY || rand() < 0.3)) {
             g[below] = SAND; g[p] = belowCell
           } else {
             const dx = rand() < 0.5 ? -1 : 1
             const nx1 = x + dx, nx2 = x - dx
-            if (nx1 >= 0 && nx1 < cols && canSink(SAND, g[idx(nx1, y + 1)]) && g[idx(nx1, y)] === EMPTY) {
-              g[idx(nx1, y + 1)] = SAND; g[p] = g[idx(nx1, y + 1)] === WATER ? WATER : EMPTY
-              if (belowCell === WATER) g[p] = WATER
-            } else if (nx2 >= 0 && nx2 < cols && canSink(SAND, g[idx(nx2, y + 1)]) && g[idx(nx2, y)] === EMPTY) {
-              g[idx(nx2, y + 1)] = SAND; g[p] = g[idx(nx2, y + 1)] === WATER ? WATER : EMPTY
+            const diag1 = idx(nx1, y + 1), diag2 = idx(nx2, y + 1)
+            if (nx1 >= 0 && nx1 < cols && g[idx(nx1, y)] === EMPTY) {
+              const diagCell = g[diag1]
+              if (diagCell === EMPTY) { g[diag1] = SAND; g[p] = EMPTY }
+              else if (diagCell === WATER && rand() < 0.3) { g[diag1] = SAND; g[p] = WATER }
+            } else if (nx2 >= 0 && nx2 < cols && g[idx(nx2, y)] === EMPTY) {
+              const diagCell = g[diag2]
+              if (diagCell === EMPTY) { g[diag2] = SAND; g[p] = EMPTY }
+              else if (diagCell === WATER && rand() < 0.3) { g[diag2] = SAND; g[p] = WATER }
             }
           }
         } else if (c === WATER) {
@@ -326,24 +330,25 @@ function App() {
           }
         } else if (c === DIRT) {
           // Check for plant growth - dirt touching plant can sprout
+          let touchingPlant = false
           for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
               if (dy === 0 && dx === 0) continue
               const nx = x + dx, ny = y + dy
               if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-                if (g[idx(nx, ny)] === PLANT && rand() < 0.008) {
-                  g[p] = PLANT
-                  continue
-                }
+                if (g[idx(nx, ny)] === PLANT) touchingPlant = true
               }
             }
           }
-          if (canSink(DIRT, belowCell) && rand() < 0.4) { g[below] = DIRT; g[p] = belowCell }
+          if (touchingPlant && rand() < 0.005) { g[p] = PLANT; continue }
+          if (canSink(DIRT, belowCell) && (belowCell === EMPTY || rand() < 0.3)) { g[below] = DIRT; g[p] = belowCell }
           else if (rand() < 0.2) {
             const dx = rand() < 0.5 ? -1 : 1
             const nx = x + dx
-            if (nx >= 0 && nx < cols && canSink(DIRT, g[idx(nx, y + 1)]) && g[idx(nx, y)] === EMPTY) {
-              g[idx(nx, y + 1)] = DIRT; g[p] = g[idx(nx, y + 1)] === WATER ? WATER : EMPTY
+            if (nx >= 0 && nx < cols && g[idx(nx, y)] === EMPTY) {
+              const diagCell = g[idx(nx, y + 1)]
+              if (diagCell === EMPTY) { g[idx(nx, y + 1)] = DIRT; g[p] = EMPTY }
+              else if (diagCell === WATER && rand() < 0.3) { g[idx(nx, y + 1)] = DIRT; g[p] = WATER }
             }
           }
         } else if (c === FLUFF) {
@@ -422,14 +427,20 @@ function App() {
         } else if (c === SLIME) {
           // Slime: eats dirt/sand/bugs, floats on water
 
-          // Float on water - move sideways or stay put
-          if (belowCell === WATER && rand() < 0.2) {
-            const dx = rand() < 0.5 ? -1 : 1
-            const nx = x + dx
-            if (nx >= 0 && nx < cols && g[idx(nx, y)] === EMPTY && g[idx(nx, y + 1)] === WATER) {
-              g[idx(nx, y)] = SLIME
-              g[p] = EMPTY
-              continue
+          // Float up through water slowly
+          if (belowCell === WATER && rand() < 0.15) {
+            if (y > 0) {
+              const above = idx(x, y - 1)
+              const aboveCell = g[above]
+              if (aboveCell === WATER) {
+                g[above] = SLIME
+                g[p] = WATER
+                continue
+              } else if (aboveCell === EMPTY) {
+                g[above] = SLIME
+                g[p] = EMPTY
+                continue
+              }
             }
           }
 
@@ -488,14 +499,22 @@ function App() {
             }
           }
 
-          // Float on water - move sideways or stay put
-          if (belowCell === WATER && rand() < 0.2) {
-            const dx = rand() < 0.5 ? -1 : 1
-            const nx = x + dx
-            if (nx >= 0 && nx < cols && g[idx(nx, y)] === EMPTY && g[idx(nx, y + 1)] === WATER) {
-              g[idx(nx, y)] = ANT
-              g[p] = EMPTY
-              continue
+          // Float up through water slowly
+          if (belowCell === WATER && rand() < 0.15) {
+            if (y > 0) {
+              const above = idx(x, y - 1)
+              const aboveCell = g[above]
+              if (aboveCell === WATER) {
+                // Swap with water above (rise up)
+                g[above] = ANT
+                g[p] = WATER
+                continue
+              } else if (aboveCell === EMPTY) {
+                // Rise to surface
+                g[above] = ANT
+                g[p] = EMPTY
+                continue
+              }
             }
           }
 
