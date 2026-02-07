@@ -488,22 +488,16 @@ function App() {
             }
           }
 
-          // Climb plants or burrow up through dirt
+          // Climb plants (move up if adjacent to plant)
           let nearPlant = false
           for (let dx = -1; dx <= 1; dx++) {
             const nx = x + dx
             if (nx >= 0 && nx < cols && g[idx(nx, y)] === PLANT) nearPlant = true
           }
-          if (y > 0 && rand() < 0.3) {
+          if (nearPlant && y > 0 && rand() < 0.4) {
             const above = idx(x, y - 1)
-            const aboveCell = g[above]
-            if (aboveCell === DIRT) {
-              // Burrow up through dirt
-              g[above] = ANT
-              g[p] = rand() < 0.5 ? DIRT : EMPTY
-              continue
-            } else if (nearPlant && (aboveCell === EMPTY || aboveCell === PLANT)) {
-              if (aboveCell === PLANT) {
+            if (g[above] === EMPTY || g[above] === PLANT) {
+              if (g[above] === PLANT) {
                 g[above] = ANT
                 g[p] = rand() < 0.3 ? DIRT : EMPTY
               } else {
