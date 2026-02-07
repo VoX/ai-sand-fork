@@ -608,6 +608,10 @@ function App() {
               g[ni] = ALIEN
               g[p] = rand() < 0.3 ? BUG : PLANT
               moved = true
+            } else if (nc === GLASS) {
+              g[ni] = ALIEN
+              g[p] = FLUFF // Glass becomes fluff
+              moved = true
             } else if (nc === STONE && rand() < 0.1) {
               g[ni] = ALIEN
               g[p] = rand() < 0.5 ? GLASS : STONE
