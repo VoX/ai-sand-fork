@@ -600,8 +600,13 @@ function App() {
               g[p] = rand() < 0.7 ? PLANT : WATER
               moved = true
             } else if (nc === WATER) {
-              g[ni] = ALIEN
-              g[p] = rand() < 0.5 ? SLIME : PLANT
+              if (rand() < 0.5) {
+                // Water kills alien
+                g[p] = EMPTY
+              } else {
+                g[ni] = ALIEN
+                g[p] = rand() < 0.5 ? SLIME : PLANT
+              }
               moved = true
             } else if (nc === PLANT) {
               g[ni] = ALIEN
