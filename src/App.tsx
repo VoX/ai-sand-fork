@@ -1,24 +1,24 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
 const EMPTY = 0, SAND = 1, WATER = 2, DIRT = 3, STONE = 4, PLANT = 5
 const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13, SLIME = 14, ANT = 15, ALIEN = 16, QUARK = 17
 const CRYSTAL = 18, EMBER = 19, STATIC = 20 // Quark cycle particles
-const BIRD = 21
+const BIRD = 21, GUNPOWDER = 22
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
   fire: FIRE, gas: GAS, fluff: FLUFF, bug: BUG, plasma: PLASMA,
   nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME, ant: ANT, alien: ALIEN, quark: QUARK,
-  crystal: CRYSTAL, ember: EMBER, static: STATIC, bird: BIRD,
+  crystal: CRYSTAL, ember: EMBER, static: STATIC, bird: BIRD, gunpowder: GUNPOWDER,
 }
 
 // Density for displacement (higher sinks through lower, 0 = doesn't displace)
-const DENSITY = new Uint8Array([0, 3, 1, 3, 5, 0, 0, 0, 0, 0, 0, 2, 5, 0, 0, 0])
+const DENSITY = new Uint8Array([0, 3, 1, 3, 5, 0, 0, 0, 0, 0, 0, 2, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3]) // index 22 = GUNPOWDER
 
 const CELL_SIZE = 4
 
@@ -57,6 +57,7 @@ const COLORS_U32 = new Uint32Array([
   0xFF2040FF, // EMBER (orange-red in ABGR)
   0xFFFFFF44, // STATIC (electric cyan)
   0xFFE8E8E8, // BIRD (light grey/white)
+  0xFF303030, // GUNPOWDER (dark charcoal)
 ])
 
 // Dynamic color palettes
@@ -78,7 +79,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   plant: '#228b22', fire: '#ff6600', gas: '#888888', fluff: '#f5e6d3',
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
   lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a', alien: '#00ff00', quark: '#ff00ff',
-  crystal: '#a0e0ff', ember: '#ff4020', static: '#44ffff', bird: '#e8e8e8',
+  crystal: '#a0e0ff', ember: '#ff4020', static: '#44ffff', bird: '#e8e8e8', gunpowder: '#303030',
 }
 
 function App() {
@@ -176,7 +177,7 @@ function App() {
               const nx = x + dx, ny = y + dy
               if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
                 const ni = idx(nx, ny), nc = g[ni]
-                if ((nc === PLANT || nc === FLUFF || nc === BUG || nc === GAS) && rand() < 0.3) g[ni] = FIRE
+                if ((nc === PLANT || nc === FLUFF || nc === BUG || nc === GAS || nc === GUNPOWDER) && rand() < 0.3) g[ni] = FIRE
               }
             }
           }
@@ -730,6 +731,7 @@ function App() {
             else if (nc === CRYSTAL) { g[ni] = QUARK; g[p] = r2 < 0.35 ? SAND : r2 < 0.55 ? STONE : QUARK; moved = true }
             else if (nc === EMBER) { g[ni] = QUARK; g[p] = r2 < 0.4 ? FIRE : r2 < 0.55 ? PLASMA : QUARK; moved = true }
             else if (nc === STATIC) { g[ni] = QUARK; g[p] = r2 < 0.45 ? LIGHTNING : QUARK; moved = true }
+            else if (nc === GUNPOWDER) { g[ni] = FIRE; g[p] = r2 < 0.5 ? FIRE : QUARK; moved = true } // Quark ignites gunpowder
           }
 
           // Shoot lightning/static/ember
@@ -794,6 +796,63 @@ function App() {
                   break
                 }
               }
+            }
+          }
+        } else if (c === GUNPOWDER) {
+          // Gunpowder: explosive, falls like sand, ignites on fire contact
+
+          // Check for fire types - explode!
+          let ignited = false
+          for (let edy = -1; edy <= 1 && !ignited; edy++) {
+            for (let edx = -1; edx <= 1 && !ignited; edx++) {
+              if (edy === 0 && edx === 0) continue
+              const enx = x + edx, eny = y + edy
+              if (enx >= 0 && enx < cols && eny >= 0 && eny < rows) {
+                const enc = g[idx(enx, eny)]
+                if (enc === FIRE || enc === PLASMA || enc === LIGHTNING || enc === EMBER) {
+                  ignited = true
+                }
+              }
+            }
+          }
+
+          if (ignited) {
+            // Explode - create fire in radius, chain reaction with other gunpowder
+            const r = 5
+            for (let edy = -r; edy <= r; edy++) {
+              for (let edx = -r; edx <= r; edx++) {
+                if (edx * edx + edy * edy <= r * r) {
+                  const enx = x + edx, eny = y + edy
+                  if (enx >= 0 && enx < cols && eny >= 0 && eny < rows) {
+                    const ei = idx(enx, eny), ec = g[ei]
+                    if (ec === EMPTY) g[ei] = rand() < 0.6 ? FIRE : EMPTY
+                    else if (ec === GUNPOWDER) g[ei] = FIRE // Chain reaction
+                    else if (ec === PLANT || ec === FLUFF || ec === BUG) g[ei] = FIRE
+                    else if (ec === WATER) g[ei] = rand() < 0.3 ? GAS : WATER
+                    else if (ec === SAND && rand() < 0.2) g[ei] = GLASS
+                  }
+                }
+              }
+            }
+            g[p] = FIRE
+            continue
+          }
+
+          // Fall like sand, sink through water
+          if (canSink(GUNPOWDER, belowCell) && (belowCell === EMPTY || rand() < 0.6)) {
+            g[below] = GUNPOWDER; g[p] = belowCell
+          } else {
+            const dx = rand() < 0.5 ? -1 : 1
+            const nx1 = x + dx, nx2 = x - dx
+            const diag1 = idx(nx1, y + 1), diag2 = idx(nx2, y + 1)
+            if (nx1 >= 0 && nx1 < cols && g[idx(nx1, y)] === EMPTY) {
+              const diagCell = g[diag1]
+              if (diagCell === EMPTY) { g[diag1] = GUNPOWDER; g[p] = EMPTY }
+              else if (diagCell === WATER && rand() < 0.5) { g[diag1] = GUNPOWDER; g[p] = WATER }
+            } else if (nx2 >= 0 && nx2 < cols && g[idx(nx2, y)] === EMPTY) {
+              const diagCell = g[diag2]
+              if (diagCell === EMPTY) { g[diag2] = GUNPOWDER; g[p] = EMPTY }
+              else if (diagCell === WATER && rand() < 0.5) { g[diag2] = GUNPOWDER; g[p] = WATER }
             }
           }
         }
@@ -901,7 +960,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder']
 
   return (
     <div className="app">
