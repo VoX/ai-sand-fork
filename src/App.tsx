@@ -1,20 +1,20 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
 const EMPTY = 0, SAND = 1, WATER = 2, DIRT = 3, STONE = 4, PLANT = 5
 const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13, SLIME = 14, ANT = 15, ALIEN = 16, QUARK = 17
 const CRYSTAL = 18, EMBER = 19, STATIC = 20 // Quark cycle particles
-const BIRD = 21, GUNPOWDER = 22, TAP = 23
+const BIRD = 21, GUNPOWDER = 22, TAP = 23, ANTHILL = 24
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
   fire: FIRE, gas: GAS, fluff: FLUFF, bug: BUG, plasma: PLASMA,
   nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME, ant: ANT, alien: ALIEN, quark: QUARK,
-  crystal: CRYSTAL, ember: EMBER, static: STATIC, bird: BIRD, gunpowder: GUNPOWDER, tap: TAP,
+  crystal: CRYSTAL, ember: EMBER, static: STATIC, bird: BIRD, gunpowder: GUNPOWDER, tap: TAP, anthill: ANTHILL,
 }
 
 // Density for displacement (higher sinks through lower, 0 = doesn't displace)
@@ -59,6 +59,7 @@ const COLORS_U32 = new Uint32Array([
   0xFFE8E8E8, // BIRD (light grey/white)
   0xFF303030, // GUNPOWDER (dark charcoal)
   0xFFC0C0C0, // TAP (silver)
+  0xFF3080B0, // ANTHILL (yellow-brown mound)
 ])
 
 // Dynamic color palettes
@@ -80,7 +81,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   plant: '#228b22', fire: '#ff6600', gas: '#888888', fluff: '#f5e6d3',
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
   lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a', alien: '#00ff00', quark: '#ff00ff',
-  crystal: '#a0e0ff', ember: '#ff4020', static: '#44ffff', bird: '#e8e8e8', gunpowder: '#303030', tap: '#c0c0c0',
+  crystal: '#a0e0ff', ember: '#ff4020', static: '#44ffff', bird: '#e8e8e8', gunpowder: '#303030', tap: '#c0c0c0', anthill: '#b08030',
 }
 
 function App() {
@@ -861,6 +862,28 @@ function App() {
           if (belowCell === EMPTY && rand() < 0.15) {
             g[below] = WATER
           }
+        } else if (c === ANTHILL) {
+          // Anthill: spawns ants, burns in fire
+
+          // Check for fire types - anthill burns
+          for (let ady = -1; ady <= 1; ady++) {
+            for (let adx = -1; adx <= 1; adx++) {
+              if (ady === 0 && adx === 0) continue
+              const anx = x + adx, any = y + ady
+              if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
+                const anc = g[idx(anx, any)]
+                if (anc === FIRE || anc === PLASMA || anc === LIGHTNING || anc === EMBER) {
+                  g[p] = FIRE
+                  continue
+                }
+              }
+            }
+          }
+
+          // Spawn ants below at a steady rate
+          if (belowCell === EMPTY && rand() < 0.08) {
+            g[below] = ANT
+          }
         }
       }
     }
@@ -966,7 +989,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill']
 
   return (
     <div className="app">
