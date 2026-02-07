@@ -89,6 +89,7 @@ function App() {
   const [isDrawing, setIsDrawing] = useState(false)
   const [brushSize, setBrushSize] = useState(3)
   const [isPaused, setIsPaused] = useState(false)
+  const isPausedRef = useRef(false)
   const animationRef = useRef<number>(0)
   const dimensionsRef = useRef({ cols: 0, rows: 0 })
   const pointerPosRef = useRef<{ x: number; y: number } | null>(null)
@@ -838,10 +839,15 @@ function App() {
   }, [])
 
   const gameLoop = useCallback(() => {
-    if (!isPaused) updatePhysics()
+    if (!isPausedRef.current) updatePhysics()
     render()
     animationRef.current = requestAnimationFrame(gameLoop)
-  }, [updatePhysics, render, isPaused])
+  }, [updatePhysics, render])
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    isPausedRef.current = isPaused
+  }, [isPaused])
 
   const reset = useCallback(() => initGrid(), [initGrid])
 
