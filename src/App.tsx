@@ -586,38 +586,40 @@ function App() {
           else if (moveDir < 0.8) { nx = x + (rand() < 0.5 ? -1 : 1); ny = y + (rand() < 0.5 ? -1 : 1) } // Diagonal
           // else stay still
 
+          let moved = false
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && (nx !== x || ny !== y)) {
             const ni = idx(nx, ny), nc = g[ni]
 
             // Terraforming: transform materials as it passes through
             if (nc === SAND) {
               g[ni] = ALIEN
-              g[p] = rand() < 0.6 ? GLASS : PLANT // Sand becomes glass or plant
+              g[p] = rand() < 0.6 ? GLASS : PLANT
+              moved = true
             } else if (nc === DIRT) {
               g[ni] = ALIEN
-              g[p] = rand() < 0.7 ? PLANT : WATER // Dirt becomes plant or water
+              g[p] = rand() < 0.7 ? PLANT : WATER
+              moved = true
             } else if (nc === WATER) {
               g[ni] = ALIEN
-              g[p] = rand() < 0.5 ? SLIME : PLANT // Water becomes slime or plant
+              g[p] = rand() < 0.5 ? SLIME : PLANT
+              moved = true
             } else if (nc === PLANT) {
               g[ni] = ALIEN
-              g[p] = rand() < 0.3 ? BUG : PLANT // Sometimes spawns bugs from plants
-            } else if (nc === STONE) {
-              // Can slowly phase through stone
-              if (rand() < 0.1) {
-                g[ni] = ALIEN
-                g[p] = rand() < 0.5 ? GLASS : STONE
-              }
+              g[p] = rand() < 0.3 ? BUG : PLANT
+              moved = true
+            } else if (nc === STONE && rand() < 0.1) {
+              g[ni] = ALIEN
+              g[p] = rand() < 0.5 ? GLASS : STONE
+              moved = true
             } else if (nc === EMPTY) {
               g[ni] = ALIEN
-              // Leave random trail behind
               const trail = rand()
               if (trail < 0.1) g[p] = PLANT
               else if (trail < 0.15) g[p] = WATER
               else if (trail < 0.2) g[p] = SLIME
               else g[p] = EMPTY
+              moved = true
             } else if (nc === FIRE || nc === PLASMA) {
-              // Fire transforms alien - rarely reproduces
               if (rand() < 0.05) {
                 g[ni] = ALIEN
                 g[p] = ALIEN
@@ -625,10 +627,17 @@ function App() {
                 g[ni] = ALIEN
                 g[p] = EMPTY
               }
+              moved = true
             } else if (nc === SLIME) {
               g[ni] = ALIEN
-              g[p] = rand() < 0.1 ? ALIEN : EMPTY // Rarely duplicates from slime
+              g[p] = rand() < 0.1 ? ALIEN : EMPTY
+              moved = true
             }
+          }
+
+          // If stuck/idle, slowly decay (~0.5% per frame = gone in ~5-10 seconds)
+          if (!moved && rand() < 0.005) {
+            g[p] = EMPTY
           }
 
           // Rarely emit random particle nearby
