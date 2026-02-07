@@ -354,6 +354,17 @@ function App() {
         } else if (c === FLUFF) {
           if (rand() < 0.2 && belowCell === EMPTY) { g[below] = FLUFF; g[p] = EMPTY }
         } else if (c === BUG) {
+          // Swim in water
+          if (belowCell === WATER && rand() < 0.25) {
+            const dirs = [[-1,0],[1,0],[0,-1],[-1,-1],[1,-1]]
+            const [dx, dy] = dirs[Math.floor(rand() * dirs.length)]
+            const nx = x + dx, ny = y + dy
+            if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+              const ni = idx(nx, ny), nc = g[ni]
+              if (nc === WATER) { g[ni] = BUG; g[p] = WATER; continue }
+              else if (nc === EMPTY) { g[ni] = BUG; g[p] = EMPTY; continue }
+            }
+          }
           if (rand() < 0.3) {
             if (belowCell === EMPTY) { g[below] = BUG; g[p] = EMPTY; continue }
             // Try to eat or move
@@ -499,18 +510,16 @@ function App() {
             }
           }
 
-          // Float up through water slowly
-          if (belowCell === WATER && rand() < 0.15) {
+          // Float up through water
+          if (belowCell === WATER && rand() < 0.35) {
             if (y > 0) {
               const above = idx(x, y - 1)
               const aboveCell = g[above]
               if (aboveCell === WATER) {
-                // Swap with water above (rise up)
                 g[above] = ANT
                 g[p] = WATER
                 continue
               } else if (aboveCell === EMPTY) {
-                // Rise to surface
                 g[above] = ANT
                 g[p] = EMPTY
                 continue
