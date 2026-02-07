@@ -1,22 +1,21 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
 const EMPTY = 0, SAND = 1, WATER = 2, DIRT = 3, STONE = 4, PLANT = 5
-const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13, SLIME = 14
+const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13, SLIME = 14, ANT = 15
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
   fire: FIRE, gas: GAS, fluff: FLUFF, bug: BUG, plasma: PLASMA,
-  nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME,
+  nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME, ant: ANT,
 }
 
 // Density for displacement (higher sinks through lower, 0 = doesn't displace)
-// Slime is 0.5 density - floats on water (1)
-const DENSITY = new Uint8Array([0, 3, 1, 3, 5, 0, 0, 0, 0, 0, 0, 2, 5, 0, 0])
+const DENSITY = new Uint8Array([0, 3, 1, 3, 5, 0, 0, 0, 0, 0, 0, 2, 5, 0, 0, 0])
 
 const CELL_SIZE = 4
 
@@ -48,6 +47,7 @@ const COLORS_U32 = new Uint32Array([
   0xFFEAD8A8, // GLASS
   0, // LIGHTNING (dynamic)
   0xFF32CD9A, // SLIME (yellowy green)
+  0xFF0A1520, // ANT (dark dark brown)
 ])
 
 // Dynamic color palettes
@@ -68,7 +68,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   sand: '#e6c86e', water: '#4a90d9', dirt: '#8b5a2b', stone: '#666666',
   plant: '#228b22', fire: '#ff6600', gas: '#888888', fluff: '#f5e6d3',
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
-  lightning: '#ffff88', slime: '#9acd32',
+  lightning: '#ffff88', slime: '#9acd32', ant: '#20150a',
 }
 
 function App() {
@@ -410,12 +410,11 @@ function App() {
 
           // Float up through water
           if (belowCell === WATER) {
-            // Check if there's water above to float into
             if (y > 0) {
               const above = idx(x, y - 1)
               if (g[above] === WATER || g[above] === EMPTY) {
                 g[above] = SLIME
-                g[p] = rand() < 0.3 ? SLIME : WATER // Sometimes leave slime behind
+                g[p] = WATER
                 continue
               }
             }
@@ -431,8 +430,7 @@ function App() {
                 const ni = idx(nx, ny), nc = g[ni]
                 if ((nc === DIRT || nc === SAND || nc === BUG) && rand() < 0.15) {
                   g[ni] = SLIME
-                  // Leave trail behind sometimes
-                  if (rand() > 0.4) g[p] = SLIME
+                  g[p] = rand() < 0.08 ? SLIME : EMPTY // Rare trail
                   ate = true
                 }
               }
@@ -443,7 +441,7 @@ function App() {
           // Fall down or slide
           if (belowCell === EMPTY) {
             g[below] = SLIME
-            g[p] = rand() < 0.25 ? SLIME : EMPTY // Leave trail
+            g[p] = rand() < 0.05 ? SLIME : EMPTY // Very rare trail
           } else {
             // Slide sideways (slimy movement)
             const dx = rand() < 0.5 ? -1 : 1
@@ -452,16 +450,94 @@ function App() {
               const side = idx(nx1, y)
               const diag = idx(nx1, y + 1)
               if (g[diag] === EMPTY) {
-                g[diag] = SLIME; g[p] = rand() < 0.2 ? SLIME : EMPTY
+                g[diag] = SLIME; g[p] = EMPTY
               } else if (g[side] === EMPTY && rand() < 0.3) {
-                g[side] = SLIME; g[p] = rand() < 0.3 ? SLIME : EMPTY
+                g[side] = SLIME; g[p] = rand() < 0.05 ? SLIME : EMPTY
               }
             } else if (nx2 >= 0 && nx2 < cols) {
               const diag = idx(nx2, y + 1)
               if (g[diag] === EMPTY) {
-                g[diag] = SLIME; g[p] = rand() < 0.2 ? SLIME : EMPTY
+                g[diag] = SLIME; g[p] = EMPTY
               }
             }
+          }
+        } else if (c === ANT) {
+          // Ant: eats through most things, leaves dirt, burns in fire, floats on water, climbs plants
+
+          // Check for fire - ants burn
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dy === 0 && dx === 0) continue
+              const nx = x + dx, ny = y + dy
+              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                if (g[idx(nx, ny)] === FIRE || g[idx(nx, ny)] === PLASMA) {
+                  g[p] = FIRE
+                  continue
+                }
+              }
+            }
+          }
+
+          // Float up through water
+          if (belowCell === WATER) {
+            if (y > 0) {
+              const above = idx(x, y - 1)
+              if (g[above] === WATER || g[above] === EMPTY) {
+                g[above] = ANT
+                g[p] = WATER
+                continue
+              }
+            }
+          }
+
+          // Climb plants (move up if adjacent to plant)
+          let nearPlant = false
+          for (let dx = -1; dx <= 1; dx++) {
+            const nx = x + dx
+            if (nx >= 0 && nx < cols && g[idx(nx, y)] === PLANT) nearPlant = true
+          }
+          if (nearPlant && y > 0 && rand() < 0.4) {
+            const above = idx(x, y - 1)
+            if (g[above] === EMPTY || g[above] === PLANT) {
+              if (g[above] === PLANT) {
+                // Eat the plant, leave dirt sometimes
+                g[above] = ANT
+                g[p] = rand() < 0.3 ? DIRT : EMPTY
+              } else {
+                g[above] = ANT
+                g[p] = EMPTY
+              }
+              continue
+            }
+          }
+
+          // Try to eat/move in random direction
+          if (rand() < 0.4) {
+            const dirs = [[0,1],[-1,0],[1,0],[0,-1],[-1,1],[1,1],[-1,-1],[1,-1]]
+            for (let d = dirs.length - 1; d > 0; d--) {
+              const j = Math.floor(rand() * (d + 1));
+              [dirs[d], dirs[j]] = [dirs[j], dirs[d]]
+            }
+            for (const [dx, dy] of dirs) {
+              const nx = x + dx, ny = y + dy
+              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                const ni = idx(nx, ny), nc = g[ni]
+                // Eat through most things (not stone, glass, water, fire, gas, lightning)
+                if (nc === SAND || nc === DIRT || nc === PLANT || nc === FLUFF || nc === BUG || nc === NITRO || nc === SLIME) {
+                  g[ni] = ANT
+                  g[p] = rand() < 0.4 ? DIRT : EMPTY // Leave dirt trail
+                  break
+                } else if (nc === EMPTY) {
+                  g[ni] = ANT
+                  g[p] = rand() < 0.15 ? DIRT : EMPTY // Sometimes leave dirt
+                  break
+                }
+              }
+            }
+          } else if (belowCell === EMPTY) {
+            // Fall if not moving
+            g[below] = ANT
+            g[p] = EMPTY
           }
         }
       }
@@ -563,7 +639,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant']
 
   return (
     <div className="app">
