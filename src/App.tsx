@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
@@ -9,18 +9,18 @@ const EMPTY = 0, SAND = 1, WATER = 2, DIRT = 3, STONE = 4, PLANT = 5
 const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13, SLIME = 14, ANT = 15, ALIEN = 16, QUARK = 17
 const CRYSTAL = 18, EMBER = 19, STATIC = 20 // Quark cycle particles
 const BIRD = 21, GUNPOWDER = 22, TAP = 23, ANTHILL = 24
-const BEE = 25, FLOWER = 26, HIVE = 27, HONEY = 28
+const BEE = 25, FLOWER = 26, HIVE = 27, HONEY = 28, NEST = 29
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
   fire: FIRE, gas: GAS, fluff: FLUFF, bug: BUG, plasma: PLASMA,
   nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME, ant: ANT, alien: ALIEN, quark: QUARK,
   crystal: CRYSTAL, ember: EMBER, static: STATIC, bird: BIRD, gunpowder: GUNPOWDER, tap: TAP, anthill: ANTHILL,
-  bee: BEE, flower: FLOWER, hive: HIVE, honey: HONEY,
+  bee: BEE, flower: FLOWER, hive: HIVE, honey: HONEY, nest: NEST,
 }
 
 // Density for displacement (higher sinks through lower, 0 = doesn't displace)
-const DENSITY = new Uint8Array([0, 3, 1, 3, 5, 0, 0, 0, 0, 0, 0, 2, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 2]) // index 22 = GUNPOWDER, 28 = HONEY
+const DENSITY = new Uint8Array([0, 3, 1, 3, 5, 0, 0, 0, 0, 0, 0, 2, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 2, 0]) // index 22 = GUNPOWDER, 28 = HONEY, 29 = NEST
 
 const CELL_SIZE = 4
 
@@ -66,6 +66,7 @@ const COLORS_U32 = new Uint32Array([
   0xFFCC66FF, // FLOWER (pink-purple)
   0xFF40B8E8, // HIVE (honey/amber)
   0xFF30A0FF, // HONEY (orange-gold)
+  0xFF8080A0, // NEST (brownish grey, like twigs)
 ])
 
 // Dynamic color palettes
@@ -88,7 +89,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
   lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a', alien: '#00ff00', quark: '#ff00ff',
   crystal: '#a0e0ff', ember: '#ff4020', static: '#44ffff', bird: '#e8e8e8', gunpowder: '#303030', tap: '#c0c0c0', anthill: '#b08030',
-  bee: '#ffd800', flower: '#ff66cc', hive: '#e8b840', honey: '#ffa030',
+  bee: '#ffd800', flower: '#ff66cc', hive: '#e8b840', honey: '#ffa030', nest: '#a08080',
 }
 
 function App() {
@@ -186,7 +187,7 @@ function App() {
               const nx = x + dx, ny = y + dy
               if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
                 const ni = idx(nx, ny), nc = g[ni]
-                if ((nc === PLANT || nc === FLUFF || nc === BUG || nc === GAS || nc === GUNPOWDER || nc === FLOWER || nc === HIVE) && rand() < 0.3) g[ni] = FIRE
+                if ((nc === PLANT || nc === FLUFF || nc === BUG || nc === GAS || nc === GUNPOWDER || nc === FLOWER || nc === HIVE || nc === NEST) && rand() < 0.3) g[ni] = FIRE
               }
             }
           }
@@ -357,7 +358,7 @@ function App() {
           if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
             const bni = idx(bnx, bny), bnc = g[bni]
 
-            if (bnc === ANT || bnc === BUG) {
+            if (bnc === ANT || bnc === BUG || bnc === BEE) {
               g[bni] = BIRD
               g[p] = rand() < 0.4 ? PLANT : EMPTY
             } else if (bnc === EMPTY) {
@@ -1035,6 +1036,32 @@ function App() {
             else if (hnx1 >= 0 && hnx1 < cols && g[idx(hnx1, y)] === EMPTY) { g[idx(hnx1, y)] = HONEY; g[p] = EMPTY }
             else if (hnx2 >= 0 && hnx2 < cols && g[idx(hnx2, y)] === EMPTY) { g[idx(hnx2, y)] = HONEY; g[p] = EMPTY }
           }
+        } else if (c === NEST) {
+          // Nest: spawns birds, burns on fire like hive
+
+          // Check for fire types - nest burns
+          for (let ndy = -1; ndy <= 1; ndy++) {
+            for (let ndx = -1; ndx <= 1; ndx++) {
+              if (ndy === 0 && ndx === 0) continue
+              const nnx = x + ndx, nny = y + ndy
+              if (nnx >= 0 && nnx < cols && nny >= 0 && nny < rows) {
+                const nnc = g[idx(nnx, nny)]
+                if (nnc === FIRE || nnc === PLASMA || nnc === LIGHTNING || nnc === EMBER) {
+                  g[p] = FIRE
+                  continue
+                }
+              }
+            }
+          }
+
+          // Spawn birds around at a steady rate
+          if (rand() < 0.04) {
+            const ndx = Math.floor(rand() * 3) - 1, ndy = Math.floor(rand() * 3) - 1
+            const nnx = x + ndx, nny = y + ndy
+            if (nnx >= 0 && nnx < cols && nny >= 0 && nny < rows && g[idx(nnx, nny)] === EMPTY) {
+              g[idx(nnx, nny)] = BIRD
+            }
+          }
         }
       }
     }
@@ -1140,7 +1167,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey', 'nest']
 
   return (
     <div className="app">
