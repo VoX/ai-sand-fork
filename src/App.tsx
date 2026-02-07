@@ -968,16 +968,8 @@ function App() {
             }
           }
         } else if (c === BULLET_TRAIL) {
-          // Bullet trail: like static but toned down, no sparking, faster decay
-          if (rand() < 0.08) { g[p] = EMPTY; continue } // Faster decay than static
-          // Gentle jitter (less than static)
-          if (rand() < 0.05) {
-            const dx = Math.floor(rand() * 3) - 1, dy = Math.floor(rand() * 3) - 1
-            const nx = x + dx, ny = y + dy
-            if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[idx(nx, ny)] === EMPTY) {
-              g[idx(nx, ny)] = BULLET_TRAIL; g[p] = EMPTY
-            }
-          }
+          // Bullet trail: quick fade, minimal movement
+          if (rand() < 0.15) { g[p] = EMPTY; continue } // Fast decay (~0.1 sec avg)
         } else if (c === GLASS) {
           // Glass can slowly crystallize
           if (rand() < 0.002) {
