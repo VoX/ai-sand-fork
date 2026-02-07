@@ -55,7 +55,7 @@ const COLORS_U32 = new Uint32Array([
   0xFF1A2A6B, // ANT (brownish red)
   0xFF00FF00, // ALIEN (lime green)
   0xFFFF00FF, // QUARK (magenta)
-  0xFFFFE0A0, // CRYSTAL (cyan/ice)
+  0xFFFFD080, // CRYSTAL (bright cyan, distinct from glass)
   0xFF2040FF, // EMBER (orange-red in ABGR)
   0xFFFFFF44, // STATIC (electric cyan)
   0xFFE8E8E8, // BIRD (light grey/white)
@@ -63,7 +63,7 @@ const COLORS_U32 = new Uint32Array([
   0xFFC0C0C0, // TAP (silver)
   0xFF3080B0, // ANTHILL (yellow-brown mound)
   0xFF00D8FF, // BEE (bright yellow)
-  0xFFCC66FF, // FLOWER (pink-purple)
+  0xFFFF44CC, // FLOWER (purple)
   0xFF40B8E8, // HIVE (honey/amber)
   0xFF30A0FF, // HONEY (orange-gold)
   0xFF8080A0, // NEST (brownish grey, like twigs)
@@ -88,8 +88,8 @@ const BUTTON_COLORS: Record<Material, string> = {
   plant: '#228b22', fire: '#ff6600', gas: '#888888', fluff: '#f5e6d3',
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
   lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a', alien: '#00ff00', quark: '#ff00ff',
-  crystal: '#a0e0ff', ember: '#ff4020', static: '#44ffff', bird: '#e8e8e8', gunpowder: '#303030', tap: '#c0c0c0', anthill: '#b08030',
-  bee: '#ffd800', flower: '#ff66cc', hive: '#e8b840', honey: '#ffa030', nest: '#a08080',
+  crystal: '#80d0ff', ember: '#ff4020', static: '#44ffff', bird: '#e8e8e8', gunpowder: '#303030', tap: '#c0c0c0', anthill: '#b08030',
+  bee: '#ffd800', flower: '#cc44ff', hive: '#e8b840', honey: '#ffa030', nest: '#a08080',
 }
 
 function App() {
