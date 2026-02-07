@@ -212,7 +212,10 @@ function App() {
           const [bdx, bdy] = bulletDirs[dirIdx]
 
           // Skip if we'd process this bullet twice (moving in scan direction)
-          // Only process if moving against scan or vertically
+          // Rising loop goes top-to-bottom, so skip south bullets (process in falling loop)
+          if (bdy > 0) {
+            continue // South bullets processed in falling loop
+          }
           if (bdx !== 0) {
             const movingRight = bdx > 0
             if (movingRight === leftToRight) {
@@ -246,10 +249,23 @@ function App() {
             continue
           }
 
-          // Pass through stone, plant, water - bullet continues, destroys material
-          if (bc === STONE || bc === PLANT || bc === WATER) {
-            g[bni] = c // Bullet moves into this cell
+          // Pass through plant, water - bullet continues
+          if (bc === PLANT || bc === WATER) {
+            g[bni] = c
             g[p] = BULLET_TRAIL
+            continue
+          }
+
+          // Stone - bullet penetrates but may stop (~4-6 blocks avg)
+          if (bc === STONE) {
+            if (rand() < 0.2) {
+              // Bullet stopped by stone
+              g[p] = BULLET_TRAIL
+            } else {
+              // Bullet continues through
+              g[bni] = c
+              g[p] = BULLET_TRAIL
+            }
             continue
           }
 
@@ -538,6 +554,69 @@ function App() {
         const p = idx(x, y)
         const c = g[p]
         if (c === EMPTY) continue
+
+        // South-moving bullets (processed here to avoid double-processing in rising loop)
+        if (c === BULLET_S || c === BULLET_SE || c === BULLET_SW) {
+          const bulletDirs: [number, number][] = [
+            [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]
+          ]
+          const dirIdx = c - BULLET_N
+          const [bdx, bdy] = bulletDirs[dirIdx]
+
+          // Handle horizontal scan direction for SE/SW
+          if (bdx !== 0) {
+            const movingRight = bdx > 0
+            if (movingRight === leftToRight) {
+              continue
+            }
+          }
+
+          const bnx = x + bdx, bny = y + bdy
+
+          if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) {
+            g[p] = BULLET_TRAIL
+            continue
+          }
+
+          const bni = idx(bnx, bny)
+          const bc = g[bni]
+
+          if (bc === GUN || (bc >= BULLET_N && bc <= BULLET_NW)) {
+            g[p] = BULLET_TRAIL
+            continue
+          }
+
+          if (bc === GUNPOWDER || bc === NITRO) {
+            g[bni] = FIRE
+            g[p] = BULLET_TRAIL
+            continue
+          }
+
+          if (bc === PLANT || bc === WATER) {
+            g[bni] = c
+            g[p] = BULLET_TRAIL
+            continue
+          }
+
+          if (bc === STONE) {
+            if (rand() < 0.2) {
+              g[p] = BULLET_TRAIL
+            } else {
+              g[bni] = c
+              g[p] = BULLET_TRAIL
+            }
+            continue
+          }
+
+          if (bc === EMPTY) {
+            g[bni] = c
+            g[p] = BULLET_TRAIL
+            continue
+          }
+
+          g[p] = BULLET_TRAIL
+          continue
+        }
 
         const below = idx(x, y + 1)
         const belowCell = g[below]
