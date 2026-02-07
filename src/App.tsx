@@ -1,18 +1,20 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
 const EMPTY = 0, SAND = 1, WATER = 2, DIRT = 3, STONE = 4, PLANT = 5
 const FIRE = 6, GAS = 7, FLUFF = 8, BUG = 9, PLASMA = 10, NITRO = 11, GLASS = 12, LIGHTNING = 13, SLIME = 14, ANT = 15, ALIEN = 16, QUARK = 17
 const CRYSTAL = 18, EMBER = 19, STATIC = 20 // Quark cycle particles
+const BIRD = 21
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
   fire: FIRE, gas: GAS, fluff: FLUFF, bug: BUG, plasma: PLASMA,
   nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME, ant: ANT, alien: ALIEN, quark: QUARK,
+  crystal: CRYSTAL, ember: EMBER, static: STATIC, bird: BIRD,
 }
 
 // Density for displacement (higher sinks through lower, 0 = doesn't displace)
@@ -54,6 +56,7 @@ const COLORS_U32 = new Uint32Array([
   0xFFFFE0A0, // CRYSTAL (cyan/ice)
   0xFF2040FF, // EMBER (orange-red in ABGR)
   0xFFFFFF44, // STATIC (electric cyan)
+  0xFF4080E0, // BIRD (warm brown/tan)
 ])
 
 // Dynamic color palettes
@@ -75,6 +78,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   plant: '#228b22', fire: '#ff6600', gas: '#888888', fluff: '#f5e6d3',
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
   lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a', alien: '#00ff00', quark: '#ff00ff',
+  crystal: '#a0e0ff', ember: '#ff4020', static: '#44ffff', bird: '#e08040',
 }
 
 function App() {
@@ -132,7 +136,7 @@ function App() {
           const nx = pos.x + dx, ny = pos.y + dy
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
             const idx = ny * cols + nx
-            const spawnChance = matId === ANT ? 0.6 : (matId === ALIEN || matId === QUARK) ? 0.92 : 0.3 // Spawn fewer ants/aliens/quarks
+            const spawnChance = matId === ANT || matId === BIRD ? 0.6 : (matId === ALIEN || matId === QUARK) ? 0.92 : 0.3 // Spawn fewer ants/aliens/quarks/birds
             if (tool === 'erase' || (g[idx] === EMPTY && Math.random() > spawnChance)) {
               g[idx] = matId
             }
@@ -714,6 +718,129 @@ function App() {
               }
             }
           }
+        } else if (c === BIRD) {
+          // Bird: flies around eating ants/bugs, wide-ranging random walk
+
+          // Check for fire/plasma - birds burn
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dy === 0 && dx === 0) continue
+              const nx = x + dx, ny = y + dy
+              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                if (g[idx(nx, ny)] === FIRE || g[idx(nx, ny)] === PLASMA) {
+                  g[p] = FIRE
+                  continue
+                }
+              }
+            }
+          }
+
+          // Wide-ranging random walk using position-based bias that changes over time
+          // This creates long sweeping flights across the screen
+          const r1 = rand()
+          const r2 = rand()
+          const r3 = rand()
+
+          // Create a direction bias based on position to avoid oscillation
+          // Use sin waves with different frequencies to create sweeping patterns
+          const time = (x * 7 + y * 11) % 100
+          const xBias = r1 < 0.3 ? -1 : r1 < 0.6 ? 1 : (time % 20 < 10 ? -1 : 1)
+          const yBias = r2 < 0.25 ? -2 : r2 < 0.45 ? -1 : r2 < 0.65 ? 0 : r2 < 0.85 ? 1 : 2
+
+          // Large movement jumps for wide coverage
+          let dx = xBias
+          let dy = yBias
+
+          // Occasionally make big jumps (3-5 cells) for faster coverage
+          if (r3 < 0.15) {
+            dx = Math.floor(r1 * 7) - 3 // -3 to +3
+            dy = Math.floor(r2 * 5) - 2 // -2 to +2
+          }
+
+          const nx = x + dx, ny = y + dy
+          let moved = false
+
+          if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+            const ni = idx(nx, ny), nc = g[ni]
+
+            // Eat ants and bugs - leave seeds/dirt behind
+            if (nc === ANT) {
+              g[ni] = BIRD
+              g[p] = r3 < 0.3 ? PLANT : r3 < 0.5 ? DIRT : EMPTY
+              moved = true
+            } else if (nc === BUG) {
+              g[ni] = BIRD
+              g[p] = r3 < 0.2 ? PLANT : EMPTY
+              moved = true
+            }
+            // Fly through empty space
+            else if (nc === EMPTY) {
+              g[ni] = BIRD
+              g[p] = EMPTY
+              moved = true
+            }
+            // Scatter fluff
+            else if (nc === FLUFF) {
+              g[ni] = BIRD
+              g[p] = EMPTY
+              // Scatter the fluff somewhere nearby
+              const fx = x + Math.floor(rand() * 5) - 2
+              const fy = y + Math.floor(rand() * 5) - 2
+              if (fx >= 0 && fx < cols && fy >= 0 && fy < rows && g[idx(fx, fy)] === EMPTY) {
+                g[idx(fx, fy)] = FLUFF
+              }
+              moved = true
+            }
+            // Eat plants sometimes (berries?)
+            else if (nc === PLANT && r3 < 0.15) {
+              g[ni] = BIRD
+              g[p] = r3 < 0.08 ? BIRD : EMPTY // Rare duplication from eating plants
+              moved = true
+            }
+            // Avoid water - fly away
+            else if (nc === WATER) {
+              // Try to go up instead
+              if (y > 0 && g[idx(x, y - 1)] === EMPTY) {
+                g[idx(x, y - 1)] = BIRD
+                g[p] = EMPTY
+                moved = true
+              }
+            }
+            // Perch on stone/dirt/glass briefly
+            else if ((nc === STONE || nc === DIRT || nc === GLASS) && r3 < 0.05) {
+              // Just stay perched, don't move
+              moved = true
+            }
+          }
+
+          // If couldn't move in primary direction, try alternatives
+          if (!moved) {
+            const altDirs = [[-1,-1],[1,-1],[0,-1],[-1,0],[1,0],[-1,1],[1,1],[0,1]]
+            for (let d = altDirs.length - 1; d > 0; d--) {
+              const j = Math.floor(rand() * (d + 1));
+              [altDirs[d], altDirs[j]] = [altDirs[j], altDirs[d]]
+            }
+            for (const [adx, ady] of altDirs) {
+              const anx = x + adx, any = y + ady
+              if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
+                const ani = idx(anx, any), anc = g[ani]
+                if (anc === EMPTY) {
+                  g[ani] = BIRD
+                  g[p] = EMPTY
+                  moved = true
+                  break
+                } else if (anc === ANT || anc === BUG) {
+                  g[ani] = BIRD
+                  g[p] = rand() < 0.3 ? PLANT : EMPTY
+                  moved = true
+                  break
+                }
+              }
+            }
+          }
+
+          // Birds die if completely stuck for too long (decay)
+          if (!moved && r1 > 0.98) g[p] = FLUFF
         }
       }
     }
@@ -814,7 +941,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird']
 
   return (
     <div className="app">
