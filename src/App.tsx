@@ -136,7 +136,7 @@ function App() {
           const nx = pos.x + dx, ny = pos.y + dy
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
             const idx = ny * cols + nx
-            const spawnChance = matId === ANT || matId === BIRD ? 0.6 : (matId === ALIEN || matId === QUARK) ? 0.92 : 0.3 // Spawn fewer ants/aliens/quarks/birds
+            const spawnChance = matId === BIRD ? 0.8 : matId === ANT ? 0.6 : (matId === ALIEN || matId === QUARK) ? 0.92 : 0.3 // Spawn fewer birds/ants/aliens/quarks
             if (tool === 'erase' || (g[idx] === EMPTY && Math.random() > spawnChance)) {
               g[idx] = matId
             }
@@ -719,27 +719,32 @@ function App() {
             }
           }
         } else if (c === BIRD) {
-          // Bird: flies around eating ants/bugs, swoops down fast, hovers slow
+          // Bird: slow-moving, dies if doesn't eat
 
-          // Check for dangerous things - birds disappear
+          // Hunger decay - birds disappear over time if not eating
+          if (rand() < 0.012) { g[p] = FLUFF; continue }
+
+          // Check for dangerous things - birds explode on fire
           for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
               if (dy === 0 && dx === 0) continue
               const nx = x + dx, ny = y + dy
               if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
                 const nc = g[idx(nx, ny)]
-                // Fire types kill birds
                 if (nc === FIRE || nc === PLASMA || nc === LIGHTNING || nc === EMBER) {
-                  g[p] = EMPTY
+                  // Explode into fire/ember particles
+                  g[p] = FIRE
+                  for (let ey = -1; ey <= 1; ey++) {
+                    for (let ex = -1; ex <= 1; ex++) {
+                      const bx = x + ex, by = y + ey
+                      if (bx >= 0 && bx < cols && by >= 0 && by < rows && g[idx(bx, by)] === EMPTY && rand() < 0.4) {
+                        g[idx(bx, by)] = rand() < 0.6 ? FIRE : EMBER
+                      }
+                    }
+                  }
                   continue
                 }
-                // Aliens eat birds
-                if (nc === ALIEN) {
-                  g[p] = EMPTY
-                  continue
-                }
-                // Quarks destroy birds
-                if (nc === QUARK) {
+                if (nc === ALIEN || nc === QUARK) {
                   g[p] = EMPTY
                   continue
                 }
@@ -747,118 +752,51 @@ function App() {
             }
           }
 
+          // Birds move slowly - skip most updates
+          if (rand() < 0.7) continue
+
           const r1 = rand()
           const r2 = rand()
-          const r3 = rand()
 
-          // Position-based phase creates long sweeping patterns
-          const phase = (x * 3 + y * 7) % 60
-
+          // Simple movement - mostly gliding with occasional swoop
           let dx = 0, dy = 0
+          if (r1 < 0.15) {
+            // Swoop down
+            dy = 2
+            dx = r2 < 0.5 ? -1 : 1
+          } else if (r1 < 0.4) {
+            // Glide sideways
+            dx = r2 < 0.5 ? -1 : 1
+            dy = r2 < 0.3 ? -1 : 0
+          } else if (r1 < 0.7) {
+            // Drift down slowly
+            dy = 1
+            dx = r2 < 0.3 ? -1 : r2 < 0.6 ? 1 : 0
+          }
+          // else stay still (perching)
 
-          // Swooping behavior - fast downward dives
-          if (r1 < 0.25) {
-            // Fast swoop down (2-4 cells)
-            dy = Math.floor(r2 * 3) + 2
-            dx = r3 < 0.5 ? -1 : 1
-          }
-          // Slow hover/glide
-          else if (r1 < 0.5) {
-            // Slow movement, slight drift
-            if (rand() < 0.4) { // Sometimes don't move at all (hovering)
-              dy = r2 < 0.4 ? -1 : r2 < 0.7 ? 0 : 1
-              dx = phase % 20 < 10 ? -1 : 1
-            }
-          }
-          // Regular flight with downward bias
-          else if (r1 < 0.8) {
-            dx = r2 < 0.35 ? -1 : r2 < 0.7 ? 1 : 0
-            dy = r3 < 0.3 ? -1 : r3 < 0.7 ? 1 : 2 // Bias toward going down
-          }
-          // Big diagonal swoop
-          else {
-            dx = Math.floor(r2 * 5) - 2 // -2 to +2
-            dy = Math.floor(r3 * 4) + 1 // +1 to +4 (always down or level)
-          }
+          if (dx === 0 && dy === 0) continue
 
           const nx = x + dx, ny = y + dy
-          let moved = false
-
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
             const ni = idx(nx, ny), nc = g[ni]
 
-            // Eat ants and bugs - leave seeds/dirt behind
-            if (nc === ANT) {
+            // Eat ants/bugs - resets hunger by leaving behind plant (life)
+            if (nc === ANT || nc === BUG) {
               g[ni] = BIRD
-              g[p] = r3 < 0.3 ? PLANT : r3 < 0.5 ? DIRT : EMPTY
-              moved = true
-            } else if (nc === BUG) {
-              g[ni] = BIRD
-              g[p] = r3 < 0.2 ? PLANT : EMPTY
-              moved = true
+              g[p] = rand() < 0.4 ? PLANT : EMPTY
             }
-            // Fly through empty space
+            // Fly through empty
             else if (nc === EMPTY) {
               g[ni] = BIRD
               g[p] = EMPTY
-              moved = true
             }
             // Scatter fluff
             else if (nc === FLUFF) {
               g[ni] = BIRD
               g[p] = EMPTY
-              const fx = x + Math.floor(rand() * 5) - 2
-              const fy = y + Math.floor(rand() * 5) - 2
-              if (fx >= 0 && fx < cols && fy >= 0 && fy < rows && g[idx(fx, fy)] === EMPTY) {
-                g[idx(fx, fy)] = FLUFF
-              }
-              moved = true
-            }
-            // Eat plants sometimes
-            else if (nc === PLANT && r3 < 0.15) {
-              g[ni] = BIRD
-              g[p] = r3 < 0.08 ? BIRD : EMPTY
-              moved = true
-            }
-            // Avoid water - fly up
-            else if (nc === WATER) {
-              if (y > 0 && g[idx(x, y - 1)] === EMPTY) {
-                g[idx(x, y - 1)] = BIRD
-                g[p] = EMPTY
-                moved = true
-              }
-            }
-            // Perch on solids briefly
-            else if ((nc === STONE || nc === DIRT || nc === GLASS) && r3 < 0.08) {
-              moved = true
             }
           }
-
-          // Try alternatives if blocked
-          if (!moved) {
-            // Prioritize downward directions for swooping
-            const altDirs = [[0,1],[1,1],[-1,1],[1,0],[-1,0],[0,-1],[1,-1],[-1,-1]]
-            for (const [adx, ady] of altDirs) {
-              const anx = x + adx, any = y + ady
-              if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
-                const ani = idx(anx, any), anc = g[ani]
-                if (anc === EMPTY) {
-                  g[ani] = BIRD
-                  g[p] = EMPTY
-                  moved = true
-                  break
-                } else if (anc === ANT || anc === BUG) {
-                  g[ani] = BIRD
-                  g[p] = rand() < 0.3 ? PLANT : EMPTY
-                  moved = true
-                  break
-                }
-              }
-            }
-          }
-
-          // Birds decay to fluff if stuck
-          if (!moved && r1 > 0.98) g[p] = FLUFF
         }
       }
     }
