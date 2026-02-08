@@ -256,8 +256,24 @@ function App() {
             continue
           }
 
+          // Water slows bullet and may stop it
+          if (bc === WATER) {
+            if (rand() < 0.15) {
+              // Bullet stopped by water
+              g[p] = BULLET_TRAIL
+            } else if (rand() < 0.5) {
+              // Bullet slowed - skip this move
+              continue
+            } else {
+              // Bullet continues through
+              g[bni] = c
+              g[p] = BULLET_TRAIL
+            }
+            continue
+          }
+
           // Pass through soft/transparent materials and other bullets fully
-          if (bc === PLANT || bc === WATER || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS || (bc >= BULLET_N && bc <= BULLET_NW) || bc === BULLET_TRAIL) {
+          if (bc === PLANT || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS || (bc >= BULLET_N && bc <= BULLET_NW) || bc === BULLET_TRAIL) {
             g[bni] = c
             g[p] = BULLET_TRAIL
             continue
@@ -603,7 +619,19 @@ function App() {
             continue
           }
 
-          if (bc === PLANT || bc === WATER || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS || (bc >= BULLET_N && bc <= BULLET_NW) || bc === BULLET_TRAIL) {
+          if (bc === WATER) {
+            if (rand() < 0.15) {
+              g[p] = BULLET_TRAIL
+            } else if (rand() < 0.5) {
+              continue
+            } else {
+              g[bni] = c
+              g[p] = BULLET_TRAIL
+            }
+            continue
+          }
+
+          if (bc === PLANT || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS || (bc >= BULLET_N && bc <= BULLET_NW) || bc === BULLET_TRAIL) {
             g[bni] = c
             g[p] = BULLET_TRAIL
             continue

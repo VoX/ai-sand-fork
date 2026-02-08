@@ -131,7 +131,8 @@ Slime eats → Dirt, Sand, Bug
 ### Bullet Behavior
 - **Ignites:** Gunpowder, Nitro (then stops)
 - **Destroys:** Bug, Ant, Bird, Bee, Slime (continues through)
-- **Passes through fully:** Plant, Water, Flower, Glass, Fluff, Gas, other bullets
+- **Slowed by:** Water (50% speed, 15% chance to stop per block)
+- **Passes through fully:** Plant, Flower, Glass, Fluff, Gas, other bullets
 - **Penetrates with limit (~4-6 blocks):** Stone, Dirt, Sand
 - **Stops at:** Guns, spawners
 - **Leaves:** Yellow bullet trail that fades quickly
