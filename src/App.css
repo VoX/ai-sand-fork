@@ -84,20 +84,19 @@ html, body, #root {
 .action-btns {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
 .ctrl-btn {
-  width: 36px;
-  height: 36px;
-  font-size: 16px;
-  background: #333;
-  color: #fff;
-  border: 2px solid #333;
-  border-radius: 6px;
+  width: 40px;
+  height: 40px;
+  background: #1a1a1a;
+  color: #666;
+  border: none;
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   user-select: none;
@@ -105,6 +104,12 @@ html, body, #root {
   align-items: center;
   justify-content: center;
   outline: none;
+  padding: 0;
+}
+
+.ctrl-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 .ctrl-btn:focus {
@@ -116,32 +121,53 @@ html, body, #root {
 }
 
 .ctrl-btn:hover:not(.disabled) {
-  background: #444;
+  background: #252525;
+  color: #888;
 }
 
 .ctrl-btn:active:not(.disabled) {
-  transform: scale(0.95);
+  transform: scale(0.92);
 }
 
 .ctrl-btn.disabled {
-  background: #222;
-  color: #555;
+  background: #151515;
+  color: #333;
   cursor: default;
-  border-color: #222;
 }
 
-.ctrl-btn.active {
+/* Play button active - green HDR glow */
+.ctrl-btn.play.active {
   background: #1a1a1a;
-  color: #e0e0e0;
-  border-color: #888;
-  box-shadow: 0 0 8px rgba(200, 200, 200, 0.3);
+  color: #4ade80;
+  box-shadow:
+    0 0 20px rgba(74, 222, 128, 0.4),
+    0 0 40px rgba(74, 222, 128, 0.2),
+    inset 0 0 20px rgba(74, 222, 128, 0.1);
 }
 
+/* Pause button active - blue HDR glow */
+.ctrl-btn.pause.active {
+  background: #1a1a1a;
+  color: #60a5fa;
+  box-shadow:
+    0 0 20px rgba(96, 165, 250, 0.4),
+    0 0 40px rgba(96, 165, 250, 0.2),
+    inset 0 0 20px rgba(96, 165, 250, 0.1);
+}
+
+/* Reset button - subtle */
+.ctrl-btn.reset:hover {
+  color: #a3a3a3;
+}
+
+/* Erase button active - red HDR glow */
 .ctrl-btn.erase.active {
   background: #1a1a1a;
-  color: #ff4444;
-  border-color: #ff4444;
-  box-shadow: 0 0 8px rgba(255, 68, 68, 0.4);
+  color: #f87171;
+  box-shadow:
+    0 0 20px rgba(248, 113, 113, 0.5),
+    0 0 40px rgba(248, 113, 113, 0.25),
+    inset 0 0 20px rgba(248, 113, 113, 0.15);
 }
 
 .canvas-container {
@@ -182,13 +208,18 @@ html, body, #root {
   }
 
   .action-btns {
-    gap: 3px;
+    gap: 5px;
   }
 
   .ctrl-btn {
-    width: 32px;
-    height: 32px;
-    font-size: 14px;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+  }
+
+  .ctrl-btn svg {
+    width: 16px;
+    height: 16px;
   }
 }
 
