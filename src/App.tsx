@@ -341,13 +341,15 @@ function App() {
         } else if (c === PLASMA) {
           if (y === 0) { g[p] = EMPTY; continue }
           if (rand() < 0.08) { g[p] = EMPTY; continue }
-          // Spread to sand
+          // Spread to sand, ignite flammables
           for (let dy = -1; dy <= 1; dy++) {
             for (let dx = -1; dx <= 1; dx++) {
               if (dy === 0 && dx === 0) continue
               const nx = x + dx, ny = y + dy
-              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[idx(nx, ny)] === SAND && rand() < 0.4) {
-                g[idx(nx, ny)] = PLASMA
+              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                const nc = g[idx(nx, ny)]
+                if (nc === SAND && rand() < 0.4) g[idx(nx, ny)] = PLASMA
+                else if ((nc === PLANT || nc === FLUFF || nc === GAS || nc === FLOWER) && rand() < 0.3) g[idx(nx, ny)] = FIRE
               }
             }
           }

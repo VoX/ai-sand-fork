@@ -48,7 +48,7 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 | Particle | Color | Behavior |
 |----------|-------|----------|
 | **Fire** | Orange/red | Rises, spreads to flammables, decays to gas/ember/nothing |
-| **Plasma** | Purple | Rises, spreads to sand, decays quickly |
+| **Plasma** | Purple | Rises, spreads to sand, ignites flammables, decays quickly |
 | **Lightning** | Yellow | Strikes downward, turns sand→glass, ignites flammables, spreads through water |
 | **Ember** | Orange-red | Glowing coal, falls slowly, can reignite nearby flammables |
 | **Static** | Cyan | Electrical residue, jitters around, can spark into lightning |
@@ -152,6 +152,10 @@ flowchart LR
     Fire -->|ignites| Flower
     Fire -->|ignites| Hive
     Fire -->|ignites| Nest
+    Plasma((Plasma)) -->|ignites| Plant
+    Plasma -->|ignites| Fluff
+    Plasma -->|ignites| Gas
+    Plasma -->|ignites| Flower
     Lightning -->|creates| Fire
     Ember -->|reignites| Plant
     Gunpowder -->|explodes to| Fire
@@ -211,9 +215,12 @@ flowchart LR
         Slime[Slime]
     end
 
+    subgraph SlowedBy[Slowed By - 50% speed, 15% stop]
+        Water[Water]
+    end
+
     subgraph PassThrough[Passes Through Fully]
         Plant[Plant]
-        Water[Water]
         Flower[Flower]
         Glass[Glass]
         Fluff[Fluff]
@@ -228,6 +235,7 @@ flowchart LR
     end
 
     Bullet -->|kills| Destroys
+    Bullet -->|slowed| SlowedBy
     Bullet -.->|through| PassThrough
     Bullet -->|penetrates| Penetrates
     Bullet -->|leaves| Trail[Bullet Trail]
@@ -263,6 +271,20 @@ These are spawned by the Gun particle and track their own direction.
 - **Play/Pause:** Control simulation
 - **Reset:** Clear canvas
 - **Erase:** Remove particles
+
+---
+
+## Testing
+
+Playwright is set up for automated testing:
+
+```bash
+bun run test          # Run all tests
+bun run test:headed   # Run with visible browser
+bun run test:ui       # Interactive UI mode
+```
+
+Tests cover control buttons, particle selection, and canvas interactions.
 
 ---
 
