@@ -236,12 +236,6 @@ function App() {
           const bni = idx(bnx, bny)
           const bc = g[bni]
 
-          // Skip guns (bullet stops)
-          if (bc === GUN) {
-            g[p] = BULLET_TRAIL
-            continue
-          }
-
           // Ignite gunpowder and nitro
           if (bc === GUNPOWDER || bc === NITRO) {
             g[bni] = FIRE
@@ -272,8 +266,8 @@ function App() {
             continue
           }
 
-          // Pass through soft/transparent materials and other bullets fully
-          if (bc === PLANT || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS || (bc >= BULLET_N && bc <= BULLET_NW) || bc === BULLET_TRAIL) {
+          // Pass through soft/transparent materials, other bullets, and guns fully
+          if (bc === PLANT || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS || bc === GUN || (bc >= BULLET_N && bc <= BULLET_NW) || bc === BULLET_TRAIL) {
             g[bni] = c
             g[p] = BULLET_TRAIL
             continue
@@ -604,11 +598,6 @@ function App() {
           const bni = idx(bnx, bny)
           const bc = g[bni]
 
-          if (bc === GUN) {
-            g[p] = BULLET_TRAIL
-            continue
-          }
-
           if (bc === GUNPOWDER || bc === NITRO) {
             g[bni] = FIRE
             g[p] = BULLET_TRAIL
@@ -633,7 +622,7 @@ function App() {
             continue
           }
 
-          if (bc === PLANT || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS || (bc >= BULLET_N && bc <= BULLET_NW) || bc === BULLET_TRAIL) {
+          if (bc === PLANT || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS || bc === GUN || (bc >= BULLET_N && bc <= BULLET_NW) || bc === BULLET_TRAIL) {
             g[bni] = c
             g[p] = BULLET_TRAIL
             continue

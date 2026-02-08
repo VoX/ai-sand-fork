@@ -132,9 +132,9 @@ Slime eats → Dirt, Sand, Bug
 - **Ignites:** Gunpowder, Nitro (then stops)
 - **Destroys:** Bug, Ant, Bird, Bee, Slime (continues through)
 - **Slowed by:** Water (50% speed, 15% chance to stop per block)
-- **Passes through fully:** Plant, Flower, Glass, Fluff, Gas, other bullets
+- **Passes through fully:** Plant, Flower, Glass, Fluff, Gas, Guns, other bullets
 - **Penetrates with limit (~4-6 blocks):** Stone, Dirt, Sand
-- **Stops at:** Guns, spawners
+- **Stops at:** Spawners (Tap, Anthill, Hive, Nest)
 - **Leaves:** Yellow bullet trail that fades quickly
 
 ---
@@ -225,6 +225,7 @@ flowchart LR
         Glass[Glass]
         Fluff[Fluff]
         Gas[Gas]
+        Guns[Guns]
         OtherBullets[Other Bullets]
     end
 
