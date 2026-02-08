@@ -71,6 +71,7 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 | Particle | Color | Behavior |
 |----------|-------|----------|
 | **Tap** | Silver | Static, spawns water below continuously |
+| **Cloud** | White | Floats around, drops water slowly (slower than tap) |
 | **Anthill** | Yellow-brown | Static, spawns ants, burns on fire |
 | **Hive** | Amber | Static, spawns bees, burns on fire |
 | **Nest** | Brown-grey | Static, spawns birds, burns on fire |
@@ -181,6 +182,7 @@ flowchart TD
 ```mermaid
 flowchart LR
     Tap[Tap] -->|spawns| Water[Water]
+    Cloud[Cloud] -->|drops| Water
     Anthill[Anthill] -->|spawns| Ant[Ant]
     Hive[Hive] -->|spawns| Bee[Bee]
     Nest[Nest] -->|spawns| Bird[Bird]

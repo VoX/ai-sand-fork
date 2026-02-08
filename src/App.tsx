@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
@@ -14,13 +14,14 @@ const BEE = 25, FLOWER = 26, HIVE = 27, HONEY = 28, NEST = 29, GUN = 30
 const BULLET_N = 31, BULLET_NE = 32, BULLET_E = 33, BULLET_SE = 34
 const BULLET_S = 35, BULLET_SW = 36, BULLET_W = 37, BULLET_NW = 38
 const BULLET_TRAIL = 39 // Yellow trail left by bullets
+const CLOUD = 40 // White floating particle that drops water
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
   fire: FIRE, gas: GAS, fluff: FLUFF, bug: BUG, plasma: PLASMA,
   nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME, ant: ANT, alien: ALIEN, quark: QUARK,
   crystal: CRYSTAL, ember: EMBER, static: STATIC, bird: BIRD, gunpowder: GUNPOWDER, tap: TAP, anthill: ANTHILL,
-  bee: BEE, flower: FLOWER, hive: HIVE, honey: HONEY, nest: NEST, gun: GUN,
+  bee: BEE, flower: FLOWER, hive: HIVE, honey: HONEY, nest: NEST, gun: GUN, cloud: CLOUD,
 }
 
 // Density for displacement (higher sinks through lower, 0 = doesn't displace)
@@ -81,6 +82,7 @@ const COLORS_U32 = new Uint32Array([
   0xFF44FFFF, // BULLET_W
   0xFF44FFFF, // BULLET_NW
   0xFF44DDFF, // BULLET_TRAIL (yellow, slightly dimmer)
+  0xFFFFFFFF, // CLOUD (white)
 ])
 
 // Dynamic color palettes
@@ -103,7 +105,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
   lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a', alien: '#00ff00', quark: '#ff00ff',
   crystal: '#80d0ff', ember: '#ff4020', static: '#44ffff', bird: '#e8e8e8', gunpowder: '#303030', tap: '#c0c0c0', anthill: '#b08030',
-  bee: '#ffd800', flower: '#cc44ff', hive: '#e8b840', honey: '#ffa030', nest: '#a08080', gun: '#505050',
+  bee: '#ffd800', flower: '#cc44ff', hive: '#e8b840', honey: '#ffa030', nest: '#a08080', gun: '#505050', cloud: '#ffffff',
 }
 
 function App() {
@@ -343,6 +345,22 @@ function App() {
               g[idx(x + dx, y - 1)] = GAS; g[p] = EMPTY
             } else if (x + dx >= 0 && x + dx < cols && g[idx(x + dx, y)] === EMPTY) {
               g[idx(x + dx, y)] = GAS; g[p] = EMPTY
+            }
+          }
+        } else if (c === CLOUD) {
+          // Cloud: floats around and drops water
+          // Drop water below (slower than tap's 15%)
+          if (y < rows - 1 && g[idx(x, y + 1)] === EMPTY && rand() < 0.08) {
+            g[idx(x, y + 1)] = WATER
+          }
+          // Float around - drift sideways and occasionally up/down
+          if (rand() < 0.3) {
+            const dx = rand() < 0.5 ? -1 : 1
+            const dy = rand() < 0.3 ? -1 : rand() < 0.5 ? 1 : 0
+            const nx = x + dx, ny = y + dy
+            if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[idx(nx, ny)] === EMPTY) {
+              g[idx(nx, ny)] = CLOUD
+              g[p] = EMPTY
             }
           }
         } else if (c === PLASMA) {
@@ -1456,7 +1474,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey', 'nest', 'gun']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey', 'nest', 'gun', 'cloud']
 
   return (
     <div className="app">
