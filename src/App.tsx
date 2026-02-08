@@ -266,8 +266,21 @@ function App() {
             continue
           }
 
-          // Pass through soft/transparent materials, other bullets, and guns fully
-          if (bc === PLANT || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS || bc === GUN || (bc >= BULLET_N && bc <= BULLET_NW) || bc === BULLET_TRAIL) {
+          // Pass through guns without destroying them - jump over
+          if (bc === GUN) {
+            const bnx2 = bnx + bdx, bny2 = bny + bdy
+            if (bnx2 >= 0 && bnx2 < cols && bny2 >= 0 && bny2 < rows) {
+              const bni2 = idx(bnx2, bny2)
+              if (g[bni2] === EMPTY) {
+                g[bni2] = c
+              }
+            }
+            g[p] = BULLET_TRAIL
+            continue
+          }
+
+          // Pass through soft/transparent materials and other bullets fully
+          if (bc === PLANT || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS || (bc >= BULLET_N && bc <= BULLET_NW) || bc === BULLET_TRAIL) {
             g[bni] = c
             g[p] = BULLET_TRAIL
             continue
@@ -622,7 +635,20 @@ function App() {
             continue
           }
 
-          if (bc === PLANT || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS || bc === GUN || (bc >= BULLET_N && bc <= BULLET_NW) || bc === BULLET_TRAIL) {
+          // Pass through guns without destroying them - jump over
+          if (bc === GUN) {
+            const bnx2 = bnx + bdx, bny2 = bny + bdy
+            if (bnx2 >= 0 && bnx2 < cols && bny2 >= 0 && bny2 < rows) {
+              const bni2 = idx(bnx2, bny2)
+              if (g[bni2] === EMPTY) {
+                g[bni2] = c
+              }
+            }
+            g[p] = BULLET_TRAIL
+            continue
+          }
+
+          if (bc === PLANT || bc === FLOWER || bc === GLASS || bc === FLUFF || bc === GAS || (bc >= BULLET_N && bc <= BULLET_NW) || bc === BULLET_TRAIL) {
             g[bni] = c
             g[p] = BULLET_TRAIL
             continue
