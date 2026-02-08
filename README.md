@@ -276,7 +276,34 @@ These are spawned by the Gun particle and track their own direction.
 
 ## Testing
 
-Playwright is set up for automated testing:
+Playwright is set up for automated testing. Requires Node.js >= 18.19 and bun.
+
+### Quick Start
+
+```bash
+make setup            # Install deps + Playwright Chromium
+make test             # Run all tests
+```
+
+### All Commands
+
+```bash
+make test             # Run all tests headless
+make test-headed      # Run with visible browser
+make test-ui          # Interactive Playwright UI mode
+make report           # Open HTML test report
+make clean            # Remove test artifacts
+```
+
+Or use the shell script directly:
+
+```bash
+./run-tests.sh                # Run all tests (handles nvm/node setup)
+./run-tests.sh --headed       # With visible browser
+./run-tests.sh --grep "canvas" # Run specific tests
+```
+
+Or via bun:
 
 ```bash
 bun run test          # Run all tests
