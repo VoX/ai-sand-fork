@@ -29,16 +29,16 @@ test.describe('Particle Interactions', () => {
 
   test('selecting different materials works', async ({ page }) => {
     const materials = ['water', 'fire', 'plant', 'gun']
-    
+
     for (const material of materials) {
-      const btn = page.locator('.material-btn', { hasText: material })
+      const btn = page.locator('.material-btn', { hasText: new RegExp(`^${material}$`) })
       await btn.click()
       await expect(btn).toHaveClass(/active/)
     }
   })
 
   test('gun particle button exists', async ({ page }) => {
-    const gunBtn = page.locator('.material-btn', { hasText: 'gun' })
+    const gunBtn = page.locator('.material-btn', { hasText: /^gun$/ })
     await expect(gunBtn).toBeVisible()
     await gunBtn.click()
     await expect(gunBtn).toHaveClass(/active/)
