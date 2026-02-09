@@ -122,7 +122,7 @@ const COLORS_U32 = new Uint32Array([
   0xFF0066FF, // FIREWORK (bright orange)
   0xFFEBCE87, // BUBBLE (sky blue)
   0xFFC0C0C0, // GLITTER (silver)
-  0xFFEE82EE, // STAR (bright violet)
+  0xFF00DFFF, // STAR (bright yellow sun)
   0xFFFFF97D, // COMET (electric blue)
   0xFFFF901E, // BLUE_FIRE (cyan-blue fire)
   0xFF000008, // BLACK_HOLE (very dark, almost black with hint of purple)
@@ -154,7 +154,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   acid: '#bfff00', lava: '#dc1414', snow: '#e0f0ff',
   volcano: '#660000', mold: '#7b68ee', mercury: '#b8c0c8', void: '#2e0854', seed: '#d4a574',
   rust: '#b7410e', spore: '#20b2aa', algae: '#2e8b57', poison: '#8b008b', dust: '#deb887',
-  firework: '#ff6600', bubble: '#87ceeb', glitter: '#c0c0c0', star: '#ee82ee', comet: '#7df9ff', blackhole: '#080008',
+  firework: '#ff6600', bubble: '#87ceeb', glitter: '#c0c0c0', star: '#ffdf00', comet: '#7df9ff', blackhole: '#080008',
 }
 
 function App() {
@@ -2215,56 +2215,60 @@ function App() {
             }
           }
         } else if (c === STAR) {
-          // Star: magical particle, transforms nearby materials
+          // Star: yellow sun - grows plants/flowers/algae, melts snow, warms area
 
-          // Transform one adjacent neighbor occasionally
-          if (rand() < 0.08) {
-            const sdx = Math.floor(rand() * 3) - 1
-            const sdy = Math.floor(rand() * 3) - 1
-            if (sdx !== 0 || sdy !== 0) {
+          const sunRadius = 5
+
+          // Sun effects on nearby area
+          for (let sdy = -sunRadius; sdy <= sunRadius; sdy++) {
+            for (let sdx = -sunRadius; sdx <= sunRadius; sdx++) {
+              if (sdx === 0 && sdy === 0) continue
+              const dist = Math.abs(sdx) + Math.abs(sdy)
+              if (dist > sunRadius) continue
+
               const snx = x + sdx, sny = y + sdy
-              if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
-                const si = idx(snx, sny), sc = g[si]
-                // Magical transformations
-                if (sc === SAND) g[si] = rand() < 0.5 ? GLASS : CRYSTAL
-                else if (sc === DIRT) g[si] = rand() < 0.5 ? PLANT : FLOWER
-                else if (sc === WATER) g[si] = rand() < 0.5 ? BUBBLE : HONEY
-                else if (sc === STONE) g[si] = rand() < 0.5 ? CRYSTAL : GLASS
-                else if (sc === PLANT) g[si] = FLOWER
-                else if (sc === FIRE) g[si] = PLASMA
-                else if (sc === GAS) g[si] = CLOUD
+              if (snx < 0 || snx >= cols || sny < 0 || sny >= rows) continue
+
+              const si = idx(snx, sny), sc = g[si]
+
+              // Grow plants from dirt
+              if (sc === DIRT && rand() < 0.03 / dist) {
+                g[si] = rand() < 0.3 ? FLOWER : PLANT
+              }
+              // Make plants flower
+              else if (sc === PLANT && rand() < 0.02 / dist) {
+                g[si] = FLOWER
+              }
+              // Grow algae in water
+              else if (sc === WATER && rand() < 0.01 / dist) {
+                g[si] = ALGAE
+              }
+              // Spread algae
+              else if (sc === ALGAE && rand() < 0.02 / dist) {
+                // Try to spread to adjacent water
+                const adx = Math.floor(rand() * 3) - 1
+                const ady = Math.floor(rand() * 3) - 1
+                const anx = snx + adx, any = sny + ady
+                if (anx >= 0 && anx < cols && any >= 0 && any < rows && g[idx(anx, any)] === WATER) {
+                  g[idx(anx, any)] = ALGAE
+                }
+              }
+              // Melt snow to water
+              else if (sc === SNOW && rand() < 0.08 / dist) {
+                g[si] = WATER
+              }
+              // Evaporate some water to gas (steam)
+              else if (sc === WATER && rand() < 0.005 / dist) {
+                g[si] = GAS
               }
             }
           }
 
-          // Occasionally emit a glitter
-          if (rand() < 0.03) {
-            const gdx = Math.floor(rand() * 3) - 1
-            const gdy = Math.floor(rand() * 3) - 1
-            const gnx = x + gdx, gny = y + gdy
-            if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows && g[idx(gnx, gny)] === EMPTY) {
-              g[idx(gnx, gny)] = GLITTER
-            }
-          }
-
-          // Decay into glitter
-          if (rand() < 0.01) { g[p] = GLITTER; continue }
-
-          // Float down slowly, drift sideways
-          if (rand() < 0.25) {
-            const sdx = Math.floor(rand() * 3) - 1
-            const sdy = rand() < 0.6 ? 1 : (rand() < 0.5 ? 0 : -1)
-            const snx = x + sdx, sny = y + sdy
-            if (snx >= 0 && snx < cols && sny >= 0 && sny < rows && g[idx(snx, sny)] === EMPTY) {
-              g[idx(snx, sny)] = STAR
-              g[p] = EMPTY
-            }
-          }
+          // Star is stationary like a sun
         } else if (c === BLACK_HOLE) {
-          // Black hole: sucks in and destroys nearby particles
+          // Black hole: strong gravity pulls in and destroys particles
 
-          // Pull in particles from surrounding area
-          const pullRadius = 6
+          const pullRadius = 10
           for (let bdy = -pullRadius; bdy <= pullRadius; bdy++) {
             for (let bdx = -pullRadius; bdx <= pullRadius; bdx++) {
               if (bdx === 0 && bdy === 0) continue
@@ -2275,24 +2279,21 @@ function App() {
               if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) continue
 
               const bi = idx(bnx, bny), bc = g[bi]
-              // Don't pull in other black holes, stone, glass, or spawners
               if (bc === EMPTY || bc === BLACK_HOLE || bc === STONE || bc === GLASS ||
-                  bc === TAP || bc === VOLCANO || bc === GUN || bc === ANTHILL || bc === HIVE) continue
+                  bc === TAP || bc === VOLCANO || bc === GUN || bc === ANTHILL || bc === HIVE || bc === CRYSTAL) continue
 
-              // Closer = stronger pull
-              const pullChance = 0.15 / dist
+              // Strong gravity pull
+              const pullChance = 0.35 / dist
 
               if (rand() < pullChance) {
-                // Move particle one step toward black hole
                 const stepX = bdx > 0 ? -1 : (bdx < 0 ? 1 : 0)
                 const stepY = bdy > 0 ? -1 : (bdy < 0 ? 1 : 0)
                 const targetX = bnx + stepX, targetY = bny + stepY
 
                 if (targetX >= 0 && targetX < cols && targetY >= 0 && targetY < rows) {
                   const ti = idx(targetX, targetY)
-                  // If next to black hole, destroy it
                   if (Math.abs(bdx + stepX) <= 1 && Math.abs(bdy + stepY) <= 1) {
-                    g[bi] = EMPTY // Consumed!
+                    g[bi] = EMPTY // Consumed
                   } else if (g[ti] === EMPTY) {
                     g[ti] = bc
                     g[bi] = EMPTY
@@ -2302,7 +2303,25 @@ function App() {
             }
           }
 
-          // Black holes are stationary - they don't move
+          // Bend trajectory of falling particles passing nearby
+          for (let checkX = x - 8; checkX <= x + 8; checkX++) {
+            if (checkX < 0 || checkX >= cols) continue
+            for (let checkY = y - 10; checkY <= y + 3; checkY++) {
+              if (checkY < 0 || checkY >= rows) continue
+              const ci = idx(checkX, checkY), cc = g[ci]
+              if (cc === EMPTY || cc === BLACK_HOLE || cc === STONE || cc === GLASS) continue
+
+              const dx = x - checkX
+              if (Math.abs(dx) > 1 && Math.abs(dx) <= 6 && rand() < 0.25) {
+                const bendDir = dx > 0 ? 1 : -1
+                const bendX = checkX + bendDir
+                if (bendX >= 0 && bendX < cols && g[idx(bendX, checkY)] === EMPTY) {
+                  g[idx(bendX, checkY)] = cc
+                  g[ci] = EMPTY
+                }
+              }
+            }
+          }
         }
       }
     }
