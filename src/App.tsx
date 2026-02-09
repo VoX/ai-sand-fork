@@ -2279,54 +2279,55 @@ function App() {
 
           // Star is stationary like a sun
         } else if (c === BLACK_HOLE) {
-          // Black hole: strong gravity pulls in and destroys particles
+          // Black hole: gravity pulls in particles (optimized)
 
+          // Only process some frames to reduce CPU load
+          if (rand() > 0.5) continue
+
+          // Sample random directions instead of checking all 400+ cells
           const pullRadius = 10
-          for (let bdy = -pullRadius; bdy <= pullRadius; bdy++) {
-            for (let bdx = -pullRadius; bdx <= pullRadius; bdx++) {
-              if (bdx === 0 && bdy === 0) continue
-              const dist = Math.sqrt(bdx * bdx + bdy * bdy)
-              if (dist > pullRadius) continue
+          for (let sample = 0; sample < 16; sample++) {
+            const angle = rand() * 6.28318 // 2*PI
+            const dist = rand() * pullRadius + 1
+            const bdx = Math.round(Math.cos(angle) * dist)
+            const bdy = Math.round(Math.sin(angle) * dist)
+            if (bdx === 0 && bdy === 0) continue
 
-              const bnx = x + bdx, bny = y + bdy
-              if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) continue
+            const bnx = x + bdx, bny = y + bdy
+            if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) continue
 
-              const bi = idx(bnx, bny), bc = g[bi]
-              if (bc === EMPTY || bc === BLACK_HOLE || bc === STONE || bc === GLASS ||
-                  bc === TAP || bc === VOLCANO || bc === GUN || bc === ANTHILL || bc === HIVE || bc === CRYSTAL) continue
+            const bi = idx(bnx, bny), bc = g[bi]
+            if (bc === EMPTY || bc === BLACK_HOLE || bc === STONE || bc === GLASS ||
+                bc === TAP || bc === VOLCANO || bc === GUN || bc === ANTHILL || bc === HIVE || bc === CRYSTAL) continue
 
-              // Strong gravity pull
-              const pullChance = 0.35 / dist
+            // Pull towards center
+            const stepX = bdx > 0 ? -1 : (bdx < 0 ? 1 : 0)
+            const stepY = bdy > 0 ? -1 : (bdy < 0 ? 1 : 0)
+            const targetX = bnx + stepX, targetY = bny + stepY
 
-              if (rand() < pullChance) {
-                const stepX = bdx > 0 ? -1 : (bdx < 0 ? 1 : 0)
-                const stepY = bdy > 0 ? -1 : (bdy < 0 ? 1 : 0)
-                const targetX = bnx + stepX, targetY = bny + stepY
-
-                if (targetX >= 0 && targetX < cols && targetY >= 0 && targetY < rows) {
-                  const ti = idx(targetX, targetY)
-                  if (Math.abs(bdx + stepX) <= 1 && Math.abs(bdy + stepY) <= 1) {
-                    g[bi] = EMPTY // Consumed
-                  } else if (g[ti] === EMPTY) {
-                    g[ti] = bc
-                    g[bi] = EMPTY
-                  }
-                }
+            if (targetX >= 0 && targetX < cols && targetY >= 0 && targetY < rows) {
+              const ti = idx(targetX, targetY)
+              if (Math.abs(bdx + stepX) <= 1 && Math.abs(bdy + stepY) <= 1) {
+                g[bi] = EMPTY // Consumed
+              } else if (g[ti] === EMPTY) {
+                g[ti] = bc
+                g[bi] = EMPTY
               }
             }
           }
 
-          // Bend trajectory of falling particles passing nearby
-          for (let checkX = x - 8; checkX <= x + 8; checkX++) {
+          // Quick gravity bend for nearby falling particles (step by 2)
+          for (let dx = -6; dx <= 6; dx += 2) {
+            const checkX = x + dx
             if (checkX < 0 || checkX >= cols) continue
-            for (let checkY = y - 10; checkY <= y + 3; checkY++) {
+            for (let dy = -8; dy <= 2; dy += 2) {
+              const checkY = y + dy
               if (checkY < 0 || checkY >= rows) continue
               const ci = idx(checkX, checkY), cc = g[ci]
               if (cc === EMPTY || cc === BLACK_HOLE || cc === STONE || cc === GLASS) continue
 
-              const dx = x - checkX
-              if (Math.abs(dx) > 1 && Math.abs(dx) <= 6 && rand() < 0.25) {
-                const bendDir = dx > 0 ? 1 : -1
+              if (Math.abs(dx) > 1 && rand() < 0.3) {
+                const bendDir = dx > 0 ? -1 : 1
                 const bendX = checkX + bendDir
                 if (bendX >= 0 && bendX < cols && g[idx(bendX, checkY)] === EMPTY) {
                   g[idx(bendX, checkY)] = cc
