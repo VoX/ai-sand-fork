@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
@@ -23,6 +23,16 @@ const MOLD = 45 // Terraformer: spreads across organics, decomposes
 const MERCURY = 46 // Liquid metal, toxic, reflects bullets
 const VOID = 47 // Dark matter, absorbs particles, grows and shrinks
 const SEED = 48 // Grows into plant when on dirt near water
+const RUST = 49 // Corrosion that spreads on stone when wet, crumbles to dirt
+const SPORE = 50 // Airborne mold spore, floats and creates mold on contact
+const ALGAE = 51 // Aquatic plant, grows in water, releases gas
+const POISON = 52 // Toxic liquid from decomposition, kills creatures
+const DUST = 53 // Airborne particles, settles to sand, EXPLOSIVE with fire
+const FIREWORK = 54 // Shoots upward, explodes into colorful sparks
+const BUBBLE = 55 // Rises through liquids, pops at surface
+const GLITTER = 56 // Sparkly, spreads and sticks to everything
+const STAR = 57 // Magical particle, grants random transformations
+const COMET = 58 // Fast streaking particle, leaves fire trail
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
@@ -31,6 +41,8 @@ const MATERIAL_TO_ID: Record<Material, number> = {
   crystal: CRYSTAL, ember: EMBER, static: STATIC, bird: BIRD, gunpowder: GUNPOWDER, tap: TAP, anthill: ANTHILL,
   bee: BEE, flower: FLOWER, hive: HIVE, honey: HONEY, nest: NEST, gun: GUN, cloud: CLOUD,
   acid: ACID, lava: LAVA, snow: SNOW, volcano: VOLCANO, mold: MOLD, mercury: MERCURY, void: VOID, seed: SEED,
+  rust: RUST, spore: SPORE, algae: ALGAE, poison: POISON, dust: DUST,
+  firework: FIREWORK, bubble: BUBBLE, glitter: GLITTER, star: STAR, comet: COMET,
 }
 
 // Density for displacement (higher sinks through lower, 0 = doesn't displace)
@@ -100,6 +112,16 @@ const COLORS_U32 = new Uint32Array([
   0xFFC8C0B8, // MERCURY (silver metallic)
   0xFF54082E, // VOID (deep purple, almost black)
   0xFF74A5D4, // SEED (tan/wheat)
+  0xFF0E41B7, // RUST (terracotta/rust orange-brown)
+  0xFFAAB220, // SPORE (teal/sea green)
+  0xFF578B2E, // ALGAE (sea green, aquatic)
+  0xFF8B008B, // POISON (dark magenta)
+  0xFF87B8DE, // DUST (burlywood/warm beige)
+  0xFF0066FF, // FIREWORK (bright orange)
+  0xFFEBCE87, // BUBBLE (sky blue)
+  0xFF00D7FF, // GLITTER (sparkly gold)
+  0xFFEE82EE, // STAR (bright violet)
+  0xFFFFF97D, // COMET (electric blue)
 ])
 
 // Dynamic color palettes
@@ -125,6 +147,8 @@ const BUTTON_COLORS: Record<Material, string> = {
   bee: '#ffd800', flower: '#cc44ff', hive: '#e8b840', honey: '#ffa030', nest: '#a08080', gun: '#505050', cloud: '#c8d0d8',
   acid: '#bfff00', lava: '#dc1414', snow: '#e0f0ff',
   volcano: '#660000', mold: '#7b68ee', mercury: '#b8c0c8', void: '#2e0854', seed: '#d4a574',
+  rust: '#b7410e', spore: '#20b2aa', algae: '#2e8b57', poison: '#8b008b', dust: '#deb887',
+  firework: '#ff6600', bubble: '#87ceeb', glitter: '#ffd700', star: '#ee82ee', comet: '#7df9ff',
 }
 
 function App() {
@@ -376,6 +400,38 @@ function App() {
               g[idx(x + dx, y)] = GAS; g[p] = EMPTY
             }
           }
+        } else if (c === SPORE) {
+          // Spore: airborne mold reproduction, floats and creates mold on organics
+
+          // Decay over time
+          if (rand() < 0.01) { g[p] = EMPTY; continue }
+
+          // Check for contact with organic matter - create mold!
+          for (let sdy = -1; sdy <= 1; sdy++) {
+            for (let sdx = -1; sdx <= 1; sdx++) {
+              if (sdy === 0 && sdx === 0) continue
+              const snx = x + sdx, sny = y + sdy
+              if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
+                const snc = g[idx(snx, sny)]
+                if ((snc === PLANT || snc === FLOWER || snc === FLUFF || snc === HONEY || snc === DIRT || snc === ALGAE) && rand() < 0.2) {
+                  g[idx(snx, sny)] = MOLD
+                  g[p] = EMPTY
+                  continue
+                }
+              }
+            }
+          }
+
+          // Float upward slowly, drift sideways
+          if (rand() < 0.4) {
+            const sdx = Math.floor(rand() * 3) - 1
+            const sdy = rand() < 0.6 ? -1 : (rand() < 0.5 ? 0 : 1) // Bias upward
+            const snx = x + sdx, sny = y + sdy
+            if (snx >= 0 && snx < cols && sny >= 0 && sny < rows && g[idx(snx, sny)] === EMPTY) {
+              g[idx(snx, sny)] = SPORE
+              g[p] = EMPTY
+            }
+          }
         } else if (c === CLOUD) {
           // Cloud: floats around and drops water
           // Drop water below (slower than tap's 15%)
@@ -391,6 +447,165 @@ function App() {
               g[idx(nx, ny)] = CLOUD
               g[p] = EMPTY
             }
+          }
+        } else if (c === FIREWORK) {
+          // Firework: shoots upward, explodes into colorful sparks when slowing
+
+          // Rise upward rapidly
+          if (y > 0 && rand() < 0.85) {
+            const above = idx(x, y - 1)
+            if (g[above] === EMPTY) {
+              // Leave a trail of embers
+              g[above] = FIREWORK
+              g[p] = rand() < 0.4 ? EMBER : EMPTY
+            } else {
+              // Hit something or random chance - EXPLODE!
+              g[p] = EMPTY
+              const r = 6
+              for (let edy = -r; edy <= r; edy++) {
+                for (let edx = -r; edx <= r; edx++) {
+                  if (edx * edx + edy * edy <= r * r) {
+                    const ex = x + edx, ey = y + edy
+                    if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY) {
+                      // Colorful explosion - mix of glitter, ember, fire, static
+                      const particle = rand()
+                      if (particle < 0.3) g[idx(ex, ey)] = GLITTER
+                      else if (particle < 0.5) g[idx(ex, ey)] = EMBER
+                      else if (particle < 0.7) g[idx(ex, ey)] = FIRE
+                      else if (particle < 0.85) g[idx(ex, ey)] = STATIC
+                    }
+                  }
+                }
+              }
+            }
+          } else if (rand() < 0.3) {
+            // Random explosion when slowing down
+            g[p] = EMPTY
+            const r = 5
+            for (let edy = -r; edy <= r; edy++) {
+              for (let edx = -r; edx <= r; edx++) {
+                if (edx * edx + edy * edy <= r * r && rand() < 0.4) {
+                  const ex = x + edx, ey = y + edy
+                  if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY) {
+                    const particle = rand()
+                    if (particle < 0.35) g[idx(ex, ey)] = GLITTER
+                    else if (particle < 0.6) g[idx(ex, ey)] = EMBER
+                    else if (particle < 0.8) g[idx(ex, ey)] = FIRE
+                    else g[idx(ex, ey)] = STATIC
+                  }
+                }
+              }
+            }
+          }
+        } else if (c === BUBBLE) {
+          // Bubble: rises through liquids, pops at surface with a small splash
+
+          // Check if in liquid
+          let inLiquid = false
+          for (let bdy = -1; bdy <= 1; bdy++) {
+            for (let bdx = -1; bdx <= 1; bdx++) {
+              const bnx = x + bdx, bny = y + bdy
+              if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
+                const bnc = g[idx(bnx, bny)]
+                if (bnc === WATER || bnc === ACID || bnc === HONEY || bnc === POISON) inLiquid = true
+              }
+            }
+          }
+
+          if (inLiquid) {
+            // Rise through liquid
+            if (y > 0 && rand() < 0.6) {
+              const above = idx(x, y - 1)
+              const ac = g[above]
+              if (ac === WATER || ac === ACID || ac === HONEY || ac === POISON) {
+                g[above] = BUBBLE
+                g[p] = ac // Leave the liquid behind
+              } else if (ac === EMPTY) {
+                // Pop at surface!
+                g[p] = EMPTY
+                // Small splash - throw some water droplets
+                for (let i = 0; i < 3; i++) {
+                  const sx = x + Math.floor(rand() * 3) - 1
+                  const sy = y - 1 - Math.floor(rand() * 2)
+                  if (sx >= 0 && sx < cols && sy >= 0 && sy < rows && g[idx(sx, sy)] === EMPTY) {
+                    g[idx(sx, sy)] = WATER
+                  }
+                }
+              }
+            }
+            // Slight sideways wobble
+            if (rand() < 0.2) {
+              const bdx = rand() < 0.5 ? -1 : 1
+              if (x + bdx >= 0 && x + bdx < cols) {
+                const side = idx(x + bdx, y)
+                const sc = g[side]
+                if (sc === WATER || sc === ACID || sc === HONEY || sc === POISON) {
+                  g[side] = BUBBLE
+                  g[p] = sc
+                }
+              }
+            }
+          } else {
+            // Not in liquid - pop!
+            g[p] = EMPTY
+          }
+        } else if (c === COMET) {
+          // Comet: fast streaking particle, leaves fire trail, transforms what it hits
+
+          // Move fast upward and diagonally
+          const cdy = rand() < 0.8 ? -2 : -1 // Usually moves 2 cells up
+          const cdx = Math.floor(rand() * 3) - 1 // Random horizontal drift
+
+          let moved = false
+          for (let step = Math.abs(cdy); step > 0; step--) {
+            const cny = y - step
+            const cnx = x + (step === Math.abs(cdy) ? cdx : 0)
+            if (cny >= 0 && cny < rows && cnx >= 0 && cnx < cols) {
+              const ci = idx(cnx, cny)
+              const cc = g[ci]
+              if (cc === EMPTY) {
+                g[ci] = COMET
+                g[p] = FIRE // Leave fire trail
+                moved = true
+                break
+              } else if (cc === WATER) {
+                // Steam explosion!
+                g[ci] = GAS
+                g[p] = FIRE
+                moved = true
+                break
+              } else if (cc === PLANT || cc === FLUFF || cc === FLOWER) {
+                // Ignite on contact
+                g[ci] = FIRE
+                g[p] = FIRE
+                moved = true
+                break
+              } else if (cc === SAND) {
+                // Turn sand to glass
+                g[ci] = GLASS
+                g[p] = FIRE
+                moved = true
+                break
+              } else {
+                // Hit solid - explode into fire and embers
+                g[p] = EMPTY
+                for (let edy = -2; edy <= 2; edy++) {
+                  for (let edx = -2; edx <= 2; edx++) {
+                    const ex = x + edx, ey = y + edy
+                    if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY) {
+                      g[idx(ex, ey)] = rand() < 0.6 ? FIRE : EMBER
+                    }
+                  }
+                }
+                moved = true
+                break
+              }
+            }
+          }
+
+          // Decay chance - comets don't last forever
+          if (!moved || rand() < 0.05) {
+            g[p] = FIRE
           }
         } else if (c === PLASMA) {
           if (y === 0) { g[p] = EMPTY; continue }
@@ -1464,8 +1679,8 @@ function App() {
             }
           }
 
-          // Slow decay
-          if (rand() < 0.002) { g[p] = STONE; continue }
+          // Slow decay - lava lasts a while
+          if (rand() < 0.001) { g[p] = STONE; continue }
 
           // Flow slowly like honey
           if (rand() > 0.15) continue
@@ -1535,13 +1750,13 @@ function App() {
             }
           }
 
-          // Spawn lava above (eruption)
-          if (rand() < 0.06 && y > 0) {
+          // Spawn lava above (eruption) - fast rate
+          if (rand() < 0.22 && y > 0) {
             const vi = idx(x, y - 1)
             if (g[vi] === EMPTY) g[vi] = LAVA
           }
           // Occasionally emit embers in random direction
-          if (rand() < 0.03) {
+          if (rand() < 0.05) {
             const vdx = Math.floor(rand() * 3) - 1
             const vdy = Math.floor(rand() * 2) - 1
             const vnx = x + vdx, vny = y + vdy
@@ -1580,8 +1795,8 @@ function App() {
               // Spread to organics
               if (mc === PLANT || mc === FLOWER || mc === FLUFF || mc === HONEY || mc === DIRT) {
                 g[mi] = MOLD
-                // Sometimes release gas (decomposition)
-                if (rand() < 0.2) g[p] = GAS
+                // Sometimes release gas or spores (decomposition/reproduction)
+                if (rand() < 0.2) g[p] = rand() < 0.4 ? SPORE : GAS
               }
               // Kill and consume creatures
               else if ((mc === BUG || mc === ANT || mc === SLIME) && rand() < 0.3) {
@@ -1681,10 +1896,34 @@ function App() {
             }
           }
 
-          // Grow into plant!
-          if (onDirt && nearWater && rand() < 0.05) {
-            g[p] = PLANT
-            continue
+          // Grow into plant! - spawner behavior, grows plants upward with flowers
+          if (onDirt && nearWater) {
+            // Rapidly spawn plants growing upward
+            if (rand() < 0.15 && y > 0) {
+              const above = idx(x, y - 1)
+              if (g[above] === EMPTY) {
+                g[above] = rand() < 0.2 ? FLOWER : PLANT // 20% flowers
+              } else if (g[above] === PLANT && rand() < 0.1) {
+                // Keep growing upward through existing plants
+                for (let h = 2; h <= 8; h++) {
+                  if (y - h < 0) break
+                  const hi = idx(x, y - h)
+                  if (g[hi] === EMPTY) {
+                    g[hi] = rand() < 0.25 ? FLOWER : PLANT
+                    break
+                  } else if (g[hi] !== PLANT && g[hi] !== FLOWER) break
+                }
+              }
+            }
+            // Also spread sideways occasionally
+            if (rand() < 0.05) {
+              const sdx = rand() < 0.5 ? -1 : 1
+              if (x + sdx >= 0 && x + sdx < cols && y > 0) {
+                const si = idx(x + sdx, y - 1)
+                if (g[si] === EMPTY) g[si] = PLANT
+              }
+            }
+            continue // Stay as seed, keep spawning
           }
 
           // Burns in fire
@@ -1727,6 +1966,272 @@ function App() {
             const snx = x + sdx
             if (snx >= 0 && snx < cols && g[idx(snx, y)] === EMPTY && g[idx(snx, y + 1)] === EMPTY) {
               g[idx(snx, y + 1)] = SEED; g[p] = EMPTY
+            }
+          }
+        } else if (c === RUST) {
+          // Rust: corrosion that forms on wet stone, spreads, crumbles to dirt
+
+          // Eventually crumble to dirt
+          if (rand() < 0.005) { g[p] = DIRT; continue }
+
+          // Spread to adjacent stone if water nearby
+          let waterNearby = false
+          for (let rdy = -1; rdy <= 1; rdy++) {
+            for (let rdx = -1; rdx <= 1; rdx++) {
+              const rnx = x + rdx, rny = y + rdy
+              if (rnx >= 0 && rnx < cols && rny >= 0 && rny < rows) {
+                if (g[idx(rnx, rny)] === WATER) waterNearby = true
+              }
+            }
+          }
+
+          if (waterNearby && rand() < 0.03) {
+            // Spread rust to adjacent stone
+            const rdx = Math.floor(rand() * 3) - 1
+            const rdy = Math.floor(rand() * 3) - 1
+            const rnx = x + rdx, rny = y + rdy
+            if (rnx >= 0 && rnx < cols && rny >= 0 && rny < rows) {
+              if (g[idx(rnx, rny)] === STONE) {
+                g[idx(rnx, rny)] = RUST
+              }
+            }
+          }
+
+          // Static - doesn't move, but can fall if nothing below
+          if (belowCell === EMPTY && rand() < 0.1) {
+            g[below] = RUST; g[p] = EMPTY
+          }
+        } else if (c === ALGAE) {
+          // Algae: aquatic plant that grows in water, releases gas bubbles
+
+          // Check if in water
+          let inWater = false
+          for (let ady = -1; ady <= 1; ady++) {
+            for (let adx = -1; adx <= 1; adx++) {
+              const anx = x + adx, any = y + ady
+              if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
+                if (g[idx(anx, any)] === WATER) inWater = true
+              }
+            }
+          }
+
+          // Die without water - become plant
+          if (!inWater && rand() < 0.05) {
+            g[p] = PLANT
+            continue
+          }
+
+          // Release gas bubbles (photosynthesis)
+          if (inWater && rand() < 0.01 && y > 0) {
+            const above = idx(x, y - 1)
+            if (g[above] === WATER) g[above] = GAS
+          }
+
+          // Spread through water
+          if (inWater && rand() < 0.02) {
+            const adx = Math.floor(rand() * 3) - 1
+            const ady = Math.floor(rand() * 3) - 1
+            const anx = x + adx, any = y + ady
+            if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
+              if (g[idx(anx, any)] === WATER) {
+                g[idx(anx, any)] = ALGAE
+              }
+            }
+          }
+
+          // Eaten by bugs and slime
+          for (let ady = -1; ady <= 1; ady++) {
+            for (let adx = -1; adx <= 1; adx++) {
+              if (ady === 0 && adx === 0) continue
+              const anx = x + adx, any = y + ady
+              if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
+                const anc = g[idx(anx, any)]
+                if ((anc === BUG || anc === SLIME) && rand() < 0.15) {
+                  g[p] = EMPTY
+                  continue
+                }
+              }
+            }
+          }
+        } else if (c === POISON) {
+          // Poison: toxic liquid, kills creatures, diluted by water
+
+          // Kill adjacent creatures
+          for (let pdy = -1; pdy <= 1; pdy++) {
+            for (let pdx = -1; pdx <= 1; pdx++) {
+              if (pdy === 0 && pdx === 0) continue
+              const pnx = x + pdx, pny = y + pdy
+              if (pnx >= 0 && pnx < cols && pny >= 0 && pny < rows) {
+                const pnc = g[idx(pnx, pny)]
+                // Kill all creatures
+                if ((pnc === BUG || pnc === ANT || pnc === BIRD || pnc === BEE || pnc === SLIME) && rand() < 0.4) {
+                  g[idx(pnx, pny)] = POISON // Creature becomes more poison!
+                }
+                // Diluted by water
+                if (pnc === WATER && rand() < 0.1) {
+                  g[idx(pnx, pny)] = EMPTY
+                  if (rand() < 0.5) g[p] = WATER // Poison dilutes
+                }
+              }
+            }
+          }
+
+          // Flow like water but slower
+          if (rand() > 0.3) continue
+          if (belowCell === EMPTY) {
+            g[below] = POISON; g[p] = EMPTY
+          } else {
+            const pdx = rand() < 0.5 ? -1 : 1
+            const pnx1 = x + pdx, pnx2 = x - pdx
+            if (pnx1 >= 0 && pnx1 < cols && g[idx(pnx1, y + 1)] === EMPTY) { g[idx(pnx1, y + 1)] = POISON; g[p] = EMPTY }
+            else if (pnx2 >= 0 && pnx2 < cols && g[idx(pnx2, y + 1)] === EMPTY) { g[idx(pnx2, y + 1)] = POISON; g[p] = EMPTY }
+            else if (pnx1 >= 0 && pnx1 < cols && g[idx(pnx1, y)] === EMPTY) { g[idx(pnx1, y)] = POISON; g[p] = EMPTY }
+            else if (pnx2 >= 0 && pnx2 < cols && g[idx(pnx2, y)] === EMPTY) { g[idx(pnx2, y)] = POISON; g[p] = EMPTY }
+          }
+        } else if (c === DUST) {
+          // Dust: airborne particles, settles to sand, EXPLOSIVE with fire!
+
+          // Check for fire - DUST EXPLOSION!
+          for (let ddy = -1; ddy <= 1; ddy++) {
+            for (let ddx = -1; ddx <= 1; ddx++) {
+              if (ddy === 0 && ddx === 0) continue
+              const dnx = x + ddx, dny = y + ddy
+              if (dnx >= 0 && dnx < cols && dny >= 0 && dny < rows) {
+                const dnc = g[idx(dnx, dny)]
+                if (dnc === FIRE || dnc === PLASMA || dnc === EMBER || dnc === LAVA) {
+                  // Dust explosion! Ignite nearby dust in chain reaction
+                  g[p] = FIRE
+                  for (let edy = -2; edy <= 2; edy++) {
+                    for (let edx = -2; edx <= 2; edx++) {
+                      const enx = x + edx, eny = y + edy
+                      if (enx >= 0 && enx < cols && eny >= 0 && eny < rows) {
+                        if (g[idx(enx, eny)] === DUST && rand() < 0.7) {
+                          g[idx(enx, eny)] = FIRE
+                        }
+                      }
+                    }
+                  }
+                  continue
+                }
+              }
+            }
+          }
+
+          // Settle to sand over time
+          if (rand() < 0.003) { g[p] = SAND; continue }
+
+          // Float and drift like gas but slowly fall
+          if (rand() < 0.3) {
+            const ddx = Math.floor(rand() * 3) - 1
+            const ddy = rand() < 0.6 ? 1 : (rand() < 0.5 ? 0 : -1) // Bias downward
+            const dnx = x + ddx, dny = y + ddy
+            if (dnx >= 0 && dnx < cols && dny >= 0 && dny < rows && g[idx(dnx, dny)] === EMPTY) {
+              g[idx(dnx, dny)] = DUST
+              g[p] = EMPTY
+            }
+          }
+        } else if (c === GLITTER) {
+          // Glitter: sparkly, spreads everywhere, sticks to surfaces
+
+          // Slowly decay
+          if (rand() < 0.003) { g[p] = EMPTY; continue }
+
+          // Spread to neighbors! Glitter gets everywhere
+          if (rand() < 0.08) {
+            const gdx = Math.floor(rand() * 3) - 1
+            const gdy = Math.floor(rand() * 3) - 1
+            const gnx = x + gdx, gny = y + gdy
+            if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows) {
+              const gi = idx(gnx, gny)
+              // Stick to surfaces, spread through empty
+              if (g[gi] === EMPTY && rand() < 0.4) {
+                g[gi] = GLITTER
+              }
+            }
+          }
+
+          // Check if stuck to something
+          let stuckToSurface = false
+          for (let gdy = -1; gdy <= 1; gdy++) {
+            for (let gdx = -1; gdx <= 1; gdx++) {
+              if (gdy === 0 && gdx === 0) continue
+              const gnx = x + gdx, gny = y + gdy
+              if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows) {
+                const gnc = g[idx(gnx, gny)]
+                // Stick to solid surfaces
+                if (gnc !== EMPTY && gnc !== GLITTER && gnc !== GAS && gnc !== FIRE && gnc !== WATER) {
+                  stuckToSurface = true
+                  break
+                }
+              }
+            }
+            if (stuckToSurface) break
+          }
+
+          // Fall slowly if not stuck, otherwise stay put and sparkle
+          if (!stuckToSurface && rand() < 0.4) {
+            if (belowCell === EMPTY) {
+              g[below] = GLITTER; g[p] = EMPTY
+            } else if (belowCell === WATER) {
+              // Float on water
+              const gdx = rand() < 0.5 ? -1 : 1
+              if (x + gdx >= 0 && x + gdx < cols && g[idx(x + gdx, y)] === EMPTY) {
+                g[idx(x + gdx, y)] = GLITTER; g[p] = EMPTY
+              }
+            } else {
+              const gdx = rand() < 0.5 ? -1 : 1
+              if (x + gdx >= 0 && x + gdx < cols && g[idx(x + gdx, y + 1)] === EMPTY) {
+                g[idx(x + gdx, y + 1)] = GLITTER; g[p] = EMPTY
+              }
+            }
+          }
+        } else if (c === STAR) {
+          // Star: magical particle, grants random transformations, slowly floats down
+
+          // Random magical transformations on neighbors!
+          if (rand() < 0.06) {
+            const sdx = Math.floor(rand() * 3) - 1
+            const sdy = Math.floor(rand() * 3) - 1
+            const snx = x + sdx, sny = y + sdy
+            if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
+              const si = idx(snx, sny), sc = g[si]
+              // Magical transformations!
+              if (sc === SAND) g[si] = rand() < 0.5 ? GLASS : CRYSTAL
+              else if (sc === DIRT) g[si] = rand() < 0.5 ? PLANT : FLOWER
+              else if (sc === WATER) g[si] = rand() < 0.5 ? BUBBLE : HONEY
+              else if (sc === STONE) g[si] = rand() < 0.5 ? CRYSTAL : GLASS
+              else if (sc === PLANT) g[si] = rand() < 0.5 ? FLOWER : BEE
+              else if (sc === BUG) g[si] = BIRD
+              else if (sc === ANT) g[si] = BEE
+              else if (sc === FIRE) g[si] = PLASMA
+              else if (sc === GAS) g[si] = CLOUD
+              else if (sc === EMBER) g[si] = FIREWORK
+              else if (sc === GLASS) g[si] = CRYSTAL
+              else if (sc === EMPTY && rand() < 0.3) g[si] = GLITTER
+            }
+          }
+
+          // Emit glitter occasionally
+          if (rand() < 0.05) {
+            const gdx = Math.floor(rand() * 3) - 1
+            const gdy = Math.floor(rand() * 3) - 1
+            const gnx = x + gdx, gny = y + gdy
+            if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows && g[idx(gnx, gny)] === EMPTY) {
+              g[idx(gnx, gny)] = GLITTER
+            }
+          }
+
+          // Slowly decay
+          if (rand() < 0.008) { g[p] = GLITTER; continue }
+
+          // Float down slowly, drift sideways magically
+          if (rand() < 0.25) {
+            const sdx = Math.floor(rand() * 3) - 1
+            const sdy = rand() < 0.7 ? 1 : (rand() < 0.5 ? 0 : -1)
+            const snx = x + sdx, sny = y + sdy
+            if (snx >= 0 && snx < cols && sny >= 0 && sny < rows && g[idx(snx, sny)] === EMPTY) {
+              g[idx(snx, sny)] = STAR
+              g[p] = rand() < 0.3 ? GLITTER : EMPTY
             }
           }
         }
@@ -1860,7 +2365,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey', 'nest', 'gun', 'cloud', 'acid', 'lava', 'snow', 'volcano', 'mold', 'mercury', 'void', 'seed']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey', 'nest', 'gun', 'cloud', 'acid', 'lava', 'snow', 'volcano', 'mold', 'mercury', 'void', 'seed', 'rust', 'spore', 'algae', 'poison', 'dust', 'firework', 'bubble', 'glitter', 'star', 'comet']
 
   return (
     <div className="app">
