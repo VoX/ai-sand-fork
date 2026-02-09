@@ -965,42 +965,48 @@ function App() {
             }
           }
         } else if (c === WATER) {
-          // Check for plant growth
-          let nearPlant = false, nearDirt = false
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              const nx = x + dx, ny = y + dy
-              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-                const nc = g[idx(nx, ny)]
-                if (nc === PLANT) nearPlant = true
-                if (nc === DIRT) nearDirt = true
-              }
-            }
-          }
-          if (nearPlant && rand() < 0.05 && (nearDirt || rand() < 0.3)) { g[p] = PLANT; continue }
+          // Movement first (most common case)
+          if (belowCell === EMPTY) { g[below] = WATER; g[p] = EMPTY; continue }
 
-          if (belowCell === EMPTY) { g[below] = WATER; g[p] = EMPTY }
-          else {
-            const dx = rand() < 0.5 ? -1 : 1
-            const nx1 = x + dx, nx2 = x - dx
-            if (nx1 >= 0 && nx1 < cols && g[idx(nx1, y + 1)] === EMPTY) { g[idx(nx1, y + 1)] = WATER; g[p] = EMPTY }
-            else if (nx2 >= 0 && nx2 < cols && g[idx(nx2, y + 1)] === EMPTY) { g[idx(nx2, y + 1)] = WATER; g[p] = EMPTY }
-            else if (nx1 >= 0 && nx1 < cols && g[idx(nx1, y)] === EMPTY) { g[idx(nx1, y)] = WATER; g[p] = EMPTY }
-            else if (nx2 >= 0 && nx2 < cols && g[idx(nx2, y)] === EMPTY) { g[idx(nx2, y)] = WATER; g[p] = EMPTY }
-          }
-        } else if (c === DIRT) {
-          // Check for plant growth - dirt touching plant can sprout
-          let touchingPlant = false
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              if (dy === 0 && dx === 0) continue
-              const nx = x + dx, ny = y + dy
-              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-                if (g[idx(nx, ny)] === PLANT) touchingPlant = true
+          // Only check plant growth occasionally (optimization)
+          if (rand() < 0.1) {
+            let nearPlant = false, nearDirt = false
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                const nx = x + dx, ny = y + dy
+                if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                  const nc = g[idx(nx, ny)]
+                  if (nc === PLANT) nearPlant = true
+                  if (nc === DIRT) nearDirt = true
+                }
               }
             }
+            if (nearPlant && rand() < 0.5 && (nearDirt || rand() < 0.3)) { g[p] = PLANT; continue }
           }
-          if (touchingPlant && rand() < 0.001) { g[p] = PLANT; continue }
+
+          // Spread sideways when can't fall
+          const dx = rand() < 0.5 ? -1 : 1
+          const nx1 = x + dx, nx2 = x - dx
+          if (nx1 >= 0 && nx1 < cols && g[idx(nx1, y + 1)] === EMPTY) { g[idx(nx1, y + 1)] = WATER; g[p] = EMPTY }
+          else if (nx2 >= 0 && nx2 < cols && g[idx(nx2, y + 1)] === EMPTY) { g[idx(nx2, y + 1)] = WATER; g[p] = EMPTY }
+          else if (nx1 >= 0 && nx1 < cols && g[idx(nx1, y)] === EMPTY) { g[idx(nx1, y)] = WATER; g[p] = EMPTY }
+          else if (nx2 >= 0 && nx2 < cols && g[idx(nx2, y)] === EMPTY) { g[idx(nx2, y)] = WATER; g[p] = EMPTY }
+        } else if (c === DIRT) {
+          // Check for plant growth occasionally (optimization - skip 95% of frames)
+          if (rand() < 0.05) {
+            let touchingPlant = false
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                if (dy === 0 && dx === 0) continue
+                const nx = x + dx, ny = y + dy
+                if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                  if (g[idx(nx, ny)] === PLANT) { touchingPlant = true; break }
+                }
+              }
+              if (touchingPlant) break
+            }
+            if (touchingPlant && rand() < 0.02) { g[p] = PLANT; continue }
+          }
           if (canSink(DIRT, belowCell) && (belowCell === EMPTY || rand() < 0.5)) { g[below] = DIRT; g[p] = belowCell }
           else if (rand() < 0.25) {
             const dx = rand() < 0.5 ? -1 : 1
@@ -1604,27 +1610,29 @@ function App() {
         } else if (c === ACID) {
           // Acid: corrosive liquid that dissolves organics, neutralized by water
 
-          // Check neighbors for reactions
+          // Check neighbors for reactions (skip 50% of frames for optimization)
           let reacted = false
-          for (let ady = -1; ady <= 1 && !reacted; ady++) {
-            for (let adx = -1; adx <= 1 && !reacted; adx++) {
-              if (ady === 0 && adx === 0) continue
-              const anx = x + adx, any = y + ady
-              if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
-                const ani = idx(anx, any), anc = g[ani]
-                // Neutralize with water - both become gas
-                if (anc === WATER && rand() < 0.3) {
-                  g[ani] = GAS
-                  g[p] = rand() < 0.5 ? GAS : EMPTY
-                  reacted = true
-                }
-                // Dissolve organics and soft materials
-                else if ((anc === DIRT || anc === SAND || anc === PLANT || anc === FLOWER ||
-                          anc === FLUFF || anc === BUG || anc === ANT || anc === SLIME ||
-                          anc === HONEY || anc === BIRD || anc === BEE) && rand() < 0.2) {
-                  g[ani] = rand() < 0.3 ? GAS : EMPTY
-                  if (rand() < 0.1) g[p] = EMPTY // Acid consumed
-                  reacted = true
+          if (rand() < 0.5) {
+            for (let ady = -1; ady <= 1 && !reacted; ady++) {
+              for (let adx = -1; adx <= 1 && !reacted; adx++) {
+                if (ady === 0 && adx === 0) continue
+                const anx = x + adx, any = y + ady
+                if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
+                  const ani = idx(anx, any), anc = g[ani]
+                  // Neutralize with water - both become gas
+                  if (anc === WATER && rand() < 0.5) {
+                    g[ani] = GAS
+                    g[p] = rand() < 0.5 ? GAS : EMPTY
+                    reacted = true
+                  }
+                  // Dissolve organics and soft materials
+                  else if ((anc === DIRT || anc === SAND || anc === PLANT || anc === FLOWER ||
+                            anc === FLUFF || anc === BUG || anc === ANT || anc === SLIME ||
+                            anc === HONEY || anc === BIRD || anc === BEE) && rand() < 0.35) {
+                    g[ani] = rand() < 0.3 ? GAS : EMPTY
+                    if (rand() < 0.15) g[p] = EMPTY // Acid consumed
+                    reacted = true
+                  }
                 }
               }
             }
@@ -1644,35 +1652,37 @@ function App() {
         } else if (c === LAVA) {
           // Lava: molten rock, ignites everything, cools to stone with water
 
-          // Check neighbors for reactions
-          for (let ldy = -1; ldy <= 1; ldy++) {
-            for (let ldx = -1; ldx <= 1; ldx++) {
-              if (ldy === 0 && ldx === 0) continue
-              const lnx = x + ldx, lny = y + ldy
-              if (lnx >= 0 && lnx < cols && lny >= 0 && lny < rows) {
-                const lni = idx(lnx, lny), lnc = g[lni]
-                // Water cools lava to stone, creates steam
-                if (lnc === WATER) {
-                  g[lni] = GAS
-                  if (rand() < 0.3) { g[p] = STONE; continue }
-                }
-                // Snow cools lava and melts
-                else if (lnc === SNOW) {
-                  g[lni] = WATER
-                  if (rand() < 0.2) g[p] = STONE
-                }
-                // Melt sand into glass
-                else if (lnc === SAND && rand() < 0.15) {
-                  g[lni] = GLASS
-                }
-                // Ignite flammables
-                else if ((lnc === PLANT || lnc === FLUFF || lnc === GAS || lnc === FLOWER ||
-                          lnc === GUNPOWDER || lnc === HIVE || lnc === NEST) && rand() < 0.4) {
-                  g[lni] = FIRE
-                }
-                // Kill creatures
-                else if ((lnc === BUG || lnc === ANT || lnc === BIRD || lnc === BEE) && rand() < 0.5) {
-                  g[lni] = FIRE
+          // Check neighbors for reactions (skip 60% of frames for optimization)
+          if (rand() < 0.4) {
+            for (let ldy = -1; ldy <= 1; ldy++) {
+              for (let ldx = -1; ldx <= 1; ldx++) {
+                if (ldy === 0 && ldx === 0) continue
+                const lnx = x + ldx, lny = y + ldy
+                if (lnx >= 0 && lnx < cols && lny >= 0 && lny < rows) {
+                  const lni = idx(lnx, lny), lnc = g[lni]
+                  // Water cools lava to stone, creates steam
+                  if (lnc === WATER) {
+                    g[lni] = GAS
+                    if (rand() < 0.5) { g[p] = STONE; continue }
+                  }
+                  // Snow cools lava and melts
+                  else if (lnc === SNOW) {
+                    g[lni] = WATER
+                    if (rand() < 0.35) g[p] = STONE
+                  }
+                  // Melt sand into glass
+                  else if (lnc === SAND && rand() < 0.3) {
+                    g[lni] = GLASS
+                  }
+                  // Ignite flammables
+                  else if ((lnc === PLANT || lnc === FLUFF || lnc === GAS || lnc === FLOWER ||
+                            lnc === GUNPOWDER || lnc === HIVE || lnc === NEST) && rand() < 0.6) {
+                    g[lni] = FIRE
+                  }
+                  // Kill creatures
+                  else if ((lnc === BUG || lnc === ANT || lnc === BIRD || lnc === BEE) && rand() < 0.7) {
+                    g[lni] = FIRE
+                  }
                 }
               }
             }
@@ -1695,22 +1705,24 @@ function App() {
         } else if (c === SNOW) {
           // Snow: cold particle, freezes water, melts near heat
 
-          // Check neighbors for reactions
+          // Check neighbors for reactions (skip 60% of frames for optimization)
           let melted = false
-          for (let sdy = -1; sdy <= 1 && !melted; sdy++) {
-            for (let sdx = -1; sdx <= 1 && !melted; sdx++) {
-              if (sdy === 0 && sdx === 0) continue
-              const snx = x + sdx, sny = y + sdy
-              if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
-                const snc = g[idx(snx, sny)]
-                // Melt near fire/plasma/ember/lava
-                if ((snc === FIRE || snc === PLASMA || snc === EMBER || snc === LAVA) && rand() < 0.4) {
-                  g[p] = WATER
-                  melted = true
-                }
-                // Freeze water into ice (glass)
-                else if (snc === WATER && rand() < 0.02) {
-                  g[idx(snx, sny)] = GLASS
+          if (rand() < 0.4) {
+            for (let sdy = -1; sdy <= 1 && !melted; sdy++) {
+              for (let sdx = -1; sdx <= 1 && !melted; sdx++) {
+                if (sdy === 0 && sdx === 0) continue
+                const snx = x + sdx, sny = y + sdy
+                if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
+                  const snc = g[idx(snx, sny)]
+                  // Melt near fire/plasma/ember/lava
+                  if ((snc === FIRE || snc === PLASMA || snc === EMBER || snc === LAVA) && rand() < 0.6) {
+                    g[p] = WATER
+                    melted = true
+                  }
+                  // Freeze water into ice (glass)
+                  else if (snc === WATER && rand() < 0.04) {
+                    g[idx(snx, sny)] = GLASS
+                  }
                 }
               }
             }
