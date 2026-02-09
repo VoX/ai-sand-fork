@@ -2314,8 +2314,8 @@ function App() {
             if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) continue
 
             const bi = idx(bnx, bny), bc = g[bi]
-            if (bc === EMPTY || bc === BLACK_HOLE || bc === STONE || bc === GLASS ||
-                bc === TAP || bc === VOLCANO || bc === GUN || bc === ANTHILL || bc === HIVE || bc === CRYSTAL) continue
+            if (bc === EMPTY || bc === BLACK_HOLE ||
+                bc === TAP || bc === VOLCANO || bc === GUN || bc === ANTHILL || bc === HIVE) continue
 
             // Pull towards center
             const stepX = bdx > 0 ? -1 : (bdx < 0 ? 1 : 0)
@@ -2341,7 +2341,7 @@ function App() {
               const checkY = y + dy
               if (checkY < 0 || checkY >= rows) continue
               const ci = idx(checkX, checkY), cc = g[ci]
-              if (cc === EMPTY || cc === BLACK_HOLE || cc === STONE || cc === GLASS) continue
+              if (cc === EMPTY || cc === BLACK_HOLE) continue
 
               if (Math.abs(dx) > 1 && rand() < 0.3) {
                 const bendDir = dx > 0 ? -1 : 1

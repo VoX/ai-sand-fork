@@ -96,7 +96,7 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 ### Cosmic Elements
 | Particle | Color | Behavior |
 |----------|-------|----------|
-| **Black Hole** | Deep black/purple | Gravitational singularity - pulls in nearby particles and destroys them, bends trajectory of passing particles |
+| **Black Hole** | Deep black/purple | Gravitational singularity - pulls in and destroys all nearby particles (including stone, glass, crystal), only spawners are immune |
 
 ### Special Elements
 | Particle | Color | Behavior |
@@ -463,16 +463,16 @@ flowchart TD
         Sand[Sand]
         Water[Water]
         Fire[Fire]
+        Stone[Stone]
+        Glass[Glass]
+        Crystal[Crystal]
         Creatures[All Creatures]
         Plants[Plants/Organic]
         Liquids[All Liquids]
     end
 
     subgraph Immune[Cannot Pull]
-        Stone[Stone]
-        Glass[Glass]
-        Crystal[Crystal]
-        Spawners[All Spawners]
+        Spawners[Spawners: Tap, Volcano, Gun, Anthill, Hive]
     end
 
     BlackHole -->|gravity pull| Pulls
