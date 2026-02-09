@@ -71,7 +71,32 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 ### Growth Elements
 | Particle | Color | Behavior |
 |----------|-------|----------|
-| **Seed** | Tan/wheat | Falls like sand, grows into plant when resting on dirt near water, eaten by creatures, burns |
+| **Seed** | Tan/wheat | Falls like sand, grows 20-30 pixel tall plant stems with branching near top, grows through dirt/water, massive growth near sun |
+| **Algae** | Blue-green | Aquatic plant, lives in water, spreads to nearby water, grows faster near sun, converted by poison |
+| **Spore** | Dark purple | Floats up slowly, spreads mold on contact with organics, dies in fire/acid |
+
+### Decay Elements
+| Particle | Color | Behavior |
+|----------|-------|----------|
+| **Rust** | Orange-brown | Spreads slowly to nearby sand/dirt, weakens materials, created when water touches certain metals |
+| **Poison** | Sickly purple | Toxic substance, spreads slowly to organic matter (plant, algae, dirt), kills creatures on contact |
+| **Mold** | Medium purple | Organic terraformer - spreads across organics (plant, flower, dirt, honey), releases gas, dies in fire/acid |
+| **Dust** | Tan/beige | Very light, floats down slowly like fluff, highly flammable, disperses in wind |
+
+### Bright/Effect Particles
+| Particle | Color | Behavior |
+|----------|-------|----------|
+| **Firework** | Multicolor | Single pixels that shoot straight up, then explode into colorful sparks |
+| **Bubble** | Light cyan | Rises through liquids, turns to gas when reaching air |
+| **Glitter** | Silver | Sparkly silver particles that fade (fast at first, then slowly when clustered) |
+| **Star** | Bright yellow | Sun - grows plants/algae/flowers nearby, boosts seed growth massively, melts snow, evaporates water, emits glitter and static |
+| **Comet** | Cyan/white | Fast-moving streak, leaves blue fire trail behind |
+| **Blue Fire** | Blue | Blue flame effect, left as trail by comets, rises and fades like regular fire |
+
+### Cosmic Elements
+| Particle | Color | Behavior |
+|----------|-------|----------|
+| **Black Hole** | Deep black/purple | Gravitational singularity - pulls in nearby particles and destroys them, bends trajectory of passing particles |
 
 ### Special Elements
 | Particle | Color | Behavior |
@@ -92,6 +117,7 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 | **Hive** | Amber | Static, spawns bees, burns on fire |
 | **Nest** | Brown-grey | Static, spawns birds, burns on fire |
 | **Gun** | Dark grey | Static, shoots bullets in random directions (single pixel placement) |
+| **Star** | Bright yellow | Sun emitter - continuously spawns glitter and static particles nearby |
 
 ### Projectiles (Internal - not paintable)
 | Particle | Color | Behavior |
@@ -104,8 +130,9 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 ## Particle Interactions
 
 ### Fire Interactions
-- **Ignites:** Plant, Fluff, Bug, Gas, Gunpowder, Flower, Hive, Nest
-- **Created by:** Lightning striking flammables, Ember reigniting, Gunpowder explosion
+- **Ignites:** Plant, Fluff, Bug, Gas, Gunpowder, Flower, Hive, Nest, Dust, Spore
+- **Created by:** Lightning striking flammables, Ember reigniting, Gunpowder explosion, Comet trails (blue fire)
+- **Blue Fire:** Special variant left by comets, same behavior as regular fire but blue colored
 
 ### Creature Food Chain
 ```
@@ -169,6 +196,10 @@ flowchart LR
     Fire -->|ignites| Flower
     Fire -->|ignites| Hive
     Fire -->|ignites| Nest
+    Fire -->|ignites| Dust
+    Fire -->|ignites| Spore
+    BlueFire((Blue Fire)) -->|same as| Fire
+    Comet -->|leaves trail| BlueFire
     Plasma((Plasma)) -->|ignites| Plant
     Plasma -->|ignites| Fluff
     Plasma -->|ignites| Gas
@@ -183,6 +214,7 @@ flowchart LR
     Lightning -->|creates| Fire
     Ember -->|reignites| Plant
     Gunpowder -->|explodes to| Fire
+    Firework -->|explodes to| Sparks[Colorful Sparks]
 ```
 
 ### Creature Food Chain
@@ -212,10 +244,14 @@ flowchart LR
     Hive[Hive] -->|spawns| Bee[Bee]
     Nest[Nest] -->|spawns| Bird[Bird]
     Gun[Gun] -->|spawns| Bullet[Bullet]
+    Star[Sun] -->|emits| Glitter[Glitter]
+    Star -->|emits| Static[Static]
+    Comet[Comet] -->|leaves| BlueFire[Blue Fire]
     Fire[Fire] -.->|destroys| Anthill
     Fire -.->|destroys| Hive
     Fire -.->|destroys| Nest
     Water -.->|cools| Volcano
+    BlackHole[Black Hole] -->|absorbs| NearbyParticles[Nearby Particles]
 ```
 
 ### Bee Ecosystem
@@ -298,9 +334,11 @@ flowchart LR
 flowchart TD
     subgraph Hot[Heat Sources]
         Fire[Fire]
+        BlueFire[Blue Fire]
         Plasma[Plasma]
         Ember[Ember]
         Lava[Lava]
+        Star[Sun/Star]
     end
 
     subgraph Cold[Cold]
@@ -311,6 +349,8 @@ flowchart TD
     Snow -->|becomes| Water[Water]
     Snow -->|freezes| Water
     Water -->|becomes| Ice[Glass/Ice]
+    Star -->|evaporates| Water
+    Water -->|becomes| Gas[Gas/Steam]
 
     Lava -->|melts| Sand[Sand]
     Sand -->|becomes| Glass[Glass]
@@ -386,13 +426,92 @@ flowchart LR
 ```mermaid
 flowchart TD
     Seed[Seed] -->|lands on| Dirt[Dirt]
-    Water[Water] -->|nearby| Seed
-    Seed -->|grows into| Plant[Plant]
+    Seed -->|grows through| Water[Water]
+    Seed -->|grows through| Dirt
+    Seed -->|grows into| Stem[Plant Stem 20-30px]
+    Stem -->|branches at top| Plant[Plant + Flowers]
+
+    Star[Sun] -->|nearby| Seed
+    Seed -->|massive growth 50-65px| BigPlant[Giant Plant]
 
     Fire[Fire] -.->|burns| Seed
     Bug[Bug] -.->|eats| Seed
     Ant[Ant] -.->|eats| Seed
     Bird[Bird] -.->|eats| Seed
+```
+
+### Sun (Star) Effects
+```mermaid
+flowchart LR
+    Star((Sun)) -->|grows| Dirt[Dirt → Plant/Flower]
+    Star -->|flowers| Plant[Plant → Flower]
+    Star -->|grows| Water[Water → Algae]
+    Star -->|spreads| Algae[Algae expands]
+    Star -->|boosts| Seed[Seed → Giant Plants]
+    Star -->|melts| Snow[Snow → Water]
+    Star -->|evaporates| Steam[Water → Gas]
+    Star -->|emits| Glitter[Glitter]
+    Star -->|emits| Static[Static]
+```
+
+### Black Hole Gravity
+```mermaid
+flowchart TD
+    BlackHole((Black Hole))
+
+    subgraph Pulls[Pulls In & Destroys]
+        Sand[Sand]
+        Water[Water]
+        Fire[Fire]
+        Creatures[All Creatures]
+        Plants[Plants/Organic]
+        Liquids[All Liquids]
+    end
+
+    subgraph Immune[Cannot Pull]
+        Stone[Stone]
+        Glass[Glass]
+        Crystal[Crystal]
+        Spawners[All Spawners]
+    end
+
+    BlackHole -->|gravity pull| Pulls
+    BlackHole -->|bends trajectory| FallingParticles[Nearby Falling Particles]
+    BlackHole -.->|cannot affect| Immune
+```
+
+### Poison & Algae Interactions
+```mermaid
+flowchart LR
+    Poison((Poison)) -->|spreads to| Plant[Plant]
+    Poison -->|spreads to| Algae[Algae]
+    Poison -->|spreads to| Dirt[Dirt]
+    Poison -->|kills| Bug[Bug]
+    Poison -->|kills| Ant[Ant]
+    Poison -->|kills| Slime[Slime]
+
+    Water[Water] -->|enables| Algae
+    Star[Sun] -->|grows| Algae
+    Algae -->|spreads in| Water
+```
+
+### Bright Particle Effects
+```mermaid
+flowchart TD
+    Firework[Firework] -->|shoots up| Air[Air]
+    Air -->|explodes into| Sparks[Multicolor Sparks]
+
+    Comet[Comet] -->|moves fast| Trail[Blue Fire Trail]
+    Trail -->|rises & fades| Empty[Empty]
+
+    Bubble[Bubble] -->|rises through| Water[Water]
+    Bubble -->|reaches air| Gas[Gas]
+
+    Glitter[Glitter] -->|fades fast| Less[Less Glitter]
+    Less -->|fades slow when clustered| Empty2[Empty]
+
+    Star[Sun] -->|emits| Glitter
+    Star -->|emits| Static[Static]
 ```
 
 ---
@@ -403,18 +522,23 @@ flowchart TD
 Some particles are internal and not directly paintable:
 - **Bullets (8 directions):** BULLET_N, BULLET_NE, BULLET_E, BULLET_SE, BULLET_S, BULLET_SW, BULLET_W, BULLET_NW
 - **Bullet Trail:** Yellow fading trail left behind by bullets
+- **Blue Fire:** Blue flame particles left as trail by comets
 
-These are spawned by the Gun particle and track their own direction.
+These are spawned by other particles (Gun spawns bullets, Comet spawns blue fire).
 
 ### Particle Processing Order
-1. **Rising elements** (top to bottom): Fire, Gas, Plasma, Lightning, Bullets, Bird, Bee
-2. **Falling elements** (bottom to top): Sand, Water, Dirt, Fluff, Bug, Nitro, Slime, Ant, Alien, Quark, Crystal, Ember, Static, Glass, Gunpowder, Tap, Anthill, Flower, Hive, Honey, Nest, Gun
+1. **Rising elements** (top to bottom): Fire, Blue Fire, Gas, Plasma, Lightning, Bullets, Bird, Bee, Bubble, Spore, Firework
+2. **Falling/Static elements** (bottom to top): Sand, Water, Dirt, Fluff, Bug, Nitro, Slime, Ant, Alien, Quark, Crystal, Ember, Static, Glass, Gunpowder, Tap, Anthill, Flower, Hive, Honey, Nest, Gun, Seed, Rust, Algae, Poison, Dust, Glitter, Star, Comet, Black Hole
 
 ### Special Spawn Rules
 - **Gun:** Always spawns as single 4px block (1 particle)
 - **Bird/Bee:** Spawn at 20% rate (sparse)
 - **Ant:** Spawn at 40% rate
 - **Alien/Quark:** Spawn at 8% rate (very sparse)
+- **Black Hole:** Single pixel, high impact - use sparingly
+- **Star (Sun):** Static, affects large area (radius 10), emits particles
+- **Firework:** Single pixels that launch upward before exploding
+- **Comet:** Fast-moving, leaves blue fire trail
 
 ---
 
