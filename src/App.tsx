@@ -1889,14 +1889,14 @@ function App() {
             }
           }
         } else if (c === SEED) {
-          // Seed: grows straight plant stem 10-20 pixels high with flowers on top
-          // Works on dirt alone, grows BIGGER with water nearby
+          // Seed: grows 20-30 pixel tall plant, straight stem with branches near top
+          // Works on dirt alone, bigger with water, can grow through water
 
-          // Check conditions - bigger water range
+          // Check conditions
           let onDirt = false, nearWater = false
           if (y < rows - 1 && g[below] === DIRT) onDirt = true
-          for (let sdy = -5; sdy <= 5 && !nearWater; sdy++) {
-            for (let sdx = -5; sdx <= 5 && !nearWater; sdx++) {
+          for (let sdy = -6; sdy <= 6 && !nearWater; sdy++) {
+            for (let sdx = -6; sdx <= 6 && !nearWater; sdx++) {
               const snx = x + sdx, sny = y + sdy
               if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
                 if (g[idx(snx, sny)] === WATER) nearWater = true
@@ -1904,37 +1904,67 @@ function App() {
             }
           }
 
-          // Grow on dirt! Water makes it bigger (10-20 pixels)
+          // Grow on dirt! 20-30 pixels tall
           if (onDirt) {
-            const maxHeight = nearWater ? 20 : 12
-            const growRate = nearWater ? 0.4 : 0.25
+            const maxHeight = nearWater ? 30 : 22
+            const growRate = nearWater ? 0.45 : 0.3
 
             if (rand() < growRate) {
-              // Find current stem height - can grow through other seeds
+              // Find stem height - can grow through seeds and water
               let stemHeight = 0
               for (let h = 1; h <= maxHeight; h++) {
                 if (y - h < 0) break
                 const cell = g[idx(x, y - h)]
-                if (cell === PLANT || cell === FLOWER || cell === SEED) {
+                if (cell === PLANT || cell === FLOWER || cell === SEED || cell === WATER) {
                   stemHeight = h
                 } else {
                   break
                 }
               }
 
-              // Grow straight up if room
+              // Grow straight up for main stem
               const nextY = y - stemHeight - 1
               if (nextY >= 0 && stemHeight < maxHeight) {
                 const ni = idx(x, nextY)
-                if (g[ni] === EMPTY || g[ni] === SEED) {
-                  // Flower at top when tall enough
-                  const flowerHeight = nearWater ? 15 : 8
-                  g[ni] = (stemHeight >= flowerHeight - 1) ? FLOWER : PLANT
+                const nc = g[ni]
+                if (nc === EMPTY || nc === SEED || nc === WATER) {
+                  const flowerHeight = nearWater ? 26 : 19
+                  g[ni] = (stemHeight >= flowerHeight) ? FLOWER : PLANT
                 }
               }
 
-              // Add more flowers at top when done
-              if (stemHeight >= (nearWater ? 18 : 10) && rand() < 0.2) {
+              // Branch out near top (after 60% height)
+              const branchStart = Math.floor(maxHeight * 0.6)
+              if (stemHeight >= branchStart && rand() < 0.2) {
+                const branchDir = rand() < 0.5 ? -1 : 1
+                const branchX = x + branchDir
+                for (let bh = 0; bh <= 3; bh++) {
+                  const branchY = y - stemHeight + bh
+                  if (branchX >= 0 && branchX < cols && branchY >= 0) {
+                    const bi = idx(branchX, branchY)
+                    const bc = g[bi]
+                    if (bc === EMPTY || bc === WATER) {
+                      g[bi] = rand() < 0.35 ? FLOWER : PLANT
+                      break
+                    }
+                  }
+                }
+              }
+
+              // More branches further out near very top
+              if (stemHeight >= branchStart + 5 && rand() < 0.12) {
+                const dx = rand() < 0.5 ? -2 : 2
+                const branchY = y - stemHeight + Math.floor(rand() * 4)
+                if (x + dx >= 0 && x + dx < cols && branchY >= 0) {
+                  const dbi = idx(x + dx, branchY)
+                  if (g[dbi] === EMPTY || g[dbi] === WATER) {
+                    g[dbi] = rand() < 0.5 ? FLOWER : PLANT
+                  }
+                }
+              }
+
+              // Flowers at top
+              if (stemHeight >= maxHeight - 4 && rand() < 0.25) {
                 const topIdx = idx(x, y - stemHeight)
                 if (g[topIdx] === PLANT) g[topIdx] = FLOWER
               }
