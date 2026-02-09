@@ -65,6 +65,13 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 | **Acid** | Toxic yellow-green | Corrosive liquid, dissolves organics (dirt, sand, plants, creatures), neutralized by water into gas |
 | **Lava** | Deep crimson | Molten rock, flows slowly, ignites flammables, melts sand→glass, cools to stone with water/snow |
 | **Snow** | Icy light blue | Falls slowly like fluff, piles up, freezes water→ice, melts near fire/lava/plasma/ember |
+| **Mercury** | Silver metallic | Liquid metal, very dense (sinks through most materials), toxic to creatures, reflects bullets! |
+| **Void** | Deep purple | Dark matter, absorbs nearby particles, can grow when eating, slowly decays, destroyed by lightning |
+
+### Growth Elements
+| Particle | Color | Behavior |
+|----------|-------|----------|
+| **Seed** | Tan/wheat | Falls like sand, grows into plant when resting on dirt near water, eaten by creatures, burns |
 
 ### Special Elements
 | Particle | Color | Behavior |
@@ -73,12 +80,14 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 | **Crystal** | Bright cyan | Static, grows from glass, slowly decays to sand |
 | **Alien** | Lime green | Terraformer - transforms materials into organic matter, duplicates |
 | **Quark** | Magenta | Chaotic terraformer - teleports, shoots lightning/static, creates inorganic matter |
+| **Mold** | Medium purple | Organic terraformer - spreads across organics (plant, flower, dirt, honey), releases gas, dies in fire/acid |
 
 ### Spawners
 | Particle | Color | Behavior |
 |----------|-------|----------|
 | **Tap** | Silver | Static, spawns water below continuously |
 | **Cloud** | Light grey | Floats around, drops water slowly (slower than tap) |
+| **Volcano** | Dark maroon | Erupts lava upward, emits embers, cooled by water (rarely turns to stone) |
 | **Anthill** | Yellow-brown | Static, spawns ants, burns on fire |
 | **Hive** | Amber | Static, spawns bees, burns on fire |
 | **Nest** | Brown-grey | Static, spawns birds, burns on fire |
@@ -197,6 +206,8 @@ flowchart TD
 flowchart LR
     Tap[Tap] -->|spawns| Water[Water]
     Cloud[Cloud] -->|drops| Water
+    Volcano[Volcano] -->|erupts| Lava[Lava]
+    Volcano -->|emits| Ember[Ember]
     Anthill[Anthill] -->|spawns| Ant[Ant]
     Hive[Hive] -->|spawns| Bee[Bee]
     Nest[Nest] -->|spawns| Bird[Bird]
@@ -204,6 +215,7 @@ flowchart LR
     Fire[Fire] -.->|destroys| Anthill
     Fire -.->|destroys| Hive
     Fire -.->|destroys| Nest
+    Water -.->|cools| Volcano
 ```
 
 ### Bee Ecosystem
@@ -251,10 +263,15 @@ flowchart LR
         Sand[Sand]
     end
 
+    subgraph Reflects[Reflects Bullets]
+        Mercury[Mercury]
+    end
+
     Bullet -->|kills| Destroys
     Bullet -->|slowed| SlowedBy
     Bullet -.->|through| PassThrough
     Bullet -->|penetrates| Penetrates
+    Bullet -->|bounces off| Reflects
     Bullet -->|leaves| Trail[Bullet Trail]
 ```
 
@@ -301,6 +318,81 @@ flowchart TD
     Water -->|cools| Lava
     Snow -->|cools| Lava
     Lava -->|becomes| Stone[Stone]
+```
+
+### Mold Decomposition
+```mermaid
+flowchart LR
+    Mold((Mold)) -->|spreads to| Plant
+    Mold -->|spreads to| Flower
+    Mold -->|spreads to| Fluff
+    Mold -->|spreads to| Dirt
+    Mold -->|spreads to| Honey
+    Mold -->|consumes| Bug
+    Mold -->|consumes| Ant
+    Mold -->|consumes| Slime
+    Mold -->|releases| Gas[Gas]
+    Fire[Fire] -.->|kills| Mold
+    Acid[Acid] -.->|kills| Mold
+    Lava[Lava] -.->|kills| Mold
+```
+
+### Mercury Properties
+```mermaid
+flowchart TD
+    Mercury((Mercury))
+
+    subgraph Sinks[Sinks Through]
+        Water[Water]
+        Acid[Acid]
+        Honey[Honey]
+        Sand[Sand]
+        Dirt[Dirt]
+    end
+
+    subgraph Poisons[Poisons]
+        Bug[Bug]
+        Ant[Ant]
+        Bird[Bird]
+        Bee[Bee]
+        Slime[Slime]
+    end
+
+    Mercury -->|sinks| Sinks
+    Mercury -->|kills| Poisons
+    Bullet[Bullet] -->|reflects off| Mercury
+    Mercury -->|reverses| Bullet
+```
+
+### Void Absorption
+```mermaid
+flowchart LR
+    Void((Void)) -->|absorbs| Most[Most Particles]
+    Void -->|grows| Void
+    Void -->|decays to| Empty[Empty]
+    Lightning[Lightning] -->|destroys| Void
+    Void -->|becomes| Static[Static]
+
+    subgraph Immune[Cannot Absorb]
+        Stone[Stone]
+        Glass[Glass]
+        Crystal[Crystal]
+        Tap[Tap]
+        Volcano[Volcano]
+    end
+```
+
+### Seed Growth Cycle
+```mermaid
+flowchart TD
+    Seed[Seed] -->|lands on| Dirt[Dirt]
+    Water[Water] -->|nearby| Seed
+    Seed -->|grows into| Plant[Plant]
+
+    Fire[Fire] -.->|burns| Seed
+    Bug[Bug] -.->|eats| Seed
+    Ant[Ant] -.->|eats| Seed
+    Bird[Bird] -.->|eats| Seed
 ```
 
 ---
