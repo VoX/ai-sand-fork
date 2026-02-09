@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
@@ -34,6 +34,7 @@ const GLITTER = 56 // Sparkly silver, spreads and sticks to everything
 const STAR = 57 // Magical particle, grants random transformations
 const COMET = 58 // Fast streaking particle, leaves blue fire trail
 const BLUE_FIRE = 59 // Blue fire trail from comets
+const BLACK_HOLE = 60 // Sucks in and destroys nearby particles
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
@@ -43,7 +44,7 @@ const MATERIAL_TO_ID: Record<Material, number> = {
   bee: BEE, flower: FLOWER, hive: HIVE, honey: HONEY, nest: NEST, gun: GUN, cloud: CLOUD,
   acid: ACID, lava: LAVA, snow: SNOW, volcano: VOLCANO, mold: MOLD, mercury: MERCURY, void: VOID, seed: SEED,
   rust: RUST, spore: SPORE, algae: ALGAE, poison: POISON, dust: DUST,
-  firework: FIREWORK, bubble: BUBBLE, glitter: GLITTER, star: STAR, comet: COMET,
+  firework: FIREWORK, bubble: BUBBLE, glitter: GLITTER, star: STAR, comet: COMET, blackhole: BLACK_HOLE,
 }
 
 // Density for displacement (higher sinks through lower, 0 = doesn't displace)
@@ -124,6 +125,7 @@ const COLORS_U32 = new Uint32Array([
   0xFFEE82EE, // STAR (bright violet)
   0xFFFFF97D, // COMET (electric blue)
   0xFFFF901E, // BLUE_FIRE (cyan-blue fire)
+  0xFF000008, // BLACK_HOLE (very dark, almost black with hint of purple)
 ])
 
 // Dynamic color palettes
@@ -152,7 +154,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   acid: '#bfff00', lava: '#dc1414', snow: '#e0f0ff',
   volcano: '#660000', mold: '#7b68ee', mercury: '#b8c0c8', void: '#2e0854', seed: '#d4a574',
   rust: '#b7410e', spore: '#20b2aa', algae: '#2e8b57', poison: '#8b008b', dust: '#deb887',
-  firework: '#ff6600', bubble: '#87ceeb', glitter: '#c0c0c0', star: '#ee82ee', comet: '#7df9ff',
+  firework: '#ff6600', bubble: '#87ceeb', glitter: '#c0c0c0', star: '#ee82ee', comet: '#7df9ff', blackhole: '#080008',
 }
 
 function App() {
@@ -1887,14 +1889,14 @@ function App() {
             }
           }
         } else if (c === SEED) {
-          // Seed: grows straight plant stem 5-10 high with flowers on top
+          // Seed: grows straight plant stem 10-20 pixels high with flowers on top
           // Works on dirt alone, grows BIGGER with water nearby
 
-          // Check conditions
+          // Check conditions - bigger water range
           let onDirt = false, nearWater = false
           if (y < rows - 1 && g[below] === DIRT) onDirt = true
-          for (let sdy = -3; sdy <= 3 && !nearWater; sdy++) {
-            for (let sdx = -3; sdx <= 3 && !nearWater; sdx++) {
+          for (let sdy = -5; sdy <= 5 && !nearWater; sdy++) {
+            for (let sdx = -5; sdx <= 5 && !nearWater; sdx++) {
               const snx = x + sdx, sny = y + sdy
               if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
                 if (g[idx(snx, sny)] === WATER) nearWater = true
@@ -1902,18 +1904,18 @@ function App() {
             }
           }
 
-          // Grow on dirt! Water makes it bigger
+          // Grow on dirt! Water makes it bigger (10-20 pixels)
           if (onDirt) {
-            const maxHeight = nearWater ? 12 : 7
-            const growRate = nearWater ? 0.35 : 0.2
+            const maxHeight = nearWater ? 20 : 12
+            const growRate = nearWater ? 0.4 : 0.25
 
             if (rand() < growRate) {
-              // Find current stem height
+              // Find current stem height - can grow through other seeds
               let stemHeight = 0
               for (let h = 1; h <= maxHeight; h++) {
                 if (y - h < 0) break
                 const cell = g[idx(x, y - h)]
-                if (cell === PLANT || cell === FLOWER) {
+                if (cell === PLANT || cell === FLOWER || cell === SEED) {
                   stemHeight = h
                 } else {
                   break
@@ -1924,15 +1926,15 @@ function App() {
               const nextY = y - stemHeight - 1
               if (nextY >= 0 && stemHeight < maxHeight) {
                 const ni = idx(x, nextY)
-                if (g[ni] === EMPTY) {
+                if (g[ni] === EMPTY || g[ni] === SEED) {
                   // Flower at top when tall enough
-                  const flowerHeight = nearWater ? 8 : 5
+                  const flowerHeight = nearWater ? 15 : 8
                   g[ni] = (stemHeight >= flowerHeight - 1) ? FLOWER : PLANT
                 }
               }
 
               // Add more flowers at top when done
-              if (stemHeight >= (nearWater ? 10 : 5) && rand() < 0.15) {
+              if (stemHeight >= (nearWater ? 18 : 10) && rand() < 0.2) {
                 const topIdx = idx(x, y - stemHeight)
                 if (g[topIdx] === PLANT) g[topIdx] = FLOWER
               }
@@ -2183,83 +2185,94 @@ function App() {
             }
           }
         } else if (c === STAR) {
-          // Star: CRAZY magical particle, wild transformations, spawns everything!
+          // Star: magical particle, transforms nearby materials
 
-          // Wild magical transformations on ALL neighbors - much more frequent!
-          for (let sdy = -2; sdy <= 2; sdy++) {
-            for (let sdx = -2; sdx <= 2; sdx++) {
-              if (sdx === 0 && sdy === 0) continue
-              if (rand() > 0.15) continue // 15% chance per neighbor
+          // Transform one adjacent neighbor occasionally
+          if (rand() < 0.08) {
+            const sdx = Math.floor(rand() * 3) - 1
+            const sdy = Math.floor(rand() * 3) - 1
+            if (sdx !== 0 || sdy !== 0) {
               const snx = x + sdx, sny = y + sdy
               if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
                 const si = idx(snx, sny), sc = g[si]
-                // CRAZY magical transformations!
-                if (sc === SAND) g[si] = [GLASS, CRYSTAL, HONEY, GLITTER][Math.floor(rand() * 4)]
-                else if (sc === DIRT) g[si] = [PLANT, FLOWER, SEED, MOLD][Math.floor(rand() * 4)]
-                else if (sc === WATER) g[si] = [BUBBLE, HONEY, ACID, SNOW][Math.floor(rand() * 4)]
-                else if (sc === STONE) g[si] = [CRYSTAL, GLASS, LAVA, VOLCANO][Math.floor(rand() * 4)]
-                else if (sc === PLANT) g[si] = [FLOWER, BEE, ALGAE, FIREWORK][Math.floor(rand() * 4)]
-                else if (sc === BUG) g[si] = [BIRD, BEE, ALIEN, STAR][Math.floor(rand() * 4)]
-                else if (sc === ANT) g[si] = [BEE, BIRD, QUARK][Math.floor(rand() * 3)]
-                else if (sc === FIRE) g[si] = [PLASMA, BLUE_FIRE, LIGHTNING, COMET][Math.floor(rand() * 4)]
-                else if (sc === GAS) g[si] = [CLOUD, SPORE, DUST, FIREWORK][Math.floor(rand() * 4)]
-                else if (sc === EMBER) g[si] = [FIREWORK, COMET, STAR][Math.floor(rand() * 3)]
-                else if (sc === GLASS) g[si] = [CRYSTAL, LIGHTNING, STATIC][Math.floor(rand() * 3)]
-                else if (sc === SLIME) g[si] = [HONEY, ACID, MERCURY][Math.floor(rand() * 3)]
-                else if (sc === LAVA) g[si] = [FIRE, BLUE_FIRE, PLASMA][Math.floor(rand() * 3)]
-                else if (sc === SNOW) g[si] = [WATER, BUBBLE, GLITTER][Math.floor(rand() * 3)]
-                else if (sc === EMPTY && rand() < 0.6) {
-                  // Spawn random particles in empty space!
-                  const spawns = [GLITTER, STATIC, EMBER, FIREWORK, BUBBLE, COMET]
-                  g[si] = spawns[Math.floor(rand() * spawns.length)]
-                }
+                // Magical transformations
+                if (sc === SAND) g[si] = rand() < 0.5 ? GLASS : CRYSTAL
+                else if (sc === DIRT) g[si] = rand() < 0.5 ? PLANT : FLOWER
+                else if (sc === WATER) g[si] = rand() < 0.5 ? BUBBLE : HONEY
+                else if (sc === STONE) g[si] = rand() < 0.5 ? CRYSTAL : GLASS
+                else if (sc === PLANT) g[si] = FLOWER
+                else if (sc === FIRE) g[si] = PLASMA
+                else if (sc === GAS) g[si] = CLOUD
               }
             }
           }
 
-          // Emit lots of glitter and sometimes other stars!
-          if (rand() < 0.2) {
-            for (let i = 0; i < 3; i++) {
-              const gdx = Math.floor(rand() * 5) - 2
-              const gdy = Math.floor(rand() * 5) - 2
-              const gnx = x + gdx, gny = y + gdy
-              if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows && g[idx(gnx, gny)] === EMPTY) {
-                g[idx(gnx, gny)] = rand() < 0.1 ? STAR : GLITTER
-              }
+          // Occasionally emit a glitter
+          if (rand() < 0.03) {
+            const gdx = Math.floor(rand() * 3) - 1
+            const gdy = Math.floor(rand() * 3) - 1
+            const gnx = x + gdx, gny = y + gdy
+            if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows && g[idx(gnx, gny)] === EMPTY) {
+              g[idx(gnx, gny)] = GLITTER
             }
           }
 
-          // Sometimes explode into a burst of particles!
-          if (rand() < 0.02) {
-            g[p] = EMPTY
-            const r = 4
-            const bursts = [GLITTER, STATIC, EMBER, FIREWORK, PLASMA]
-            for (let edy = -r; edy <= r; edy++) {
-              for (let edx = -r; edx <= r; edx++) {
-                if (edx * edx + edy * edy <= r * r && rand() < 0.6) {
-                  const ex = x + edx, ey = y + edy
-                  if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY) {
-                    g[idx(ex, ey)] = bursts[Math.floor(rand() * bursts.length)]
+          // Decay into glitter
+          if (rand() < 0.01) { g[p] = GLITTER; continue }
+
+          // Float down slowly, drift sideways
+          if (rand() < 0.25) {
+            const sdx = Math.floor(rand() * 3) - 1
+            const sdy = rand() < 0.6 ? 1 : (rand() < 0.5 ? 0 : -1)
+            const snx = x + sdx, sny = y + sdy
+            if (snx >= 0 && snx < cols && sny >= 0 && sny < rows && g[idx(snx, sny)] === EMPTY) {
+              g[idx(snx, sny)] = STAR
+              g[p] = EMPTY
+            }
+          }
+        } else if (c === BLACK_HOLE) {
+          // Black hole: sucks in and destroys nearby particles
+
+          // Pull in particles from surrounding area
+          const pullRadius = 6
+          for (let bdy = -pullRadius; bdy <= pullRadius; bdy++) {
+            for (let bdx = -pullRadius; bdx <= pullRadius; bdx++) {
+              if (bdx === 0 && bdy === 0) continue
+              const dist = Math.sqrt(bdx * bdx + bdy * bdy)
+              if (dist > pullRadius) continue
+
+              const bnx = x + bdx, bny = y + bdy
+              if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) continue
+
+              const bi = idx(bnx, bny), bc = g[bi]
+              // Don't pull in other black holes, stone, glass, or spawners
+              if (bc === EMPTY || bc === BLACK_HOLE || bc === STONE || bc === GLASS ||
+                  bc === TAP || bc === VOLCANO || bc === GUN || bc === ANTHILL || bc === HIVE) continue
+
+              // Closer = stronger pull
+              const pullChance = 0.15 / dist
+
+              if (rand() < pullChance) {
+                // Move particle one step toward black hole
+                const stepX = bdx > 0 ? -1 : (bdx < 0 ? 1 : 0)
+                const stepY = bdy > 0 ? -1 : (bdy < 0 ? 1 : 0)
+                const targetX = bnx + stepX, targetY = bny + stepY
+
+                if (targetX >= 0 && targetX < cols && targetY >= 0 && targetY < rows) {
+                  const ti = idx(targetX, targetY)
+                  // If next to black hole, destroy it
+                  if (Math.abs(bdx + stepX) <= 1 && Math.abs(bdy + stepY) <= 1) {
+                    g[bi] = EMPTY // Consumed!
+                  } else if (g[ti] === EMPTY) {
+                    g[ti] = bc
+                    g[bi] = EMPTY
                   }
                 }
               }
             }
-            continue
           }
 
-          // Slowly decay into glitter
-          if (rand() < 0.005) { g[p] = GLITTER; continue }
-
-          // Wild movement - zoom around erratically!
-          if (rand() < 0.5) {
-            const sdx = Math.floor(rand() * 5) - 2
-            const sdy = Math.floor(rand() * 5) - 2
-            const snx = x + sdx, sny = y + sdy
-            if (snx >= 0 && snx < cols && sny >= 0 && sny < rows && g[idx(snx, sny)] === EMPTY) {
-              g[idx(snx, sny)] = STAR
-              g[p] = rand() < 0.5 ? GLITTER : (rand() < 0.3 ? STATIC : EMPTY)
-            }
-          }
+          // Black holes are stationary - they don't move
         }
       }
     }
@@ -2392,7 +2405,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey', 'nest', 'gun', 'cloud', 'acid', 'lava', 'snow', 'volcano', 'mold', 'mercury', 'void', 'seed', 'rust', 'spore', 'algae', 'poison', 'dust', 'firework', 'bubble', 'glitter', 'star', 'comet']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey', 'nest', 'gun', 'cloud', 'acid', 'lava', 'snow', 'volcano', 'mold', 'mercury', 'void', 'seed', 'rust', 'spore', 'algae', 'poison', 'dust', 'firework', 'bubble', 'glitter', 'star', 'comet', 'blackhole']
 
   return (
     <div className="app">
