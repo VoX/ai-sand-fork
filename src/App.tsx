@@ -112,6 +112,7 @@ function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const gridRef = useRef<Uint8Array>(new Uint8Array(0))
   const imageDataRef = useRef<ImageData | null>(null)
+  const materialPickerRef = useRef<HTMLDivElement>(null)
   const [tool, setTool] = useState<Tool>('sand')
   const [isDrawing, setIsDrawing] = useState(false)
   const [brushSize, setBrushSize] = useState(3)
@@ -1452,6 +1453,13 @@ function App() {
     setBrushSize(prev => e.deltaY > 0 ? Math.max(1, prev - 1) : Math.min(15, prev + 1))
   }, [])
 
+  const handlePickerWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault()
+    if (materialPickerRef.current) {
+      materialPickerRef.current.scrollLeft += e.deltaY
+    }
+  }, [])
+
   useEffect(() => {
     initGrid()
     lastUpdateRef.current = 0
@@ -1479,7 +1487,7 @@ function App() {
   return (
     <div className="app">
       <div className="controls">
-        <div className="material-picker">
+        <div className="material-picker" ref={materialPickerRef} onWheel={handlePickerWheel}>
           {materials.map((m) => (
             <button
               key={m}
