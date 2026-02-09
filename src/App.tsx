@@ -373,15 +373,14 @@ function App() {
         if (c === FIRE || c === BLUE_FIRE) {
           if (y === 0) { g[p] = EMPTY; continue }
           if (rand() < 0.1) { g[p] = rand() < 0.25 ? GAS : rand() < 0.15 ? EMBER : EMPTY; continue }
-          // Spread to flammable neighbors (blue fire spreads as regular fire)
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              if (dy === 0 && dx === 0) continue
-              const nx = x + dx, ny = y + dy
-              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-                const ni = idx(nx, ny), nc = g[ni]
-                if ((nc === PLANT || nc === FLUFF || nc === BUG || nc === GAS || nc === GUNPOWDER || nc === FLOWER || nc === HIVE || nc === NEST) && rand() < 0.3) g[ni] = FIRE
-              }
+          // Spread to flammable neighbors (sample 3 random)
+          for (let i = 0; i < 3; i++) {
+            const dx = Math.floor(rand() * 3) - 1, dy = Math.floor(rand() * 3) - 1
+            if (dx === 0 && dy === 0) continue
+            const nx = x + dx, ny = y + dy
+            if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+              const ni = idx(nx, ny), nc = g[ni]
+              if ((nc === PLANT || nc === FLUFF || nc === BUG || nc === GAS || nc === GUNPOWDER || nc === FLOWER || nc === HIVE || nc === NEST) && rand() < 0.5) g[ni] = FIRE
             }
           }
           // Rise
@@ -412,18 +411,17 @@ function App() {
           // Decay over time
           if (rand() < 0.01) { g[p] = EMPTY; continue }
 
-          // Check for contact with organic matter - create mold!
-          for (let sdy = -1; sdy <= 1; sdy++) {
-            for (let sdx = -1; sdx <= 1; sdx++) {
-              if (sdy === 0 && sdx === 0) continue
-              const snx = x + sdx, sny = y + sdy
-              if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
-                const snc = g[idx(snx, sny)]
-                if ((snc === PLANT || snc === FLOWER || snc === FLUFF || snc === HONEY || snc === DIRT || snc === ALGAE) && rand() < 0.2) {
-                  g[idx(snx, sny)] = MOLD
-                  g[p] = EMPTY
-                  continue
-                }
+          // Check for contact with organic matter (sample 3 random neighbors)
+          for (let i = 0; i < 3; i++) {
+            const sdx = Math.floor(rand() * 3) - 1, sdy = Math.floor(rand() * 3) - 1
+            if (sdx === 0 && sdy === 0) continue
+            const snx = x + sdx, sny = y + sdy
+            if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
+              const snc = g[idx(snx, sny)]
+              if ((snc === PLANT || snc === FLOWER || snc === FLUFF || snc === HONEY || snc === DIRT || snc === ALGAE) && rand() < 0.35) {
+                g[idx(snx, sny)] = MOLD
+                g[p] = EMPTY
+                break
               }
             }
           }
@@ -499,15 +497,14 @@ function App() {
         } else if (c === BUBBLE) {
           // Bubble: rises through liquids, pops at surface with a small splash
 
-          // Check if in liquid
+          // Check if in liquid (sample 3 random neighbors)
           let inLiquid = false
-          for (let bdy = -1; bdy <= 1; bdy++) {
-            for (let bdx = -1; bdx <= 1; bdx++) {
-              const bnx = x + bdx, bny = y + bdy
-              if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
-                const bnc = g[idx(bnx, bny)]
-                if (bnc === WATER || bnc === ACID || bnc === HONEY || bnc === POISON) inLiquid = true
-              }
+          for (let i = 0; i < 3; i++) {
+            const bdx = Math.floor(rand() * 3) - 1, bdy = Math.floor(rand() * 3) - 1
+            const bnx = x + bdx, bny = y + bdy
+            if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
+              const bnc = g[idx(bnx, bny)]
+              if (bnc === WATER || bnc === ACID || bnc === HONEY || bnc === POISON) { inLiquid = true; break }
             }
           }
 
@@ -609,16 +606,15 @@ function App() {
         } else if (c === PLASMA) {
           if (y === 0) { g[p] = EMPTY; continue }
           if (rand() < 0.08) { g[p] = EMPTY; continue }
-          // Spread to sand, ignite flammables
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              if (dy === 0 && dx === 0) continue
-              const nx = x + dx, ny = y + dy
-              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-                const nc = g[idx(nx, ny)]
-                if (nc === SAND && rand() < 0.4) g[idx(nx, ny)] = PLASMA
-                else if ((nc === PLANT || nc === FLUFF || nc === GAS || nc === FLOWER) && rand() < 0.3) g[idx(nx, ny)] = FIRE
-              }
+          // Spread to sand, ignite flammables (sample 3 random)
+          for (let i = 0; i < 3; i++) {
+            const dx = Math.floor(rand() * 3) - 1, dy = Math.floor(rand() * 3) - 1
+            if (dx === 0 && dy === 0) continue
+            const nx = x + dx, ny = y + dy
+            if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+              const nc = g[idx(nx, ny)]
+              if (nc === SAND && rand() < 0.5) g[idx(nx, ny)] = PLASMA
+              else if ((nc === PLANT || nc === FLUFF || nc === GAS || nc === FLOWER) && rand() < 0.5) g[idx(nx, ny)] = FIRE
             }
           }
           const up = idx(x, y - 1)
@@ -692,30 +688,28 @@ function App() {
         } else if (c === BIRD) {
           // Bird: flies around the screen, rises and swoops
 
-          // Check for fire types - explode and die
+          // Check for fire/predators (sample 2 random neighbors)
           let dead = false
-          for (let bdy = -1; bdy <= 1 && !dead; bdy++) {
-            for (let bdx = -1; bdx <= 1 && !dead; bdx++) {
-              if (bdy === 0 && bdx === 0) continue
-              const bnx = x + bdx, bny = y + bdy
-              if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
-                const bnc = g[idx(bnx, bny)]
-                if (bnc === FIRE || bnc === PLASMA || bnc === LIGHTNING || bnc === EMBER) {
-                  g[p] = FIRE
-                  for (let ey = -1; ey <= 1; ey++) {
-                    for (let ex = -1; ex <= 1; ex++) {
-                      const bx = x + ex, by = y + ey
-                      if (bx >= 0 && bx < cols && by >= 0 && by < rows && g[idx(bx, by)] === EMPTY && rand() < 0.35) {
-                        g[idx(bx, by)] = FIRE
-                      }
-                    }
+          for (let i = 0; i < 2; i++) {
+            const bdx = Math.floor(rand() * 3) - 1, bdy = Math.floor(rand() * 3) - 1
+            if (bdx === 0 && bdy === 0) continue
+            const bnx = x + bdx, bny = y + bdy
+            if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
+              const bnc = g[idx(bnx, bny)]
+              if (bnc === FIRE || bnc === PLASMA || bnc === LIGHTNING || bnc === EMBER) {
+                g[p] = FIRE
+                // Small fire burst
+                for (let j = 0; j < 4; j++) {
+                  const ex = x + Math.floor(rand() * 3) - 1, ey = y + Math.floor(rand() * 3) - 1
+                  if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY && rand() < 0.5) {
+                    g[idx(ex, ey)] = FIRE
                   }
-                  dead = true
                 }
-                if (bnc === ALIEN || bnc === QUARK) {
-                  g[p] = EMPTY
-                  dead = true
-                }
+                dead = true; break
+              }
+              if (bnc === ALIEN || bnc === QUARK) {
+                g[p] = EMPTY
+                dead = true; break
               }
             }
           }
@@ -767,18 +761,16 @@ function App() {
         } else if (c === BEE) {
           // Bee: buzzes around, creates flowers from plants, dies on fire
 
-          // Check for fire types - bee burns
+          // Check for fire types (sample 2 random neighbors)
           let dead = false
-          for (let bdy = -1; bdy <= 1 && !dead; bdy++) {
-            for (let bdx = -1; bdx <= 1 && !dead; bdx++) {
-              if (bdy === 0 && bdx === 0) continue
-              const bnx = x + bdx, bny = y + bdy
-              if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
-                const bnc = g[idx(bnx, bny)]
-                if (bnc === FIRE || bnc === PLASMA || bnc === LIGHTNING || bnc === EMBER) {
-                  g[p] = FIRE
-                  dead = true
-                }
+          for (let i = 0; i < 2; i++) {
+            const bdx = Math.floor(rand() * 3) - 1, bdy = Math.floor(rand() * 3) - 1
+            if (bdx === 0 && bdy === 0) continue
+            const bnx = x + bdx, bny = y + bdy
+            if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
+              const bnc = g[idx(bnx, bny)]
+              if (bnc === FIRE || bnc === PLASMA || bnc === LIGHTNING || bnc === EMBER) {
+                g[p] = FIRE; dead = true; break
               }
             }
           }
@@ -968,20 +960,19 @@ function App() {
           // Movement first (most common case)
           if (belowCell === EMPTY) { g[below] = WATER; g[p] = EMPTY; continue }
 
-          // Only check plant growth occasionally (optimization)
+          // Only check plant growth occasionally (sample 3 random neighbors)
           if (rand() < 0.1) {
             let nearPlant = false, nearDirt = false
-            for (let dy = -1; dy <= 1; dy++) {
-              for (let dx = -1; dx <= 1; dx++) {
-                const nx = x + dx, ny = y + dy
-                if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-                  const nc = g[idx(nx, ny)]
-                  if (nc === PLANT) nearPlant = true
-                  if (nc === DIRT) nearDirt = true
-                }
+            for (let i = 0; i < 3; i++) {
+              const dx = Math.floor(rand() * 3) - 1, dy = Math.floor(rand() * 3) - 1
+              const nx = x + dx, ny = y + dy
+              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                const nc = g[idx(nx, ny)]
+                if (nc === PLANT) nearPlant = true
+                if (nc === DIRT) nearDirt = true
               }
             }
-            if (nearPlant && rand() < 0.5 && (nearDirt || rand() < 0.3)) { g[p] = PLANT; continue }
+            if (nearPlant && rand() < 0.6 && (nearDirt || rand() < 0.4)) { g[p] = PLANT; continue }
           }
 
           // Spread sideways when can't fall
@@ -992,20 +983,18 @@ function App() {
           else if (nx1 >= 0 && nx1 < cols && g[idx(nx1, y)] === EMPTY) { g[idx(nx1, y)] = WATER; g[p] = EMPTY }
           else if (nx2 >= 0 && nx2 < cols && g[idx(nx2, y)] === EMPTY) { g[idx(nx2, y)] = WATER; g[p] = EMPTY }
         } else if (c === DIRT) {
-          // Check for plant growth occasionally (optimization - skip 95% of frames)
+          // Check for plant growth (skip 95% of frames, sample 2 random neighbors)
           if (rand() < 0.05) {
             let touchingPlant = false
-            for (let dy = -1; dy <= 1; dy++) {
-              for (let dx = -1; dx <= 1; dx++) {
-                if (dy === 0 && dx === 0) continue
-                const nx = x + dx, ny = y + dy
-                if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-                  if (g[idx(nx, ny)] === PLANT) { touchingPlant = true; break }
-                }
+            for (let i = 0; i < 2; i++) {
+              const dx = Math.floor(rand() * 3) - 1, dy = Math.floor(rand() * 3) - 1
+              if (dx === 0 && dy === 0) continue
+              const nx = x + dx, ny = y + dy
+              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                if (g[idx(nx, ny)] === PLANT) { touchingPlant = true; break }
               }
-              if (touchingPlant) break
             }
-            if (touchingPlant && rand() < 0.02) { g[p] = PLANT; continue }
+            if (touchingPlant && rand() < 0.04) { g[p] = PLANT; continue }
           }
           if (canSink(DIRT, belowCell) && (belowCell === EMPTY || rand() < 0.5)) { g[below] = DIRT; g[p] = belowCell }
           else if (rand() < 0.25) {
@@ -1060,26 +1049,26 @@ function App() {
             }
           }
         } else if (c === NITRO) {
+          // Check for triggers (sample 3 random neighbors)
           let touchWater = false, touchOther = false
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              if (dy === 0 && dx === 0) continue
-              const nx = x + dx, ny = y + dy
-              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-                const nc = g[idx(nx, ny)]
-                if (nc === WATER) touchWater = true
-                else if (nc !== EMPTY && nc !== NITRO && nc !== FIRE && nc !== GAS && nc !== LIGHTNING) touchOther = true
-              }
+          for (let i = 0; i < 3; i++) {
+            const dx = Math.floor(rand() * 3) - 1, dy = Math.floor(rand() * 3) - 1
+            if (dx === 0 && dy === 0) continue
+            const nx = x + dx, ny = y + dy
+            if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+              const nc = g[idx(nx, ny)]
+              if (nc === WATER) touchWater = true
+              else if (nc !== EMPTY && nc !== NITRO && nc !== FIRE && nc !== GAS && nc !== LIGHTNING) touchOther = true
             }
           }
           if (touchWater) {
             g[p] = EMPTY
-            for (let dy = -1; dy <= 1; dy++) {
-              for (let dx = -1; dx <= 1; dx++) {
-                const nx = x + dx, ny = y + dy
-                if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[idx(nx, ny)] === WATER && rand() < 0.3) {
-                  g[idx(nx, ny)] = STONE
-                }
+            // Convert nearby water to stone (sample 4 random)
+            for (let i = 0; i < 4; i++) {
+              const dx = Math.floor(rand() * 3) - 1, dy = Math.floor(rand() * 3) - 1
+              const nx = x + dx, ny = y + dy
+              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[idx(nx, ny)] === WATER && rand() < 0.5) {
+                g[idx(nx, ny)] = STONE
               }
             }
           } else if (touchOther) {
@@ -1162,16 +1151,14 @@ function App() {
         } else if (c === ANT) {
           // Ant: eats through most things, leaves dirt, burns in fire, floats on water, climbs plants
 
-          // Check for fire - ants burn
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              if (dy === 0 && dx === 0) continue
-              const nx = x + dx, ny = y + dy
-              if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
-                if (g[idx(nx, ny)] === FIRE || g[idx(nx, ny)] === PLASMA) {
-                  g[p] = FIRE
-                  continue
-                }
+          // Check for fire (sample 2 random neighbors)
+          for (let i = 0; i < 2; i++) {
+            const dx = Math.floor(rand() * 3) - 1, dy = Math.floor(rand() * 3) - 1
+            if (dx === 0 && dy === 0) continue
+            const nx = x + dx, ny = y + dy
+            if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+              if (g[idx(nx, ny)] === FIRE || g[idx(nx, ny)] === PLASMA) {
+                g[p] = FIRE; break
               }
             }
           }
@@ -1391,17 +1378,16 @@ function App() {
         } else if (c === GUNPOWDER) {
           // Gunpowder: explosive, falls like sand, ignites on fire contact
 
-          // Check for fire types - explode!
+          // Check for fire types (sample 2 random neighbors)
           let ignited = false
-          for (let edy = -1; edy <= 1 && !ignited; edy++) {
-            for (let edx = -1; edx <= 1 && !ignited; edx++) {
-              if (edy === 0 && edx === 0) continue
-              const enx = x + edx, eny = y + edy
-              if (enx >= 0 && enx < cols && eny >= 0 && eny < rows) {
-                const enc = g[idx(enx, eny)]
-                if (enc === FIRE || enc === PLASMA || enc === LIGHTNING || enc === EMBER) {
-                  ignited = true
-                }
+          for (let i = 0; i < 2; i++) {
+            const edx = Math.floor(rand() * 3) - 1, edy = Math.floor(rand() * 3) - 1
+            if (edx === 0 && edy === 0) continue
+            const enx = x + edx, eny = y + edy
+            if (enx >= 0 && enx < cols && eny >= 0 && eny < rows) {
+              const enc = g[idx(enx, eny)]
+              if (enc === FIRE || enc === PLASMA || enc === LIGHTNING || enc === EMBER) {
+                ignited = true; break
               }
             }
           }
@@ -1455,20 +1441,19 @@ function App() {
         } else if (c === ANTHILL) {
           // Anthill: spawns ants, burns in fire
 
-          // Check for fire types - anthill burns
-          for (let ady = -1; ady <= 1; ady++) {
-            for (let adx = -1; adx <= 1; adx++) {
-              if (ady === 0 && adx === 0) continue
-              const anx = x + adx, any = y + ady
-              if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
-                const anc = g[idx(anx, any)]
-                if (anc === FIRE || anc === PLASMA || anc === LIGHTNING || anc === EMBER) {
-                  g[p] = FIRE
-                  continue
-                }
+          // Quick fire check (sample 2 random neighbors)
+          for (let i = 0; i < 2; i++) {
+            const adx = Math.floor(rand() * 3) - 1, ady = Math.floor(rand() * 3) - 1
+            if (adx === 0 && ady === 0) continue
+            const anx = x + adx, any = y + ady
+            if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
+              const anc = g[idx(anx, any)]
+              if (anc === FIRE || anc === PLASMA || anc === LIGHTNING || anc === EMBER) {
+                g[p] = FIRE; break
               }
             }
           }
+          if (g[p] === FIRE) continue
 
           // Spawn ants below at a steady rate
           if (belowCell === EMPTY && rand() < 0.08) {
@@ -1477,20 +1462,19 @@ function App() {
         } else if (c === FLOWER) {
           // Flower: static, burns on fire, can spread slowly
 
-          // Check for fire types - flower burns
-          for (let fdy = -1; fdy <= 1; fdy++) {
-            for (let fdx = -1; fdx <= 1; fdx++) {
-              if (fdy === 0 && fdx === 0) continue
-              const fnx = x + fdx, fny = y + fdy
-              if (fnx >= 0 && fnx < cols && fny >= 0 && fny < rows) {
-                const fnc = g[idx(fnx, fny)]
-                if (fnc === FIRE || fnc === PLASMA || fnc === LIGHTNING || fnc === EMBER) {
-                  g[p] = FIRE
-                  continue
-                }
+          // Quick fire check (sample 2 random neighbors)
+          for (let i = 0; i < 2; i++) {
+            const fdx = Math.floor(rand() * 3) - 1, fdy = Math.floor(rand() * 3) - 1
+            if (fdx === 0 && fdy === 0) continue
+            const fnx = x + fdx, fny = y + fdy
+            if (fnx >= 0 && fnx < cols && fny >= 0 && fny < rows) {
+              const fnc = g[idx(fnx, fny)]
+              if (fnc === FIRE || fnc === PLASMA || fnc === LIGHTNING || fnc === EMBER) {
+                g[p] = FIRE; break
               }
             }
           }
+          if (g[p] === FIRE) continue
 
           // Rare chance to spread to adjacent plant
           if (rand() < 0.002) {
@@ -1503,20 +1487,19 @@ function App() {
         } else if (c === HIVE) {
           // Hive: spawns bees, burns on fire
 
-          // Check for fire types - hive burns
-          for (let hdy = -1; hdy <= 1; hdy++) {
-            for (let hdx = -1; hdx <= 1; hdx++) {
-              if (hdy === 0 && hdx === 0) continue
-              const hnx = x + hdx, hny = y + hdy
-              if (hnx >= 0 && hnx < cols && hny >= 0 && hny < rows) {
-                const hnc = g[idx(hnx, hny)]
-                if (hnc === FIRE || hnc === PLASMA || hnc === LIGHTNING || hnc === EMBER) {
-                  g[p] = FIRE
-                  continue
-                }
+          // Quick fire check (sample 2 random neighbors)
+          for (let i = 0; i < 2; i++) {
+            const hdx = Math.floor(rand() * 3) - 1, hdy = Math.floor(rand() * 3) - 1
+            if (hdx === 0 && hdy === 0) continue
+            const hnx = x + hdx, hny = y + hdy
+            if (hnx >= 0 && hnx < cols && hny >= 0 && hny < rows) {
+              const hnc = g[idx(hnx, hny)]
+              if (hnc === FIRE || hnc === PLASMA || hnc === LIGHTNING || hnc === EMBER) {
+                g[p] = FIRE; break
               }
             }
           }
+          if (g[p] === FIRE) continue
 
           // Spawn bees around at a steady rate
           if (rand() < 0.06) {
@@ -1529,17 +1512,14 @@ function App() {
         } else if (c === HONEY) {
           // Honey: very slow flowing liquid, sinks in water, fire turns to ember
 
-          // Check for fire types - turns to ember
-          for (let hdy = -1; hdy <= 1; hdy++) {
-            for (let hdx = -1; hdx <= 1; hdx++) {
-              if (hdy === 0 && hdx === 0) continue
-              const hnx = x + hdx, hny = y + hdy
-              if (hnx >= 0 && hnx < cols && hny >= 0 && hny < rows) {
-                const hnc = g[idx(hnx, hny)]
-                if (hnc === FIRE || hnc === PLASMA || hnc === LIGHTNING) {
-                  g[p] = EMBER
-                  continue
-                }
+          // Quick fire check (sample 1 random neighbor)
+          const hdx = Math.floor(rand() * 3) - 1, hdy = Math.floor(rand() * 3) - 1
+          if (hdx !== 0 || hdy !== 0) {
+            const hnx = x + hdx, hny = y + hdy
+            if (hnx >= 0 && hnx < cols && hny >= 0 && hny < rows) {
+              const hnc = g[idx(hnx, hny)]
+              if (hnc === FIRE || hnc === PLASMA || hnc === LIGHTNING) {
+                g[p] = EMBER; continue
               }
             }
           }
@@ -1562,20 +1542,19 @@ function App() {
         } else if (c === NEST) {
           // Nest: spawns birds, burns on fire like hive
 
-          // Check for fire types - nest burns
-          for (let ndy = -1; ndy <= 1; ndy++) {
-            for (let ndx = -1; ndx <= 1; ndx++) {
-              if (ndy === 0 && ndx === 0) continue
-              const nnx = x + ndx, nny = y + ndy
-              if (nnx >= 0 && nnx < cols && nny >= 0 && nny < rows) {
-                const nnc = g[idx(nnx, nny)]
-                if (nnc === FIRE || nnc === PLASMA || nnc === LIGHTNING || nnc === EMBER) {
-                  g[p] = FIRE
-                  continue
-                }
+          // Quick fire check (sample 2 random neighbors)
+          for (let i = 0; i < 2; i++) {
+            const ndx = Math.floor(rand() * 3) - 1, ndy = Math.floor(rand() * 3) - 1
+            if (ndx === 0 && ndy === 0) continue
+            const nnx = x + ndx, nny = y + ndy
+            if (nnx >= 0 && nnx < cols && nny >= 0 && nny < rows) {
+              const nnc = g[idx(nnx, nny)]
+              if (nnc === FIRE || nnc === PLASMA || nnc === LIGHTNING || nnc === EMBER) {
+                g[p] = FIRE; break
               }
             }
           }
+          if (g[p] === FIRE) continue
 
           // Spawn birds around at a steady rate
           if (rand() < 0.04) {
@@ -1652,37 +1631,36 @@ function App() {
         } else if (c === LAVA) {
           // Lava: molten rock, ignites everything, cools to stone with water
 
-          // Check neighbors for reactions (skip 60% of frames for optimization)
+          // Check neighbors for reactions (skip 60% of frames, sample 4 random)
           if (rand() < 0.4) {
-            for (let ldy = -1; ldy <= 1; ldy++) {
-              for (let ldx = -1; ldx <= 1; ldx++) {
-                if (ldy === 0 && ldx === 0) continue
-                const lnx = x + ldx, lny = y + ldy
-                if (lnx >= 0 && lnx < cols && lny >= 0 && lny < rows) {
-                  const lni = idx(lnx, lny), lnc = g[lni]
-                  // Water cools lava to stone, creates steam
-                  if (lnc === WATER) {
-                    g[lni] = GAS
-                    if (rand() < 0.5) { g[p] = STONE; continue }
-                  }
-                  // Snow cools lava and melts
-                  else if (lnc === SNOW) {
-                    g[lni] = WATER
-                    if (rand() < 0.35) g[p] = STONE
-                  }
-                  // Melt sand into glass
-                  else if (lnc === SAND && rand() < 0.3) {
-                    g[lni] = GLASS
-                  }
-                  // Ignite flammables
-                  else if ((lnc === PLANT || lnc === FLUFF || lnc === GAS || lnc === FLOWER ||
-                            lnc === GUNPOWDER || lnc === HIVE || lnc === NEST) && rand() < 0.6) {
-                    g[lni] = FIRE
-                  }
-                  // Kill creatures
-                  else if ((lnc === BUG || lnc === ANT || lnc === BIRD || lnc === BEE) && rand() < 0.7) {
-                    g[lni] = FIRE
-                  }
+            for (let i = 0; i < 4; i++) {
+              const ldx = Math.floor(rand() * 3) - 1, ldy = Math.floor(rand() * 3) - 1
+              if (ldx === 0 && ldy === 0) continue
+              const lnx = x + ldx, lny = y + ldy
+              if (lnx >= 0 && lnx < cols && lny >= 0 && lny < rows) {
+                const lni = idx(lnx, lny), lnc = g[lni]
+                // Water cools lava to stone, creates steam
+                if (lnc === WATER) {
+                  g[lni] = GAS
+                  if (rand() < 0.5) { g[p] = STONE; break }
+                }
+                // Snow cools lava and melts
+                else if (lnc === SNOW) {
+                  g[lni] = WATER
+                  if (rand() < 0.35) g[p] = STONE
+                }
+                // Melt sand into glass
+                else if (lnc === SAND && rand() < 0.4) {
+                  g[lni] = GLASS
+                }
+                // Ignite flammables
+                else if ((lnc === PLANT || lnc === FLUFF || lnc === GAS || lnc === FLOWER ||
+                          lnc === GUNPOWDER || lnc === HIVE || lnc === NEST) && rand() < 0.7) {
+                  g[lni] = FIRE
+                }
+                // Kill creatures
+                else if ((lnc === BUG || lnc === ANT || lnc === BIRD || lnc === BEE) && rand() < 0.8) {
+                  g[lni] = FIRE
                 }
               }
             }
@@ -1743,23 +1721,22 @@ function App() {
         } else if (c === VOLCANO) {
           // Volcano: spawner that emits lava and embers
 
-          // Check for water - creates steam and may cool volcano
-          for (let vdy = -1; vdy <= 1; vdy++) {
-            for (let vdx = -1; vdx <= 1; vdx++) {
-              if (vdy === 0 && vdx === 0) continue
-              const vnx = x + vdx, vny = y + vdy
-              if (vnx >= 0 && vnx < cols && vny >= 0 && vny < rows) {
-                const vnc = g[idx(vnx, vny)]
-                if (vnc === WATER) {
-                  g[idx(vnx, vny)] = GAS // Steam
-                  if (rand() < 0.05) { g[p] = STONE; continue } // Rare cooling
-                }
-                if (vnc === SNOW) {
-                  g[idx(vnx, vny)] = WATER
-                }
+          // Check for water/snow (sample 3 random neighbors)
+          for (let i = 0; i < 3; i++) {
+            const vdx = Math.floor(rand() * 3) - 1, vdy = Math.floor(rand() * 3) - 1
+            if (vdx === 0 && vdy === 0) continue
+            const vnx = x + vdx, vny = y + vdy
+            if (vnx >= 0 && vnx < cols && vny >= 0 && vny < rows) {
+              const vnc = g[idx(vnx, vny)]
+              if (vnc === WATER) {
+                g[idx(vnx, vny)] = GAS
+                if (rand() < 0.08) { g[p] = STONE; continue }
+              } else if (vnc === SNOW) {
+                g[idx(vnx, vny)] = WATER
               }
             }
           }
+          if (g[p] === STONE) continue
 
           // Spawn lava above (eruption) - very fast rate!
           if (rand() < 0.35 && y > 0) {
@@ -1789,20 +1766,19 @@ function App() {
           // Decay over time
           if (rand() < 0.008) { g[p] = EMPTY; continue }
 
-          // Die in fire/lava/acid
-          for (let mdy = -1; mdy <= 1; mdy++) {
-            for (let mdx = -1; mdx <= 1; mdx++) {
-              if (mdy === 0 && mdx === 0) continue
-              const mnx = x + mdx, mny = y + mdy
-              if (mnx >= 0 && mnx < cols && mny >= 0 && mny < rows) {
-                const mnc = g[idx(mnx, mny)]
-                if (mnc === FIRE || mnc === PLASMA || mnc === LAVA || mnc === ACID) {
-                  g[p] = mnc === ACID ? EMPTY : FIRE
-                  continue
-                }
+          // Die in fire/lava/acid (sample 2 random neighbors)
+          for (let i = 0; i < 2; i++) {
+            const mdx = Math.floor(rand() * 3) - 1, mdy = Math.floor(rand() * 3) - 1
+            if (mdx === 0 && mdy === 0) continue
+            const mnx = x + mdx, mny = y + mdy
+            if (mnx >= 0 && mnx < cols && mny >= 0 && mny < rows) {
+              const mnc = g[idx(mnx, mny)]
+              if (mnc === FIRE || mnc === PLASMA || mnc === LAVA || mnc === ACID) {
+                g[p] = mnc === ACID ? EMPTY : FIRE; break
               }
             }
           }
+          if (g[p] === FIRE || g[p] === EMPTY) continue
 
           // Spread to and decompose organic materials
           if (rand() < 0.08) {
@@ -1831,16 +1807,15 @@ function App() {
         } else if (c === MERCURY) {
           // Mercury: liquid metal, very dense, toxic, reflects bullets
 
-          // Toxic to creatures
-          for (let hdy = -1; hdy <= 1; hdy++) {
-            for (let hdx = -1; hdx <= 1; hdx++) {
-              if (hdy === 0 && hdx === 0) continue
-              const hnx = x + hdx, hny = y + hdy
-              if (hnx >= 0 && hnx < cols && hny >= 0 && hny < rows) {
-                const hnc = g[idx(hnx, hny)]
-                if ((hnc === BUG || hnc === ANT || hnc === BIRD || hnc === BEE || hnc === SLIME) && rand() < 0.3) {
-                  g[idx(hnx, hny)] = EMPTY // Poison kills
-                }
+          // Toxic to creatures (sample 2 random neighbors)
+          for (let i = 0; i < 2; i++) {
+            const hdx = Math.floor(rand() * 3) - 1, hdy = Math.floor(rand() * 3) - 1
+            if (hdx === 0 && hdy === 0) continue
+            const hnx = x + hdx, hny = y + hdy
+            if (hnx >= 0 && hnx < cols && hny >= 0 && hny < rows) {
+              const hnc = g[idx(hnx, hny)]
+              if ((hnc === BUG || hnc === ANT || hnc === BIRD || hnc === BEE || hnc === SLIME) && rand() < 0.5) {
+                g[idx(hnx, hny)] = EMPTY
               }
             }
           }
@@ -1866,19 +1841,18 @@ function App() {
           // Slowly shrink/decay
           if (rand() < 0.003) { g[p] = EMPTY; continue }
 
-          // Can be destroyed by lightning
-          for (let vdy = -1; vdy <= 1; vdy++) {
-            for (let vdx = -1; vdx <= 1; vdx++) {
-              if (vdy === 0 && vdx === 0) continue
-              const vnx = x + vdx, vny = y + vdy
-              if (vnx >= 0 && vnx < cols && vny >= 0 && vny < rows) {
-                if (g[idx(vnx, vny)] === LIGHTNING) {
-                  g[p] = STATIC
-                  continue
-                }
+          // Can be destroyed by lightning (sample 2 random neighbors)
+          for (let i = 0; i < 2; i++) {
+            const vdx = Math.floor(rand() * 3) - 1, vdy = Math.floor(rand() * 3) - 1
+            if (vdx === 0 && vdy === 0) continue
+            const vnx = x + vdx, vny = y + vdy
+            if (vnx >= 0 && vnx < cols && vny >= 0 && vny < rows) {
+              if (g[idx(vnx, vny)] === LIGHTNING) {
+                g[p] = STATIC; break
               }
             }
           }
+          if (g[p] === STATIC) continue
 
           // Absorb nearby particles (except stone, glass, crystal, other voids)
           if (rand() < 0.1) {
@@ -1978,14 +1952,13 @@ function App() {
           // Eventually crumble to dirt
           if (rand() < 0.005) { g[p] = DIRT; continue }
 
-          // Spread to adjacent stone if water nearby
+          // Check for water nearby (sample 2 random neighbors)
           let waterNearby = false
-          for (let rdy = -1; rdy <= 1; rdy++) {
-            for (let rdx = -1; rdx <= 1; rdx++) {
-              const rnx = x + rdx, rny = y + rdy
-              if (rnx >= 0 && rnx < cols && rny >= 0 && rny < rows) {
-                if (g[idx(rnx, rny)] === WATER) waterNearby = true
-              }
+          for (let i = 0; i < 2; i++) {
+            const rdx = Math.floor(rand() * 3) - 1, rdy = Math.floor(rand() * 3) - 1
+            const rnx = x + rdx, rny = y + rdy
+            if (rnx >= 0 && rnx < cols && rny >= 0 && rny < rows) {
+              if (g[idx(rnx, rny)] === WATER) { waterNearby = true; break }
             }
           }
 
@@ -2008,14 +1981,13 @@ function App() {
         } else if (c === ALGAE) {
           // Algae: aquatic plant that grows in water, releases gas bubbles
 
-          // Check if in water
+          // Check if in water (sample 2 random neighbors)
           let inWater = false
-          for (let ady = -1; ady <= 1; ady++) {
-            for (let adx = -1; adx <= 1; adx++) {
-              const anx = x + adx, any = y + ady
-              if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
-                if (g[idx(anx, any)] === WATER) inWater = true
-              }
+          for (let i = 0; i < 2; i++) {
+            const adx = Math.floor(rand() * 3) - 1, ady = Math.floor(rand() * 3) - 1
+            const anx = x + adx, any = y + ady
+            if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
+              if (g[idx(anx, any)] === WATER) { inWater = true; break }
             }
           }
 
@@ -2043,47 +2015,44 @@ function App() {
             }
           }
 
-          // Eaten by bugs and slime
-          for (let ady = -1; ady <= 1; ady++) {
-            for (let adx = -1; adx <= 1; adx++) {
-              if (ady === 0 && adx === 0) continue
-              const anx = x + adx, any = y + ady
-              if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
-                const anc = g[idx(anx, any)]
-                if ((anc === BUG || anc === SLIME) && rand() < 0.15) {
-                  g[p] = EMPTY
-                  continue
-                }
+          // Eaten by bugs and slime (sample 2 random neighbors)
+          for (let i = 0; i < 2; i++) {
+            const adx = Math.floor(rand() * 3) - 1, ady = Math.floor(rand() * 3) - 1
+            if (adx === 0 && ady === 0) continue
+            const anx = x + adx, any = y + ady
+            if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
+              const anc = g[idx(anx, any)]
+              if ((anc === BUG || anc === SLIME) && rand() < 0.25) {
+                g[p] = EMPTY; break
               }
             }
           }
         } else if (c === POISON) {
           // Poison: toxic liquid, kills creatures, converts algae and plant to poison
 
-          // Kill creatures and convert organics to poison
-          for (let pdy = -1; pdy <= 1; pdy++) {
-            for (let pdx = -1; pdx <= 1; pdx++) {
-              if (pdy === 0 && pdx === 0) continue
-              const pnx = x + pdx, pny = y + pdy
-              if (pnx >= 0 && pnx < cols && pny >= 0 && pny < rows) {
-                const pnc = g[idx(pnx, pny)]
-                // Kill all creatures - turn to poison
-                if ((pnc === BUG || pnc === ANT || pnc === BIRD || pnc === BEE || pnc === SLIME) && rand() < 0.4) {
-                  g[idx(pnx, pny)] = POISON
-                }
-                // Turn algae to poison (slowly)
-                if (pnc === ALGAE && rand() < 0.05) {
-                  g[idx(pnx, pny)] = POISON
-                }
-                // Turn plant to poison (slowly)
-                if (pnc === PLANT && rand() < 0.03) {
-                  g[idx(pnx, pny)] = POISON
-                }
-                // Diluted by water
-                if (pnc === WATER && rand() < 0.1) {
-                  g[idx(pnx, pny)] = EMPTY
-                  if (rand() < 0.5) g[p] = WATER // Poison dilutes
-                }
+          // Kill creatures and convert organics (sample 3 random neighbors)
+          for (let i = 0; i < 3; i++) {
+            const pdx = Math.floor(rand() * 3) - 1, pdy = Math.floor(rand() * 3) - 1
+            if (pdx === 0 && pdy === 0) continue
+            const pnx = x + pdx, pny = y + pdy
+            if (pnx >= 0 && pnx < cols && pny >= 0 && pny < rows) {
+              const pnc = g[idx(pnx, pny)]
+              // Kill all creatures - turn to poison
+              if ((pnc === BUG || pnc === ANT || pnc === BIRD || pnc === BEE || pnc === SLIME) && rand() < 0.5) {
+                g[idx(pnx, pny)] = POISON
+              }
+              // Turn algae to poison
+              else if (pnc === ALGAE && rand() < 0.08) {
+                g[idx(pnx, pny)] = POISON
+              }
+              // Turn plant to poison
+              else if (pnc === PLANT && rand() < 0.05) {
+                g[idx(pnx, pny)] = POISON
+              }
+              // Diluted by water
+              else if (pnc === WATER && rand() < 0.15) {
+                g[idx(pnx, pny)] = EMPTY
+                if (rand() < 0.5) g[p] = WATER
               }
             }
           }
@@ -2103,31 +2072,31 @@ function App() {
         } else if (c === DUST) {
           // Dust: airborne particles, settles to sand, EXPLOSIVE with fire!
 
-          // Check for fire - DUST EXPLOSION!
-          for (let ddy = -1; ddy <= 1; ddy++) {
-            for (let ddx = -1; ddx <= 1; ddx++) {
-              if (ddy === 0 && ddx === 0) continue
-              const dnx = x + ddx, dny = y + ddy
-              if (dnx >= 0 && dnx < cols && dny >= 0 && dny < rows) {
-                const dnc = g[idx(dnx, dny)]
-                if (dnc === FIRE || dnc === PLASMA || dnc === EMBER || dnc === LAVA) {
-                  // Dust explosion! Ignite nearby dust in chain reaction
-                  g[p] = FIRE
-                  for (let edy = -2; edy <= 2; edy++) {
-                    for (let edx = -2; edx <= 2; edx++) {
-                      const enx = x + edx, eny = y + edy
-                      if (enx >= 0 && enx < cols && eny >= 0 && eny < rows) {
-                        if (g[idx(enx, eny)] === DUST && rand() < 0.7) {
-                          g[idx(enx, eny)] = FIRE
-                        }
-                      }
+          // Check for fire - DUST EXPLOSION (sample 2 random neighbors)
+          let dustIgnited = false
+          for (let i = 0; i < 2; i++) {
+            const ddx = Math.floor(rand() * 3) - 1, ddy = Math.floor(rand() * 3) - 1
+            if (ddx === 0 && ddy === 0) continue
+            const dnx = x + ddx, dny = y + ddy
+            if (dnx >= 0 && dnx < cols && dny >= 0 && dny < rows) {
+              const dnc = g[idx(dnx, dny)]
+              if (dnc === FIRE || dnc === PLASMA || dnc === EMBER || dnc === LAVA) {
+                // Dust explosion! Sample nearby dust for chain reaction
+                g[p] = FIRE
+                for (let j = 0; j < 10; j++) {
+                  const edx = Math.floor(rand() * 5) - 2, edy = Math.floor(rand() * 5) - 2
+                  const enx = x + edx, eny = y + edy
+                  if (enx >= 0 && enx < cols && eny >= 0 && eny < rows) {
+                    if (g[idx(enx, eny)] === DUST && rand() < 0.8) {
+                      g[idx(enx, eny)] = FIRE
                     }
                   }
-                  continue
                 }
+                dustIgnited = true; break
               }
             }
           }
+          if (dustIgnited) continue
 
           // Settle to sand over time
           if (rand() < 0.003) { g[p] = SAND; continue }
@@ -2145,20 +2114,19 @@ function App() {
         } else if (c === GLITTER) {
           // Glitter: silver sparkle, disappears quickly at first then slowly
 
-          // Count nearby glitter - more glitter = slower decay
+          // Count nearby glitter (sample 3 random neighbors)
           let nearbyGlitter = 0
-          for (let gdy = -1; gdy <= 1; gdy++) {
-            for (let gdx = -1; gdx <= 1; gdx++) {
-              if (gdy === 0 && gdx === 0) continue
-              const gnx = x + gdx, gny = y + gdy
-              if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows) {
-                if (g[idx(gnx, gny)] === GLITTER) nearbyGlitter++
-              }
+          for (let i = 0; i < 3; i++) {
+            const gdx = Math.floor(rand() * 3) - 1, gdy = Math.floor(rand() * 3) - 1
+            if (gdx === 0 && gdy === 0) continue
+            const gnx = x + gdx, gny = y + gdy
+            if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows) {
+              if (g[idx(gnx, gny)] === GLITTER) nearbyGlitter++
             }
           }
 
           // Decay rate: fast when alone (15%), slow when clustered (1%)
-          const decayRate = nearbyGlitter === 0 ? 0.15 : (nearbyGlitter < 3 ? 0.05 : 0.01)
+          const decayRate = nearbyGlitter === 0 ? 0.15 : (nearbyGlitter > 0 ? 0.03 : 0.01)
           if (rand() < decayRate) { g[p] = EMPTY; continue }
 
           // Fall slowly

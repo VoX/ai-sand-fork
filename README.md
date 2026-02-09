@@ -66,7 +66,7 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 | **Lava** | Deep crimson | Molten rock, flows slowly, ignites flammables, melts sand→glass, cools to stone with water/snow |
 | **Snow** | Icy light blue | Falls slowly like fluff, piles up, freezes water→ice, melts near fire/lava/plasma/ember |
 | **Mercury** | Silver metallic | Liquid metal, very dense (sinks through most materials), toxic to creatures, reflects bullets! |
-| **Void** | Deep purple | Dark matter, absorbs nearby particles, can grow when eating, slowly decays, destroyed by lightning |
+| **Void** | Deep purple | Dark matter, absorbs nearby particles (not stone/glass/crystal), can grow when eating, slowly decays, destroyed by lightning |
 
 ### Growth Elements
 | Particle | Color | Behavior |
@@ -89,14 +89,14 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 | **Firework** | Multicolor | Single pixels that shoot straight up, then explode into colorful sparks |
 | **Bubble** | Light cyan | Rises through liquids, turns to gas when reaching air |
 | **Glitter** | Silver | Sparkly silver particles that fade (fast at first, then slowly when clustered) |
-| **Star** | Bright yellow | Sun - grows plants/algae/flowers nearby, boosts seed growth massively, melts snow, evaporates water, emits glitter and static |
+| **Star** | Bright yellow | Sun - grows plants/algae/flowers in large radius (18px), boosts seed growth massively, melts snow, evaporates water, constantly emits glitter and static |
 | **Comet** | Cyan/white | Fast-moving streak, leaves blue fire trail behind |
 | **Blue Fire** | Blue | Blue flame effect, left as trail by comets, rises and fades like regular fire |
 
 ### Cosmic Elements
 | Particle | Color | Behavior |
 |----------|-------|----------|
-| **Black Hole** | Deep black/purple | Gravitational singularity - pulls in and destroys all nearby particles (including stone, glass, crystal), only spawners are immune |
+| **Black Hole** | Deep black/purple | Gravitational singularity - pulls in and destroys ALL nearby particles including stone, glass, and crystal; only spawners (tap, volcano, gun, anthill, hive) are immune |
 
 ### Special Elements
 | Particle | Color | Behavior |
@@ -414,11 +414,7 @@ flowchart LR
     Void -->|becomes| Static[Static]
 
     subgraph Immune[Cannot Absorb]
-        Stone[Stone]
-        Glass[Glass]
-        Crystal[Crystal]
-        Tap[Tap]
-        Volcano[Volcano]
+        Spawners[Spawners: Tap, Volcano, Gun, Anthill, Hive]
     end
 ```
 
@@ -536,7 +532,7 @@ These are spawned by other particles (Gun spawns bullets, Comet spawns blue fire
 - **Ant:** Spawn at 40% rate
 - **Alien/Quark:** Spawn at 8% rate (very sparse)
 - **Black Hole:** Single pixel, high impact - use sparingly
-- **Star (Sun):** Static, affects large area (radius 10), emits particles
+- **Star (Sun):** Static, affects large area (radius 18), emits static and glitter particles
 - **Firework:** Single pixels that launch upward before exploding
 - **Comet:** Fast-moving, leaves blue fire trail
 
