@@ -1875,10 +1875,28 @@ function App() {
             }
           }
         } else if (c === SEED) {
-          // Seed: grows plants incrementally (optimized - no long stem scans)
+          // Seed: grows tall plant stems (20-30px, or 50-65px near sun)
 
-          // Skip most frames
-          if (rand() > 0.3) continue
+          // Fall like sand FIRST (always process movement)
+          if (belowCell === EMPTY) {
+            g[below] = SEED; g[p] = EMPTY; continue
+          } else if (belowCell === WATER && rand() < 0.5) {
+            g[below] = SEED; g[p] = WATER; continue
+          }
+
+          // Burns in fire (quick check - sample one neighbor)
+          const fireCheck = Math.floor(rand() * 8)
+          const fdx = [0,1,1,1,0,-1,-1,-1][fireCheck]
+          const fdy = [-1,-1,0,1,1,1,0,-1][fireCheck]
+          const fnx = x + fdx, fny = y + fdy
+          if (fnx >= 0 && fnx < cols && fny >= 0 && fny < rows) {
+            const fc = g[idx(fnx, fny)]
+            if (fc === FIRE || fc === PLASMA || fc === LAVA) { g[p] = FIRE; continue }
+            if ((fc === BUG || fc === ANT || fc === BIRD) && rand() < 0.3) { g[p] = EMPTY; continue }
+          }
+
+          // Skip growth frames for optimization (falling already handled above)
+          if (rand() > 0.35) continue
 
           // Quick check: can grow if on dirt/water or has plant above
           const aboveCell = y > 0 ? g[idx(x, y - 1)] : EMPTY
@@ -1901,12 +1919,13 @@ function App() {
           }
 
           // Grow rate based on conditions
-          const growRate = nearSun ? 0.6 : (nearWater ? 0.4 : 0.2)
+          const growRate = nearSun ? 0.7 : (nearWater ? 0.5 : 0.25)
           if (rand() > growRate) continue
 
-          // Find first empty/growable spot above (limit scan to 8 cells for speed)
+          // Find first empty spot above - taller scan for bigger plants
+          const maxHeight = nearSun ? 50 : (nearWater ? 30 : 20)
           let growY = -1
-          for (let h = 1; h <= 8; h++) {
+          for (let h = 1; h <= maxHeight; h++) {
             if (y - h < 0) break
             const cell = g[idx(x, y - h)]
             if (cell === EMPTY) { growY = y - h; break }
@@ -1915,36 +1934,18 @@ function App() {
 
           // Grow one plant/flower
           if (growY >= 0) {
-            // Flowers appear higher up, more with sun
             const flowerChance = nearSun ? 0.3 : (nearWater ? 0.15 : 0.1)
             g[idx(x, growY)] = rand() < flowerChance ? FLOWER : PLANT
           }
 
-          // Occasional branching (simplified)
-          if (rand() < (nearSun ? 0.15 : 0.08)) {
+          // Branching near top (more branches when taller)
+          const stemHeight = y - (growY >= 0 ? growY : y)
+          if (stemHeight > 10 && rand() < (nearSun ? 0.2 : 0.1)) {
             const bx = x + (rand() < 0.5 ? -1 : 1)
-            const by = y - Math.floor(rand() * 6) - 1
+            const by = y - Math.floor(rand() * Math.min(stemHeight, 15)) - 5
             if (bx >= 0 && bx < cols && by >= 0 && g[idx(bx, by)] === EMPTY) {
               g[idx(bx, by)] = rand() < 0.4 ? FLOWER : PLANT
             }
-          }
-
-          // Burns in fire (quick check - sample one neighbor)
-          const fireCheck = Math.floor(rand() * 8)
-          const fdx = [0,1,1,1,0,-1,-1,-1][fireCheck]
-          const fdy = [-1,-1,0,1,1,1,0,-1][fireCheck]
-          const fnx = x + fdx, fny = y + fdy
-          if (fnx >= 0 && fnx < cols && fny >= 0 && fny < rows) {
-            const fc = g[idx(fnx, fny)]
-            if (fc === FIRE || fc === PLASMA || fc === LAVA) { g[p] = FIRE; continue }
-            if ((fc === BUG || fc === ANT || fc === BIRD) && rand() < 0.3) { g[p] = EMPTY; continue }
-          }
-
-          // Fall like sand
-          if (belowCell === EMPTY) {
-            g[below] = SEED; g[p] = EMPTY
-          } else if (belowCell === WATER && rand() < 0.5) {
-            g[below] = SEED; g[p] = WATER
           }
         } else if (c === RUST) {
           // Rust: corrosion that forms on wet stone, spreads, crumbles to dirt
