@@ -120,7 +120,7 @@ const COLORS_U32 = new Uint32Array([
   0xFF87B8DE, // DUST (burlywood/warm beige)
   0xFF0066FF, // FIREWORK (bright orange)
   0xFFEBCE87, // BUBBLE (sky blue)
-  0, // GLITTER (dynamic - silver/white sparkle)
+  0xFFC0C0C0, // GLITTER (silver)
   0xFFEE82EE, // STAR (bright violet)
   0xFFFFF97D, // COMET (electric blue)
   0xFFFF901E, // BLUE_FIRE (cyan-blue fire)
@@ -131,7 +131,6 @@ const FIRE_COLORS = new Uint32Array(32)
 const PLASMA_COLORS = new Uint32Array(64)
 const LIGHTNING_COLORS = new Uint32Array(32)
 const BLUE_FIRE_COLORS = new Uint32Array(32)
-const GLITTER_COLORS = new Uint32Array(16)
 for (let i = 0; i < 32; i++) {
   FIRE_COLORS[i] = hslToU32(10 + i, 100, 50 + (i / 32) * 20)
   LIGHTNING_COLORS[i] = hslToU32(50 + (i / 32) * 20, 100, 80 + (i / 32) * 20)
@@ -139,10 +138,6 @@ for (let i = 0; i < 32; i++) {
 }
 for (let i = 0; i < 64; i++) {
   PLASMA_COLORS[i] = hslToU32(i < 32 ? 280 + i : 320 + (i - 32), 100, 60 + (i / 64) * 25)
-}
-// Glitter alternates between silver and white
-for (let i = 0; i < 16; i++) {
-  GLITTER_COLORS[i] = i % 2 === 0 ? 0xFFC0C0C0 : 0xFFFFFFFF // Silver and white
 }
 
 const BG_COLOR = 0xFF1A1A1A
@@ -2076,21 +2071,25 @@ function App() {
             }
           }
         } else if (c === POISON) {
-          // Poison: toxic liquid, kills creatures and algae, diluted by water
+          // Poison: toxic liquid, kills creatures, converts algae and plant to poison
 
-          // Kill adjacent creatures and algae
+          // Kill creatures and convert organics to poison
           for (let pdy = -1; pdy <= 1; pdy++) {
             for (let pdx = -1; pdx <= 1; pdx++) {
               if (pdy === 0 && pdx === 0) continue
               const pnx = x + pdx, pny = y + pdy
               if (pnx >= 0 && pnx < cols && pny >= 0 && pny < rows) {
                 const pnc = g[idx(pnx, pny)]
-                // Kill all creatures
+                // Kill all creatures - turn to poison
                 if ((pnc === BUG || pnc === ANT || pnc === BIRD || pnc === BEE || pnc === SLIME) && rand() < 0.4) {
-                  g[idx(pnx, pny)] = POISON // Creature becomes more poison!
+                  g[idx(pnx, pny)] = POISON
                 }
-                // Kill algae - poison beats algae!
+                // Turn algae to poison
                 if (pnc === ALGAE && rand() < 0.5) {
+                  g[idx(pnx, pny)] = POISON
+                }
+                // Turn plant to poison
+                if (pnc === PLANT && rand() < 0.3) {
                   g[idx(pnx, pny)] = POISON
                 }
                 // Diluted by water
@@ -2157,53 +2156,28 @@ function App() {
             }
           }
         } else if (c === GLITTER) {
-          // Glitter: sparkly, spreads everywhere, sticks to surfaces
+          // Glitter: silver sparkle, disappears quickly at first then slowly
 
-          // Slowly decay
-          if (rand() < 0.003) { g[p] = EMPTY; continue }
-
-          // Spread to neighbors! Glitter gets everywhere
-          if (rand() < 0.08) {
-            const gdx = Math.floor(rand() * 3) - 1
-            const gdy = Math.floor(rand() * 3) - 1
-            const gnx = x + gdx, gny = y + gdy
-            if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows) {
-              const gi = idx(gnx, gny)
-              // Stick to surfaces, spread through empty
-              if (g[gi] === EMPTY && rand() < 0.4) {
-                g[gi] = GLITTER
-              }
-            }
-          }
-
-          // Check if stuck to something
-          let stuckToSurface = false
+          // Count nearby glitter - more glitter = slower decay
+          let nearbyGlitter = 0
           for (let gdy = -1; gdy <= 1; gdy++) {
             for (let gdx = -1; gdx <= 1; gdx++) {
               if (gdy === 0 && gdx === 0) continue
               const gnx = x + gdx, gny = y + gdy
               if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows) {
-                const gnc = g[idx(gnx, gny)]
-                // Stick to solid surfaces
-                if (gnc !== EMPTY && gnc !== GLITTER && gnc !== GAS && gnc !== FIRE && gnc !== WATER) {
-                  stuckToSurface = true
-                  break
-                }
+                if (g[idx(gnx, gny)] === GLITTER) nearbyGlitter++
               }
             }
-            if (stuckToSurface) break
           }
 
-          // Fall slowly if not stuck, otherwise stay put and sparkle
-          if (!stuckToSurface && rand() < 0.4) {
+          // Decay rate: fast when alone (15%), slow when clustered (1%)
+          const decayRate = nearbyGlitter === 0 ? 0.15 : (nearbyGlitter < 3 ? 0.05 : 0.01)
+          if (rand() < decayRate) { g[p] = EMPTY; continue }
+
+          // Fall slowly
+          if (rand() < 0.3) {
             if (belowCell === EMPTY) {
               g[below] = GLITTER; g[p] = EMPTY
-            } else if (belowCell === WATER) {
-              // Float on water
-              const gdx = rand() < 0.5 ? -1 : 1
-              if (x + gdx >= 0 && x + gdx < cols && g[idx(x + gdx, y)] === EMPTY) {
-                g[idx(x + gdx, y)] = GLITTER; g[p] = EMPTY
-              }
             } else {
               const gdx = rand() < 0.5 ? -1 : 1
               if (x + gdx >= 0 && x + gdx < cols && g[idx(x + gdx, y + 1)] === EMPTY) {
@@ -2318,7 +2292,6 @@ function App() {
         else if (c === PLASMA) color = PLASMA_COLORS[(cx + cy) & 63]
         else if (c === LIGHTNING) color = LIGHTNING_COLORS[(cx + cy) & 31]
         else if (c === BLUE_FIRE) color = BLUE_FIRE_COLORS[(cx + cy) & 31]
-        else if (c === GLITTER) color = GLITTER_COLORS[(cx + cy) & 15]
         else color = COLORS_U32[c]
 
         const startX = cx * CELL_SIZE
