@@ -1901,137 +1901,69 @@ function App() {
             }
           }
         } else if (c === SEED) {
-          // Seed: grows huge plants, shoots through dirt/water, sun makes it massive
+          // Seed: grows plants incrementally (optimized - no long stem scans)
 
-          // Skip some frames to reduce lag
-          if (rand() > 0.4) continue
+          // Skip most frames
+          if (rand() > 0.3) continue
 
-          // Check for dirt below OR dirt/water above (seed can be buried)
-          let canGrow = false
-          if (y < rows - 1 && (g[below] === DIRT || g[below] === WATER)) canGrow = true
-          // Check if buried under dirt - can still grow!
-          if (!canGrow && y > 0) {
-            const above = g[idx(x, y - 1)]
-            if (above === DIRT || above === WATER || above === PLANT) canGrow = true
-          }
+          // Quick check: can grow if on dirt/water or has plant above
+          const aboveCell = y > 0 ? g[idx(x, y - 1)] : EMPTY
+          const canGrow = (y < rows - 1 && (g[below] === DIRT || g[below] === WATER)) ||
+                          (aboveCell === DIRT || aboveCell === WATER || aboveCell === PLANT)
 
-          // Only check for water/sun if we can grow (optimization)
+          if (!canGrow) continue
+
+          // Quick sample for water/sun (only 6 samples)
           let nearWater = false, nearSun = false
-          if (canGrow) {
-            // Sample random spots instead of checking all 289 cells
-            for (let sample = 0; sample < 12; sample++) {
-              const sdx = Math.floor(rand() * 17) - 8
-              const sdy = Math.floor(rand() * 17) - 8
-              const snx = x + sdx, sny = y + sdy
-              if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
-                const nc = g[idx(snx, sny)]
-                if (nc === WATER) nearWater = true
-                if (nc === STAR) nearSun = true
-              }
-              if (nearWater && nearSun) break // Found both, stop
+          for (let s = 0; s < 6; s++) {
+            const sdx = Math.floor(rand() * 13) - 6
+            const sdy = Math.floor(rand() * 13) - 6
+            const snx = x + sdx, sny = y + sdy
+            if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
+              const nc = g[idx(snx, sny)]
+              if (nc === WATER) nearWater = true
+              if (nc === STAR) nearSun = true
             }
           }
 
-          // Grow! Sun makes it HUGE
-          if (canGrow) {
-            let maxHeight = 22
-            if (nearWater) maxHeight = 35
-            if (nearSun) maxHeight = 50  // Sun = massive growth!
-            if (nearWater && nearSun) maxHeight = 65
+          // Grow rate based on conditions
+          const growRate = nearSun ? 0.6 : (nearWater ? 0.4 : 0.2)
+          if (rand() > growRate) continue
 
-            const growRate = nearSun ? 0.5 : (nearWater ? 0.4 : 0.25)
-
-            if (rand() < growRate) {
-              // Find stem height - can grow through dirt, water, seeds
-              let stemHeight = 0
-              for (let h = 1; h <= maxHeight; h++) {
-                if (y - h < 0) break
-                const cell = g[idx(x, y - h)]
-                if (cell === PLANT || cell === FLOWER || cell === SEED || cell === WATER || cell === DIRT) {
-                  stemHeight = h
-                } else {
-                  break
-                }
-              }
-
-              // Grow straight up - push through dirt and water!
-              const nextY = y - stemHeight - 1
-              if (nextY >= 0 && stemHeight < maxHeight) {
-                const ni = idx(x, nextY)
-                const nc = g[ni]
-                if (nc === EMPTY || nc === SEED || nc === WATER || nc === DIRT) {
-                  const flowerHeight = nearSun ? maxHeight - 10 : (nearWater ? 28 : 18)
-                  g[ni] = (stemHeight >= flowerHeight) ? FLOWER : PLANT
-                }
-              }
-
-              // Branch out near top
-              const branchStart = Math.floor(maxHeight * 0.55)
-              if (stemHeight >= branchStart && rand() < (nearSun ? 0.3 : 0.2)) {
-                const branchDir = rand() < 0.5 ? -1 : 1
-                const branchX = x + branchDir
-                for (let bh = 0; bh <= 4; bh++) {
-                  const branchY = y - stemHeight + bh
-                  if (branchX >= 0 && branchX < cols && branchY >= 0) {
-                    const bi = idx(branchX, branchY)
-                    const bc = g[bi]
-                    if (bc === EMPTY || bc === WATER || bc === DIRT) {
-                      g[bi] = rand() < 0.4 ? FLOWER : PLANT
-                      break
-                    }
-                  }
-                }
-              }
-
-              // More branches with sun
-              if (nearSun && stemHeight >= branchStart + 3 && rand() < 0.2) {
-                const dx = (rand() < 0.5 ? -1 : 1) * (Math.floor(rand() * 3) + 1)
-                const branchY = y - stemHeight + Math.floor(rand() * 5)
-                if (x + dx >= 0 && x + dx < cols && branchY >= 0) {
-                  const dbi = idx(x + dx, branchY)
-                  if (g[dbi] === EMPTY || g[dbi] === WATER) {
-                    g[dbi] = rand() < 0.5 ? FLOWER : PLANT
-                  }
-                }
-              }
-
-              // Flowers at top
-              if (stemHeight >= maxHeight - 6 && rand() < 0.3) {
-                const topIdx = idx(x, y - stemHeight)
-                if (g[topIdx] === PLANT) g[topIdx] = FLOWER
-              }
-            }
-            continue // Stay as seed
+          // Find first empty/growable spot above (limit scan to 8 cells for speed)
+          let growY = -1
+          for (let h = 1; h <= 8; h++) {
+            if (y - h < 0) break
+            const cell = g[idx(x, y - h)]
+            if (cell === EMPTY) { growY = y - h; break }
+            if (cell !== PLANT && cell !== FLOWER && cell !== WATER && cell !== DIRT && cell !== SEED) break
           }
 
-          // Burns in fire
-          for (let sdy = -1; sdy <= 1; sdy++) {
-            for (let sdx = -1; sdx <= 1; sdx++) {
-              if (sdy === 0 && sdx === 0) continue
-              const snx = x + sdx, sny = y + sdy
-              if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
-                const snc = g[idx(snx, sny)]
-                if (snc === FIRE || snc === PLASMA || snc === LAVA) {
-                  g[p] = FIRE
-                  continue
-                }
-              }
+          // Grow one plant/flower
+          if (growY >= 0) {
+            // Flowers appear higher up, more with sun
+            const flowerChance = nearSun ? 0.3 : (nearWater ? 0.15 : 0.1)
+            g[idx(x, growY)] = rand() < flowerChance ? FLOWER : PLANT
+          }
+
+          // Occasional branching (simplified)
+          if (rand() < (nearSun ? 0.15 : 0.08)) {
+            const bx = x + (rand() < 0.5 ? -1 : 1)
+            const by = y - Math.floor(rand() * 6) - 1
+            if (bx >= 0 && bx < cols && by >= 0 && g[idx(bx, by)] === EMPTY) {
+              g[idx(bx, by)] = rand() < 0.4 ? FLOWER : PLANT
             }
           }
 
-          // Eaten by creatures
-          for (let sdy = -1; sdy <= 1; sdy++) {
-            for (let sdx = -1; sdx <= 1; sdx++) {
-              if (sdy === 0 && sdx === 0) continue
-              const snx = x + sdx, sny = y + sdy
-              if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
-                const snc = g[idx(snx, sny)]
-                if ((snc === BUG || snc === ANT || snc === BIRD) && rand() < 0.2) {
-                  g[p] = EMPTY
-                  continue
-                }
-              }
-            }
+          // Burns in fire (quick check - sample one neighbor)
+          const fireCheck = Math.floor(rand() * 8)
+          const fdx = [0,1,1,1,0,-1,-1,-1][fireCheck]
+          const fdy = [-1,-1,0,1,1,1,0,-1][fireCheck]
+          const fnx = x + fdx, fny = y + fdy
+          if (fnx >= 0 && fnx < cols && fny >= 0 && fny < rows) {
+            const fc = g[idx(fnx, fny)]
+            if (fc === FIRE || fc === PLASMA || fc === LAVA) { g[p] = FIRE; continue }
+            if ((fc === BUG || fc === ANT || fc === BIRD) && rand() < 0.3) { g[p] = EMPTY; continue }
           }
 
           // Fall like sand
@@ -2039,12 +1971,6 @@ function App() {
             g[below] = SEED; g[p] = EMPTY
           } else if (belowCell === WATER && rand() < 0.5) {
             g[below] = SEED; g[p] = WATER
-          } else {
-            const sdx = rand() < 0.5 ? -1 : 1
-            const snx = x + sdx
-            if (snx >= 0 && snx < cols && g[idx(snx, y)] === EMPTY && g[idx(snx, y + 1)] === EMPTY) {
-              g[idx(snx, y + 1)] = SEED; g[p] = EMPTY
-            }
           }
         } else if (c === RUST) {
           // Rust: corrosion that forms on wet stone, spreads, crumbles to dirt
@@ -2247,12 +2173,12 @@ function App() {
             }
           }
         } else if (c === STAR) {
-          // Star: yellow sun - grows plants/flowers/algae, melts snow, emits particles
+          // Star: yellow sun - grows plants/flowers/algae over large area
 
-          // Constantly emit static and glitter around the sun
-          if (rand() < 0.15) {
+          // Constantly emit static and glitter
+          if (rand() < 0.12) {
             const angle = rand() * 6.28318
-            const dist = rand() * 3 + 1
+            const dist = rand() * 4 + 1
             const ex = x + Math.round(Math.cos(angle) * dist)
             const ey = y + Math.round(Math.sin(angle) * dist)
             if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY) {
@@ -2260,9 +2186,9 @@ function App() {
             }
           }
 
-          // Sample random spots for sun effects (optimized - no nested loops)
-          const sunRadius = 10
-          for (let sample = 0; sample < 20; sample++) {
+          // Large radius effects (optimized - 25 samples over radius 18)
+          const sunRadius = 18
+          for (let sample = 0; sample < 25; sample++) {
             const angle = rand() * 6.28318
             const dist = rand() * sunRadius + 1
             const sdx = Math.round(Math.cos(angle) * dist)
@@ -2274,19 +2200,19 @@ function App() {
             const si = idx(snx, sny), sc = g[si]
 
             // Grow plants from dirt
-            if (sc === DIRT && rand() < 0.15) {
+            if (sc === DIRT && rand() < 0.12) {
               g[si] = rand() < 0.35 ? FLOWER : PLANT
             }
             // Make plants flower
-            else if (sc === PLANT && rand() < 0.12) {
+            else if (sc === PLANT && rand() < 0.1) {
               g[si] = FLOWER
             }
             // Grow algae in water
-            else if (sc === WATER && rand() < 0.08) {
+            else if (sc === WATER && rand() < 0.06) {
               g[si] = ALGAE
             }
-            // Spread algae
-            else if (sc === ALGAE && rand() < 0.1) {
+            // Spread algae aggressively
+            else if (sc === ALGAE && rand() < 0.12) {
               const adx = Math.floor(rand() * 3) - 1
               const ady = Math.floor(rand() * 3) - 1
               const anx = snx + adx, any = sny + ady
@@ -2294,24 +2220,24 @@ function App() {
                 g[idx(anx, any)] = ALGAE
               }
             }
-            // Boost seed growth
-            else if (sc === SEED && rand() < 0.1) {
+            // Boost seed - add plant above
+            else if (sc === SEED && rand() < 0.08) {
               const above = sny > 0 ? idx(snx, sny - 1) : -1
               if (above >= 0 && g[above] === EMPTY) {
-                g[above] = rand() < 0.2 ? FLOWER : PLANT
+                g[above] = rand() < 0.25 ? FLOWER : PLANT
               }
             }
-            // Melt snow to water
-            else if (sc === SNOW && rand() < 0.25) {
+            // Melt snow
+            else if (sc === SNOW && rand() < 0.2) {
               g[si] = WATER
             }
-            // Evaporate water to gas
-            else if (sc === WATER && rand() < 0.02) {
+            // Evaporate water
+            else if (sc === WATER && rand() < 0.015) {
               g[si] = GAS
             }
           }
 
-          // Star is stationary like a sun
+          // Star is stationary
         } else if (c === BLACK_HOLE) {
           // Black hole: gravity pulls in particles (optimized)
 
