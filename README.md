@@ -59,6 +59,13 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 | **Nitro** | Bright green | Falls, explodes on contact with solids, creates stone from water |
 | **Gunpowder** | Dark grey | Falls like sand, massive explosion on fire (radius 12, destroys stone) |
 
+### Hazardous Elements
+| Particle | Color | Behavior |
+|----------|-------|----------|
+| **Acid** | Toxic yellow-green | Corrosive liquid, dissolves organics (dirt, sand, plants, creatures), neutralized by water into gas |
+| **Lava** | Deep crimson | Molten rock, flows slowly, ignites flammables, melts sand→glass, cools to stone with water/snow |
+| **Snow** | Icy light blue | Falls slowly like fluff, piles up, freezes water→ice, melts near fire/lava/plasma/ember |
+
 ### Special Elements
 | Particle | Color | Behavior |
 |----------|-------|----------|
@@ -71,7 +78,7 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 | Particle | Color | Behavior |
 |----------|-------|----------|
 | **Tap** | Silver | Static, spawns water below continuously |
-| **Cloud** | White | Floats around, drops water slowly (slower than tap) |
+| **Cloud** | Light grey | Floats around, drops water slowly (slower than tap) |
 | **Anthill** | Yellow-brown | Static, spawns ants, burns on fire |
 | **Hive** | Amber | Static, spawns bees, burns on fire |
 | **Nest** | Brown-grey | Static, spawns birds, burns on fire |
@@ -157,6 +164,13 @@ flowchart LR
     Plasma -->|ignites| Fluff
     Plasma -->|ignites| Gas
     Plasma -->|ignites| Flower
+    Lava((Lava)) -->|ignites| Plant
+    Lava -->|ignites| Fluff
+    Lava -->|ignites| Gas
+    Lava -->|ignites| Flower
+    Lava -->|ignites| Gunpowder
+    Lava -->|ignites| Hive
+    Lava -->|ignites| Nest
     Lightning -->|creates| Fire
     Ember -->|reignites| Plant
     Gunpowder -->|explodes to| Fire
@@ -242,6 +256,51 @@ flowchart LR
     Bullet -.->|through| PassThrough
     Bullet -->|penetrates| Penetrates
     Bullet -->|leaves| Trail[Bullet Trail]
+```
+
+### Acid Corrosion
+```mermaid
+flowchart LR
+    Acid((Acid)) -->|dissolves| Dirt
+    Acid -->|dissolves| Sand
+    Acid -->|dissolves| Plant
+    Acid -->|dissolves| Flower
+    Acid -->|dissolves| Fluff
+    Acid -->|dissolves| Honey
+    Acid -->|kills| Bug
+    Acid -->|kills| Ant
+    Acid -->|kills| Bird
+    Acid -->|kills| Bee
+    Acid -->|kills| Slime
+    Water[Water] -->|neutralizes| Acid
+    Acid -->|becomes| Gas[Gas]
+```
+
+### Temperature Interactions
+```mermaid
+flowchart TD
+    subgraph Hot[Heat Sources]
+        Fire[Fire]
+        Plasma[Plasma]
+        Ember[Ember]
+        Lava[Lava]
+    end
+
+    subgraph Cold[Cold]
+        Snow[Snow]
+    end
+
+    Hot -->|melts| Snow
+    Snow -->|becomes| Water[Water]
+    Snow -->|freezes| Water
+    Water -->|becomes| Ice[Glass/Ice]
+
+    Lava -->|melts| Sand[Sand]
+    Sand -->|becomes| Glass[Glass]
+
+    Water -->|cools| Lava
+    Snow -->|cools| Lava
+    Lava -->|becomes| Stone[Stone]
 ```
 
 ---

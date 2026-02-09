@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
@@ -14,7 +14,10 @@ const BEE = 25, FLOWER = 26, HIVE = 27, HONEY = 28, NEST = 29, GUN = 30
 const BULLET_N = 31, BULLET_NE = 32, BULLET_E = 33, BULLET_SE = 34
 const BULLET_S = 35, BULLET_SW = 36, BULLET_W = 37, BULLET_NW = 38
 const BULLET_TRAIL = 39 // Yellow trail left by bullets
-const CLOUD = 40 // White floating particle that drops water
+const CLOUD = 40 // Light grey floating particle that drops water
+const ACID = 41 // Toxic green corrosive liquid
+const LAVA = 42 // Molten rock, ignites and melts
+const SNOW = 43 // Cold particle, freezes water, melts near fire
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
@@ -22,6 +25,7 @@ const MATERIAL_TO_ID: Record<Material, number> = {
   nitro: NITRO, glass: GLASS, lightning: LIGHTNING, slime: SLIME, ant: ANT, alien: ALIEN, quark: QUARK,
   crystal: CRYSTAL, ember: EMBER, static: STATIC, bird: BIRD, gunpowder: GUNPOWDER, tap: TAP, anthill: ANTHILL,
   bee: BEE, flower: FLOWER, hive: HIVE, honey: HONEY, nest: NEST, gun: GUN, cloud: CLOUD,
+  acid: ACID, lava: LAVA, snow: SNOW,
 }
 
 // Density for displacement (higher sinks through lower, 0 = doesn't displace)
@@ -82,7 +86,10 @@ const COLORS_U32 = new Uint32Array([
   0xFF44FFFF, // BULLET_W
   0xFF44FFFF, // BULLET_NW
   0xFF44DDFF, // BULLET_TRAIL (yellow, slightly dimmer)
-  0xFFFFFFFF, // CLOUD (white)
+  0xFFD8D0C8, // CLOUD (light blue-grey, distinct from bird)
+  0xFF00FFBF, // ACID (toxic chartreuse yellow-green)
+  0xFF1414DC, // LAVA (deep crimson red)
+  0xFFFFF0E0, // SNOW (icy light blue)
 ])
 
 // Dynamic color palettes
@@ -105,7 +112,8 @@ const BUTTON_COLORS: Record<Material, string> = {
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
   lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a', alien: '#00ff00', quark: '#ff00ff',
   crystal: '#80d0ff', ember: '#ff4020', static: '#44ffff', bird: '#e8e8e8', gunpowder: '#303030', tap: '#c0c0c0', anthill: '#b08030',
-  bee: '#ffd800', flower: '#cc44ff', hive: '#e8b840', honey: '#ffa030', nest: '#a08080', gun: '#505050', cloud: '#ffffff',
+  bee: '#ffd800', flower: '#cc44ff', hive: '#e8b840', honey: '#ffa030', nest: '#a08080', gun: '#505050', cloud: '#c8d0d8',
+  acid: '#bfff00', lava: '#dc1414', snow: '#e0f0ff',
 }
 
 function App() {
@@ -1351,6 +1359,133 @@ function App() {
               }
             }
           }
+        } else if (c === ACID) {
+          // Acid: corrosive liquid that dissolves organics, neutralized by water
+
+          // Check neighbors for reactions
+          let reacted = false
+          for (let ady = -1; ady <= 1 && !reacted; ady++) {
+            for (let adx = -1; adx <= 1 && !reacted; adx++) {
+              if (ady === 0 && adx === 0) continue
+              const anx = x + adx, any = y + ady
+              if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
+                const ani = idx(anx, any), anc = g[ani]
+                // Neutralize with water - both become gas
+                if (anc === WATER && rand() < 0.3) {
+                  g[ani] = GAS
+                  g[p] = rand() < 0.5 ? GAS : EMPTY
+                  reacted = true
+                }
+                // Dissolve organics and soft materials
+                else if ((anc === DIRT || anc === SAND || anc === PLANT || anc === FLOWER ||
+                          anc === FLUFF || anc === BUG || anc === ANT || anc === SLIME ||
+                          anc === HONEY || anc === BIRD || anc === BEE) && rand() < 0.2) {
+                  g[ani] = rand() < 0.3 ? GAS : EMPTY
+                  if (rand() < 0.1) g[p] = EMPTY // Acid consumed
+                  reacted = true
+                }
+              }
+            }
+          }
+          if (reacted) continue
+
+          // Flow like water
+          if (belowCell === EMPTY) { g[below] = ACID; g[p] = EMPTY }
+          else {
+            const adx = rand() < 0.5 ? -1 : 1
+            const anx1 = x + adx, anx2 = x - adx
+            if (anx1 >= 0 && anx1 < cols && g[idx(anx1, y + 1)] === EMPTY) { g[idx(anx1, y + 1)] = ACID; g[p] = EMPTY }
+            else if (anx2 >= 0 && anx2 < cols && g[idx(anx2, y + 1)] === EMPTY) { g[idx(anx2, y + 1)] = ACID; g[p] = EMPTY }
+            else if (anx1 >= 0 && anx1 < cols && g[idx(anx1, y)] === EMPTY) { g[idx(anx1, y)] = ACID; g[p] = EMPTY }
+            else if (anx2 >= 0 && anx2 < cols && g[idx(anx2, y)] === EMPTY) { g[idx(anx2, y)] = ACID; g[p] = EMPTY }
+          }
+        } else if (c === LAVA) {
+          // Lava: molten rock, ignites everything, cools to stone with water
+
+          // Check neighbors for reactions
+          for (let ldy = -1; ldy <= 1; ldy++) {
+            for (let ldx = -1; ldx <= 1; ldx++) {
+              if (ldy === 0 && ldx === 0) continue
+              const lnx = x + ldx, lny = y + ldy
+              if (lnx >= 0 && lnx < cols && lny >= 0 && lny < rows) {
+                const lni = idx(lnx, lny), lnc = g[lni]
+                // Water cools lava to stone, creates steam
+                if (lnc === WATER) {
+                  g[lni] = GAS
+                  if (rand() < 0.3) { g[p] = STONE; continue }
+                }
+                // Snow cools lava and melts
+                else if (lnc === SNOW) {
+                  g[lni] = WATER
+                  if (rand() < 0.2) g[p] = STONE
+                }
+                // Melt sand into glass
+                else if (lnc === SAND && rand() < 0.15) {
+                  g[lni] = GLASS
+                }
+                // Ignite flammables
+                else if ((lnc === PLANT || lnc === FLUFF || lnc === GAS || lnc === FLOWER ||
+                          lnc === GUNPOWDER || lnc === HIVE || lnc === NEST) && rand() < 0.4) {
+                  g[lni] = FIRE
+                }
+                // Kill creatures
+                else if ((lnc === BUG || lnc === ANT || lnc === BIRD || lnc === BEE) && rand() < 0.5) {
+                  g[lni] = FIRE
+                }
+              }
+            }
+          }
+
+          // Slow decay
+          if (rand() < 0.002) { g[p] = STONE; continue }
+
+          // Flow slowly like honey
+          if (rand() > 0.15) continue
+          if (belowCell === EMPTY) { g[below] = LAVA; g[p] = EMPTY }
+          else {
+            const ldx = rand() < 0.5 ? -1 : 1
+            const lnx1 = x + ldx, lnx2 = x - ldx
+            if (lnx1 >= 0 && lnx1 < cols && g[idx(lnx1, y + 1)] === EMPTY) { g[idx(lnx1, y + 1)] = LAVA; g[p] = EMPTY }
+            else if (lnx2 >= 0 && lnx2 < cols && g[idx(lnx2, y + 1)] === EMPTY) { g[idx(lnx2, y + 1)] = LAVA; g[p] = EMPTY }
+            else if (lnx1 >= 0 && lnx1 < cols && g[idx(lnx1, y)] === EMPTY && rand() < 0.3) { g[idx(lnx1, y)] = LAVA; g[p] = EMPTY }
+            else if (lnx2 >= 0 && lnx2 < cols && g[idx(lnx2, y)] === EMPTY && rand() < 0.3) { g[idx(lnx2, y)] = LAVA; g[p] = EMPTY }
+          }
+        } else if (c === SNOW) {
+          // Snow: cold particle, freezes water, melts near heat
+
+          // Check neighbors for reactions
+          let melted = false
+          for (let sdy = -1; sdy <= 1 && !melted; sdy++) {
+            for (let sdx = -1; sdx <= 1 && !melted; sdx++) {
+              if (sdy === 0 && sdx === 0) continue
+              const snx = x + sdx, sny = y + sdy
+              if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
+                const snc = g[idx(snx, sny)]
+                // Melt near fire/plasma/ember/lava
+                if ((snc === FIRE || snc === PLASMA || snc === EMBER || snc === LAVA) && rand() < 0.4) {
+                  g[p] = WATER
+                  melted = true
+                }
+                // Freeze water into ice (glass)
+                else if (snc === WATER && rand() < 0.02) {
+                  g[idx(snx, sny)] = GLASS
+                }
+              }
+            }
+          }
+          if (melted) continue
+
+          // Fall slowly like fluff, pile up
+          if (rand() < 0.25 && belowCell === EMPTY) {
+            g[below] = SNOW; g[p] = EMPTY
+          } else if (rand() < 0.1) {
+            // Slight drift
+            const sdx = rand() < 0.5 ? -1 : 1
+            const snx = x + sdx
+            if (snx >= 0 && snx < cols && g[idx(snx, y + 1)] === EMPTY) {
+              g[idx(snx, y + 1)] = SNOW; g[p] = EMPTY
+            }
+          }
         }
       }
     }
@@ -1482,7 +1617,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey', 'nest', 'gun', 'cloud']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey', 'nest', 'gun', 'cloud', 'acid', 'lava', 'snow']
 
   return (
     <div className="app">
