@@ -1887,13 +1887,14 @@ function App() {
             }
           }
         } else if (c === SEED) {
-          // Seed: spawner that grows tall plants (5-10 pixels) when on dirt near water
+          // Seed: grows straight plant stem 5-10 high with flowers on top
+          // Works on dirt alone, grows BIGGER with water nearby
 
-          // Check for growing conditions
+          // Check conditions
           let onDirt = false, nearWater = false
           if (y < rows - 1 && g[below] === DIRT) onDirt = true
-          for (let sdy = -2; sdy <= 2 && !nearWater; sdy++) {
-            for (let sdx = -2; sdx <= 2 && !nearWater; sdx++) {
+          for (let sdy = -3; sdy <= 3 && !nearWater; sdy++) {
+            for (let sdx = -3; sdx <= 3 && !nearWater; sdx++) {
               const snx = x + sdx, sny = y + sdy
               if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
                 if (g[idx(snx, sny)] === WATER) nearWater = true
@@ -1901,46 +1902,42 @@ function App() {
             }
           }
 
-          // Grow tall plants! - fast spawner, 5-10 pixels high
-          if (onDirt && nearWater) {
-            // Very rapidly spawn plants growing upward - 30% chance per tick!
-            if (rand() < 0.3) {
-              // Find the top of the current plant stack and grow from there
-              let topY = y - 1
-              for (let h = 1; h <= 10; h++) {
+          // Grow on dirt! Water makes it bigger
+          if (onDirt) {
+            const maxHeight = nearWater ? 12 : 7
+            const growRate = nearWater ? 0.35 : 0.2
+
+            if (rand() < growRate) {
+              // Find current stem height
+              let stemHeight = 0
+              for (let h = 1; h <= maxHeight; h++) {
                 if (y - h < 0) break
-                const checkCell = g[idx(x, y - h)]
-                if (checkCell === PLANT || checkCell === FLOWER) {
-                  topY = y - h - 1
-                } else if (checkCell !== EMPTY) {
+                const cell = g[idx(x, y - h)]
+                if (cell === PLANT || cell === FLOWER) {
+                  stemHeight = h
+                } else {
                   break
                 }
               }
 
-              // Grow at the top if within 5-10 range and empty
-              if (topY >= 0 && topY > y - 10) {
-                const ti = idx(x, topY)
-                if (g[ti] === EMPTY) {
-                  // Flowers at top (25%), plants below
-                  const height = y - topY
-                  g[ti] = (height >= 5 && rand() < 0.4) ? FLOWER : PLANT
+              // Grow straight up if room
+              const nextY = y - stemHeight - 1
+              if (nextY >= 0 && stemHeight < maxHeight) {
+                const ni = idx(x, nextY)
+                if (g[ni] === EMPTY) {
+                  // Flower at top when tall enough
+                  const flowerHeight = nearWater ? 8 : 5
+                  g[ni] = (stemHeight >= flowerHeight - 1) ? FLOWER : PLANT
                 }
               }
-            }
-            // Spread sideways to create bushier plants
-            if (rand() < 0.08) {
-              const sdx = rand() < 0.5 ? -1 : 1
-              for (let h = 1; h <= 3; h++) {
-                if (x + sdx >= 0 && x + sdx < cols && y - h > 0) {
-                  const si = idx(x + sdx, y - h)
-                  if (g[si] === EMPTY) {
-                    g[si] = rand() < 0.3 ? FLOWER : PLANT
-                    break
-                  }
-                }
+
+              // Add more flowers at top when done
+              if (stemHeight >= (nearWater ? 10 : 5) && rand() < 0.15) {
+                const topIdx = idx(x, y - stemHeight)
+                if (g[topIdx] === PLANT) g[topIdx] = FLOWER
               }
             }
-            continue // Stay as seed, keep spawning
+            continue // Stay as seed
           }
 
           // Burns in fire
@@ -2084,12 +2081,12 @@ function App() {
                 if ((pnc === BUG || pnc === ANT || pnc === BIRD || pnc === BEE || pnc === SLIME) && rand() < 0.4) {
                   g[idx(pnx, pny)] = POISON
                 }
-                // Turn algae to poison
-                if (pnc === ALGAE && rand() < 0.5) {
+                // Turn algae to poison (slowly)
+                if (pnc === ALGAE && rand() < 0.05) {
                   g[idx(pnx, pny)] = POISON
                 }
-                // Turn plant to poison
-                if (pnc === PLANT && rand() < 0.3) {
+                // Turn plant to poison (slowly)
+                if (pnc === PLANT && rand() < 0.03) {
                   g[idx(pnx, pny)] = POISON
                 }
                 // Diluted by water
