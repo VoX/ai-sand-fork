@@ -116,7 +116,7 @@ const COLORS_U32 = new Uint32Array([
   0xFF74A5D4, // SEED (tan/wheat)
   0xFF0E41B7, // RUST (terracotta/rust orange-brown)
   0xFFAAB220, // SPORE (teal/sea green)
-  0xFF578B2E, // ALGAE (sea green, aquatic)
+  0xFF3D7025, // ALGAE (darker sea green, aquatic)
   0xFF8B008B, // POISON (dark magenta)
   0xFF87B8DE, // DUST (burlywood/warm beige)
   0xFF0066FF, // FIREWORK (bright orange)
@@ -439,7 +439,7 @@ function App() {
         } else if (c === CLOUD) {
           // Cloud: floats around and drops water
           // Drop water below (slower than tap's 15%)
-          if (y < rows - 1 && g[idx(x, y + 1)] === EMPTY && rand() < 0.08) {
+          if (y < rows - 1 && g[idx(x, y + 1)] === EMPTY && rand() < 0.04) {
             g[idx(x, y + 1)] = WATER
           }
           // Float around - drift sideways and occasionally up/down
