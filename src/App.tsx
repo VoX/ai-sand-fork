@@ -173,6 +173,7 @@ function App() {
   const pointerPosRef = useRef<{ x: number; y: number } | null>(null)
   const lastUpdateRef = useRef<number>(0)
   const physicsAccumRef = useRef<number>(0)
+  const updatePhysicsRef = useRef<(() => void) | null>(null)
 
   const initGrid = useCallback(() => {
     const canvas = canvasRef.current
@@ -192,6 +193,41 @@ function App() {
 
     const ctx = canvas.getContext('2d')
     if (ctx) imageDataRef.current = ctx.createImageData(width, height)
+  }, [])
+
+  // Warmup: pre-compile all particle physics code paths to avoid JIT lag on first use
+  const warmupPhysics = useCallback(() => {
+    const g = gridRef.current
+    const { cols, rows } = dimensionsRef.current
+    if (cols === 0 || rows === 0) return
+
+    // Place one of each particle type in a small area (will be cleared after)
+    const allTypes = [
+      SAND, WATER, DIRT, STONE, PLANT, FIRE, GAS, FLUFF, BUG, PLASMA, NITRO, GLASS,
+      LIGHTNING, SLIME, ANT, ALIEN, QUARK, CRYSTAL, EMBER, STATIC, BIRD, GUNPOWDER,
+      TAP, ANTHILL, BEE, FLOWER, HIVE, HONEY, NEST, GUN, BULLET_N, BULLET_S,
+      BULLET_TRAIL, CLOUD, ACID, LAVA, SNOW, VOLCANO, MOLD, MERCURY, VOID, SEED,
+      RUST, SPORE, ALGAE, POISON, DUST, FIREWORK, BUBBLE, GLITTER, STAR, COMET, BLACK_HOLE,
+      BLUE_FIRE
+    ]
+
+    // Place particles in a grid pattern in the middle
+    const startX = Math.floor(cols / 2) - 5
+    const startY = Math.floor(rows / 2) - 5
+    allTypes.forEach((type, i) => {
+      const x = startX + (i % 10)
+      const y = startY + Math.floor(i / 10)
+      if (x >= 0 && x < cols && y >= 0 && y < rows) {
+        g[y * cols + x] = type
+      }
+    })
+
+    // Run physics twice to trigger all code paths (rising + falling loops)
+    updatePhysicsRef.current?.()
+    updatePhysicsRef.current?.()
+
+    // Clear the grid
+    g.fill(0)
   }, [])
 
   const getCellPos = useCallback((clientX: number, clientY: number) => {
@@ -2267,6 +2303,9 @@ function App() {
     }
   }, [])
 
+  // Store ref for warmup to use
+  updatePhysicsRef.current = updatePhysics
+
   const render = useCallback(() => {
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
@@ -2316,12 +2355,11 @@ function App() {
 
     if (!isPausedRef.current) {
       physicsAccumRef.current += delta
-      // Run physics at fixed rate, catch up if behind (max 3 steps per frame)
-      let steps = 0
-      while (physicsAccumRef.current >= PHYSICS_STEP && steps < 3) {
+      // Run physics at fixed rate, limit to 1 step per frame to prevent lag spiral
+      if (physicsAccumRef.current >= PHYSICS_STEP) {
         updatePhysics()
-        physicsAccumRef.current -= PHYSICS_STEP
-        steps++
+        // Cap accumulator to prevent build-up during heavy load
+        physicsAccumRef.current = Math.min(physicsAccumRef.current - PHYSICS_STEP, PHYSICS_STEP)
       }
     }
 
@@ -2374,6 +2412,8 @@ function App() {
 
   useEffect(() => {
     initGrid()
+    // Warmup all particle physics code paths to avoid JIT lag on first use
+    setTimeout(() => warmupPhysics(), 50)
     lastUpdateRef.current = 0
     physicsAccumRef.current = 0
     animationRef.current = requestAnimationFrame(gameLoop)
@@ -2383,7 +2423,7 @@ function App() {
       cancelAnimationFrame(animationRef.current)
       window.removeEventListener('resize', handleResize)
     }
-  }, [initGrid, gameLoop])
+  }, [initGrid, gameLoop, warmupPhysics])
 
   useEffect(() => {
     if (!isDrawing) return
