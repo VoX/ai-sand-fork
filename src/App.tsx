@@ -178,6 +178,11 @@ function App() {
   const lastUpdateRef = useRef<number>(0)
   const physicsAccumRef = useRef<number>(0)
   const updatePhysicsRef = useRef<(() => void) | null>(null)
+  // Refs to avoid callback recreation on state change
+  const toolRef = useRef<Tool>('sand')
+  const brushSizeRef = useRef(3)
+  const frameSpawnCountRef = useRef(0)
+  const lastFrameTimeRef = useRef(0)
 
   const initGrid = useCallback(() => {
     const canvas = canvasRef.current
@@ -250,7 +255,19 @@ function App() {
     if (!pos) return
     const g = gridRef.current
     const { cols, rows } = dimensionsRef.current
-    const matId = tool === 'erase' ? EMPTY : MATERIAL_TO_ID[tool]
+    const currentTool = toolRef.current
+    const currentBrushSize = brushSizeRef.current
+    const matId = currentTool === 'erase' ? EMPTY : MATERIAL_TO_ID[currentTool as Material]
+
+    // Reset spawn count each frame (roughly 16ms)
+    const now = performance.now()
+    if (now - lastFrameTimeRef.current > 16) {
+      frameSpawnCountRef.current = 0
+      lastFrameTimeRef.current = now
+    }
+
+    // Throttle: max 150 particles per frame to prevent lag spikes
+    const MAX_SPAWNS_PER_FRAME = 150
 
     // Gun only spawns as single particle (one 4px block)
     if (matId === GUN) {
@@ -261,26 +278,30 @@ function App() {
       return
     }
 
-    for (let dy = -brushSize; dy <= brushSize; dy++) {
-      for (let dx = -brushSize; dx <= brushSize; dx++) {
-        if (dx * dx + dy * dy <= brushSize * brushSize) {
+    for (let dy = -currentBrushSize; dy <= currentBrushSize; dy++) {
+      for (let dx = -currentBrushSize; dx <= currentBrushSize; dx++) {
+        if (dx * dx + dy * dy <= currentBrushSize * currentBrushSize) {
+          // Stop if we've hit the per-frame limit
+          if (frameSpawnCountRef.current >= MAX_SPAWNS_PER_FRAME) return
+
           const nx = pos.x + dx, ny = pos.y + dy
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
             const idx = ny * cols + nx
-            // Sparse spawn for creatures and expensive particles to reduce lag
-            let spawnChance = 0.3 // Default: 70% spawn
-            if (matId === BIRD || matId === BEE || matId === FIREFLY) spawnChance = 0.8 // 20% spawn
-            else if (matId === ANT || matId === BUG || matId === SLIME) spawnChance = 0.7 // 30% spawn
+            // Sparse spawn - higher skip chance = fewer particles = less lag
+            let spawnChance = 0.5 // Default: 50% spawn (was 70%)
+            if (matId === BIRD || matId === BEE || matId === FIREFLY) spawnChance = 0.85 // 15% spawn
+            else if (matId === ANT || matId === BUG || matId === SLIME) spawnChance = 0.75 // 25% spawn
             else if (matId === ALIEN || matId === QUARK) spawnChance = 0.92 // 8% spawn
-            else if (matId === MOLD || matId === SPORE) spawnChance = 0.6 // 40% spawn
-            if ((tool === 'erase' || Math.random() > spawnChance) && (tool === 'erase' || (g[idx] !== STONE && g[idx] !== TAP))) {
+            else if (matId === MOLD || matId === SPORE) spawnChance = 0.7 // 30% spawn
+            if ((currentTool === 'erase' || Math.random() > spawnChance) && (currentTool === 'erase' || (g[idx] !== STONE && g[idx] !== TAP))) {
               g[idx] = matId
+              frameSpawnCountRef.current++
             }
           }
         }
       }
     }
-  }, [tool, brushSize, getCellPos])
+  }, [getCellPos]) // No longer depends on tool or brushSize!
 
   const updatePhysics = useCallback(() => {
     const g = gridRef.current
@@ -2465,6 +2486,10 @@ function App() {
   useEffect(() => {
     isPausedRef.current = isPaused
   }, [isPaused])
+
+  // Keep refs in sync with state to avoid callback recreation
+  useEffect(() => { toolRef.current = tool }, [tool])
+  useEffect(() => { brushSizeRef.current = brushSize }, [brushSize])
 
   const reset = useCallback(() => initGrid(), [initGrid])
 
