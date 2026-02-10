@@ -1982,18 +1982,15 @@ function App() {
         } else if (c === ALGAE) {
           // Algae: aquatic plant that grows in water, releases gas bubbles
 
-          // Check if in water (sample 2 random neighbors)
+          // Check if in water (check cardinal directions for reliability)
           let inWater = false
-          for (let i = 0; i < 2; i++) {
-            const adx = Math.floor(rand() * 3) - 1, ady = Math.floor(rand() * 3) - 1
-            const anx = x + adx, any = y + ady
-            if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
-              if (g[idx(anx, any)] === WATER) { inWater = true; break }
-            }
-          }
+          if (y > 0 && g[idx(x, y - 1)] === WATER) inWater = true
+          else if (y < rows - 1 && g[idx(x, y + 1)] === WATER) inWater = true
+          else if (x > 0 && g[idx(x - 1, y)] === WATER) inWater = true
+          else if (x < cols - 1 && g[idx(x + 1, y)] === WATER) inWater = true
 
-          // Die without water - become plant
-          if (!inWater && rand() < 0.05) {
+          // Die without water - become plant (very slow, only when truly dry)
+          if (!inWater && rand() < 0.008) {
             g[p] = PLANT
             continue
           }
