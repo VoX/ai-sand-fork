@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly'
 type Tool = Material | 'erase'
 
 // Numeric IDs for maximum performance
@@ -35,6 +35,7 @@ const STAR = 57 // Magical particle, grants random transformations
 const COMET = 58 // Fast streaking particle, leaves blue fire trail
 const BLUE_FIRE = 59 // Blue fire trail from comets
 const BLACK_HOLE = 60 // Sucks in and destroys nearby particles
+const FIREFLY = 61 // Glowing creature, emits light, attracted to flowers
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
@@ -45,6 +46,7 @@ const MATERIAL_TO_ID: Record<Material, number> = {
   acid: ACID, lava: LAVA, snow: SNOW, volcano: VOLCANO, mold: MOLD, mercury: MERCURY, void: VOID, seed: SEED,
   rust: RUST, spore: SPORE, algae: ALGAE, poison: POISON, dust: DUST,
   firework: FIREWORK, bubble: BUBBLE, glitter: GLITTER, star: STAR, comet: COMET, blackhole: BLACK_HOLE,
+  firefly: FIREFLY,
 }
 
 // Density for displacement (higher sinks through lower, 0 = doesn't displace)
@@ -126,6 +128,7 @@ const COLORS_U32 = new Uint32Array([
   0xFFFFF97D, // COMET (electric blue)
   0xFFFF901E, // BLUE_FIRE (cyan-blue fire)
   0xFF000008, // BLACK_HOLE (very dark, almost black with hint of purple)
+  0xFF00FFBF, // FIREFLY (bright chartreuse/lime-yellow glow)
 ])
 
 // Dynamic color palettes
@@ -155,6 +158,7 @@ const BUTTON_COLORS: Record<Material, string> = {
   volcano: '#660000', mold: '#7b68ee', mercury: '#b8c0c8', void: '#2e0854', seed: '#d4a574',
   rust: '#b7410e', spore: '#20b2aa', algae: '#2e8b57', poison: '#8b008b', dust: '#deb887',
   firework: '#ff6600', bubble: '#87ceeb', glitter: '#c0c0c0', star: '#ffdf00', comet: '#7df9ff', blackhole: '#080008',
+  firefly: '#bfff00',
 }
 
 function App() {
@@ -208,7 +212,7 @@ function App() {
       TAP, ANTHILL, BEE, FLOWER, HIVE, HONEY, NEST, GUN, BULLET_N, BULLET_S,
       BULLET_TRAIL, CLOUD, ACID, LAVA, SNOW, VOLCANO, MOLD, MERCURY, VOID, SEED,
       RUST, SPORE, ALGAE, POISON, DUST, FIREWORK, BUBBLE, GLITTER, STAR, COMET, BLACK_HOLE,
-      BLUE_FIRE
+      BLUE_FIRE, FIREFLY
     ]
 
     // Place particles in a grid pattern in the middle
@@ -859,6 +863,91 @@ function App() {
               // Bees make honey when touching flowers - slower consumption
               g[bni] = BEE
               g[p] = rand() < 0.1 ? HONEY : (rand() < 0.15 ? EMPTY : FLOWER) // 10% honey, 13.5% flower used up, rest flower stays
+            }
+          }
+        } else if (c === FIREFLY) {
+          // Firefly: glowing creature, emits light particles, attracted to flowers
+
+          // Check for hazards (sample 2 random neighbors)
+          let dead = false
+          for (let i = 0; i < 2; i++) {
+            const fdx = Math.floor(rand() * 3) - 1, fdy = Math.floor(rand() * 3) - 1
+            if (fdx === 0 && fdy === 0) continue
+            const fnx = x + fdx, fny = y + fdy
+            if (fnx >= 0 && fnx < cols && fny >= 0 && fny < rows) {
+              const fnc = g[idx(fnx, fny)]
+              if (fnc === FIRE || fnc === PLASMA || fnc === LAVA) {
+                g[p] = FIRE; dead = true; break
+              }
+              if (fnc === WATER || fnc === ACID) {
+                g[p] = EMPTY; dead = true; break // Drowns
+              }
+              if (fnc === BIRD) {
+                g[p] = EMPTY; dead = true; break // Eaten
+              }
+            }
+          }
+          if (dead) continue
+
+          // Emit bioluminescent particles (glitter/static trail)
+          if (rand() < 0.15) {
+            const gdx = Math.floor(rand() * 3) - 1, gdy = Math.floor(rand() * 3) - 1
+            const gnx = x + gdx, gny = y + gdy
+            if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows && g[idx(gnx, gny)] === EMPTY) {
+              g[idx(gnx, gny)] = rand() < 0.7 ? GLITTER : STATIC
+            }
+          }
+
+          // Slow, dreamy flight pattern
+          if (rand() < 0.5) continue // Move less frequently than other flyers
+
+          // Check for nearby flowers (attraction)
+          let flowerDir = { x: 0, y: 0 }
+          for (let i = 0; i < 3; i++) {
+            const sdx = Math.floor(rand() * 9) - 4, sdy = Math.floor(rand() * 9) - 4
+            const snx = x + sdx, sny = y + sdy
+            if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
+              if (g[idx(snx, sny)] === FLOWER) {
+                flowerDir = { x: Math.sign(sdx), y: Math.sign(sdy) }
+                break
+              }
+            }
+          }
+
+          // Movement - biased toward flowers if nearby
+          let fdx = 0, fdy = 0
+          if (flowerDir.x !== 0 || flowerDir.y !== 0) {
+            // Move toward flower
+            fdx = flowerDir.x
+            fdy = flowerDir.y
+          } else {
+            // Random dreamy float
+            const r = rand()
+            if (r < 0.25) { fdy = -1; fdx = rand() < 0.5 ? -1 : 1 }
+            else if (r < 0.4) { fdy = 1; fdx = rand() < 0.5 ? -1 : 1 }
+            else if (r < 0.7) { fdx = rand() < 0.5 ? -1 : 1 }
+            // else hover
+          }
+
+          if (fdx === 0 && fdy === 0) continue
+
+          const fnx = x + fdx, fny = y + fdy
+          if (fnx >= 0 && fnx < cols && fny >= 0 && fny < rows) {
+            const fni = idx(fnx, fny), fnc = g[fni]
+
+            if (fnc === EMPTY) {
+              g[fni] = FIREFLY
+              g[p] = EMPTY
+            } else if (fnc === FLOWER) {
+              // Near flower: chance to breed
+              if (rand() < 0.03) {
+                // Spawn new firefly nearby
+                const bx = x + Math.floor(rand() * 3) - 1
+                const by = y + Math.floor(rand() * 3) - 1
+                if (bx >= 0 && bx < cols && by >= 0 && by < rows && g[idx(bx, by)] === EMPTY) {
+                  g[idx(bx, by)] = FIREFLY
+                }
+              }
             }
           }
         }
@@ -2434,7 +2523,7 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, addParticles])
 
-  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey', 'nest', 'gun', 'cloud', 'acid', 'lava', 'snow', 'volcano', 'mold', 'mercury', 'void', 'seed', 'rust', 'spore', 'algae', 'poison', 'dust', 'firework', 'bubble', 'glitter', 'star', 'comet', 'blackhole']
+  const materials: Material[] = ['sand', 'water', 'dirt', 'stone', 'plant', 'fire', 'gas', 'fluff', 'bug', 'plasma', 'nitro', 'glass', 'lightning', 'slime', 'ant', 'alien', 'quark', 'crystal', 'ember', 'static', 'bird', 'gunpowder', 'tap', 'anthill', 'bee', 'flower', 'hive', 'honey', 'nest', 'gun', 'cloud', 'acid', 'lava', 'snow', 'volcano', 'mold', 'mercury', 'void', 'seed', 'rust', 'spore', 'algae', 'poison', 'dust', 'firework', 'bubble', 'glitter', 'star', 'comet', 'blackhole', 'firefly']
 
   return (
     <div className="app">

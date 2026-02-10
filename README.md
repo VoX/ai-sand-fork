@@ -43,6 +43,7 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 | **Bird** | Light grey | Flies around, eats ants/bugs/bees (spawns more birds), turns to fluff when hungry |
 | **Bee** | Yellow | Buzzes around, creates flowers from plants, makes honey from flowers |
 | **Slime** | Yellow-green | Eats dirt/sand/bugs, floats up through water |
+| **Firefly** | Bright chartreuse | Glowing creature, emits light particles (glitter/static), attracted to flowers, breeds near flowers, drowns in water |
 
 ### Energy Elements
 | Particle | Color | Behavior |
