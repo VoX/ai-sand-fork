@@ -2528,8 +2528,9 @@ function App() {
 
   useEffect(() => {
     initGrid()
-    // Warmup all particle physics code paths to avoid JIT lag on first use
-    setTimeout(() => warmupPhysics(), 50)
+    // Warmup MUST run synchronously before game loop starts
+    // This pre-compiles all particle physics code paths
+    warmupPhysics()
     lastUpdateRef.current = 0
     physicsAccumRef.current = 0
     animationRef.current = requestAnimationFrame(gameLoop)
