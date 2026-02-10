@@ -267,7 +267,12 @@ function App() {
           const nx = pos.x + dx, ny = pos.y + dy
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
             const idx = ny * cols + nx
-            const spawnChance = matId === BIRD || matId === BEE ? 0.8 : matId === ANT ? 0.6 : (matId === ALIEN || matId === QUARK) ? 0.92 : 0.3 // Spawn fewer birds/ants/aliens/quarks
+            // Sparse spawn for creatures and expensive particles to reduce lag
+            let spawnChance = 0.3 // Default: 70% spawn
+            if (matId === BIRD || matId === BEE || matId === FIREFLY) spawnChance = 0.8 // 20% spawn
+            else if (matId === ANT || matId === BUG || matId === SLIME) spawnChance = 0.7 // 30% spawn
+            else if (matId === ALIEN || matId === QUARK) spawnChance = 0.92 // 8% spawn
+            else if (matId === MOLD || matId === SPORE) spawnChance = 0.6 // 40% spawn
             if ((tool === 'erase' || Math.random() > spawnChance) && (tool === 'erase' || (g[idx] !== STONE && g[idx] !== TAP))) {
               g[idx] = matId
             }
