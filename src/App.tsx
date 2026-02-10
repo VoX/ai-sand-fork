@@ -181,8 +181,6 @@ function App() {
   // Refs to avoid callback recreation on state change
   const toolRef = useRef<Tool>('sand')
   const brushSizeRef = useRef(3)
-  const frameSpawnCountRef = useRef(0)
-  const lastFrameTimeRef = useRef(0)
 
   const initGrid = useCallback(() => {
     const canvas = canvasRef.current
@@ -208,9 +206,9 @@ function App() {
   const warmupPhysics = useCallback(() => {
     const g = gridRef.current
     const { cols, rows } = dimensionsRef.current
-    if (cols === 0 || rows === 0) return
+    if (cols === 0 || rows === 0 || !updatePhysicsRef.current) return
 
-    // Place one of each particle type in a small area (will be cleared after)
+    // Place particles spread out with proper context for physics triggers
     const allTypes = [
       SAND, WATER, DIRT, STONE, PLANT, FIRE, GAS, FLUFF, BUG, PLASMA, NITRO, GLASS,
       LIGHTNING, SLIME, ANT, ALIEN, QUARK, CRYSTAL, EMBER, STATIC, BIRD, GUNPOWDER,
@@ -220,22 +218,35 @@ function App() {
       BLUE_FIRE, FIREFLY
     ]
 
-    // Place particles in a grid pattern in the middle
-    const startX = Math.floor(cols / 2) - 5
-    const startY = Math.floor(rows / 2) - 5
+    // Place each particle with space around it (3 cells apart) so physics runs properly
+    const startX = 10
+    const startY = 10
+    const spacing = 3
     allTypes.forEach((type, i) => {
-      const x = startX + (i % 10)
-      const y = startY + Math.floor(i / 10)
-      if (x >= 0 && x < cols && y >= 0 && y < rows) {
+      const x = startX + (i % 15) * spacing
+      const y = startY + Math.floor(i / 15) * spacing
+      if (x >= 0 && x < cols && y >= 0 && y < rows - 1) {
         g[y * cols + x] = type
+        // Add empty space below for falling particles
+        g[(y + 1) * cols + x] = EMPTY
       }
     })
 
-    // Run physics twice to trigger all code paths (rising + falling loops)
-    updatePhysicsRef.current?.()
-    updatePhysicsRef.current?.()
+    // Also place some water for aquatic particles
+    for (let i = 0; i < 20; i++) {
+      const x = startX + 50 + i
+      const y = startY + 5
+      if (x < cols && y < rows) {
+        g[y * cols + x] = WATER
+      }
+    }
 
-    // Clear the grid
+    // Run physics 5 times to thoroughly trigger all code paths
+    for (let i = 0; i < 5; i++) {
+      updatePhysicsRef.current()
+    }
+
+    // Clear the grid completely
     g.fill(0)
   }, [])
 
@@ -259,16 +270,6 @@ function App() {
     const currentBrushSize = brushSizeRef.current
     const matId = currentTool === 'erase' ? EMPTY : MATERIAL_TO_ID[currentTool as Material]
 
-    // Reset spawn count each frame (roughly 16ms)
-    const now = performance.now()
-    if (now - lastFrameTimeRef.current > 16) {
-      frameSpawnCountRef.current = 0
-      lastFrameTimeRef.current = now
-    }
-
-    // Throttle: max 150 particles per frame to prevent lag spikes
-    const MAX_SPAWNS_PER_FRAME = 150
-
     // Gun only spawns as single particle (one 4px block)
     if (matId === GUN) {
       const idx = pos.y * cols + pos.x
@@ -281,27 +282,23 @@ function App() {
     for (let dy = -currentBrushSize; dy <= currentBrushSize; dy++) {
       for (let dx = -currentBrushSize; dx <= currentBrushSize; dx++) {
         if (dx * dx + dy * dy <= currentBrushSize * currentBrushSize) {
-          // Stop if we've hit the per-frame limit
-          if (frameSpawnCountRef.current >= MAX_SPAWNS_PER_FRAME) return
-
           const nx = pos.x + dx, ny = pos.y + dy
           if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
             const idx = ny * cols + nx
-            // Sparse spawn - higher skip chance = fewer particles = less lag
-            let spawnChance = 0.5 // Default: 50% spawn (was 70%)
-            if (matId === BIRD || matId === BEE || matId === FIREFLY) spawnChance = 0.85 // 15% spawn
-            else if (matId === ANT || matId === BUG || matId === SLIME) spawnChance = 0.75 // 25% spawn
+            // Sparse spawn for creatures
+            let spawnChance = 0.3 // Default: 70% spawn
+            if (matId === BIRD || matId === BEE || matId === FIREFLY) spawnChance = 0.8 // 20% spawn
+            else if (matId === ANT || matId === BUG || matId === SLIME) spawnChance = 0.7 // 30% spawn
             else if (matId === ALIEN || matId === QUARK) spawnChance = 0.92 // 8% spawn
-            else if (matId === MOLD || matId === SPORE) spawnChance = 0.7 // 30% spawn
+            else if (matId === MOLD || matId === SPORE) spawnChance = 0.6 // 40% spawn
             if ((currentTool === 'erase' || Math.random() > spawnChance) && (currentTool === 'erase' || (g[idx] !== STONE && g[idx] !== TAP))) {
               g[idx] = matId
-              frameSpawnCountRef.current++
             }
           }
         }
       }
     }
-  }, [getCellPos]) // No longer depends on tool or brushSize!
+  }, [getCellPos]) // Uses refs - no recreation on tool/brushSize change
 
   const updatePhysics = useCallback(() => {
     const g = gridRef.current
