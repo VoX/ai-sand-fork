@@ -52,7 +52,7 @@ const COLORS_U32 = new Uint32Array([
   0xFF44DDFF, 0xFFD8D0C8, 0xFF00FFBF, 0xFF1414DC, 0xFFFFF0E0, 0xFF000066,
   0xFFEE687B, 0xFFC8C0B8, 0xFF54082E, 0xFF74A5D4, 0xFF0E41B7,
   0xFFAAB220, 0xFF3D7025, 0xFF8B008B, 0xFF87B8DE, 0xFF0066FF,
-  0xFFEBCE87, 0xFFC0C0C0, 0xFF00DFFF, 0xFFFFF97D, 0xFFFF901E, 0xFF000008, 0xFF00FFBF,
+  0xFFEBCE87, 0xFFC0C0C0, 0xFF00DFFF, 0xFFFFF97D, 0xFFFF901E, 0xFF000000, 0xFF00FFBF,
 ])
 
 const FIRE_COLORS = new Uint32Array(32)
@@ -641,7 +641,7 @@ function updatePhysics() {
 
       // ANTHILL spawns ants
       if (c === ANTHILL) {
-        if (rand() < 0.03) {
+        if (rand() < 0.06) {
           const dx = Math.floor(rand() * 3) - 1
           const dy = Math.floor(rand() * 3) - 1
           const nx = x + dx, ny = y + dy
@@ -654,7 +654,7 @@ function updatePhysics() {
 
       // HIVE spawns bees
       if (c === HIVE) {
-        if (rand() < 0.015) {
+        if (rand() < 0.035) {
           const dx = Math.floor(rand() * 3) - 1
           const dy = Math.floor(rand() * 3) - 1
           const nx = x + dx, ny = y + dy
@@ -667,7 +667,7 @@ function updatePhysics() {
 
       // NEST spawns birds
       if (c === NEST) {
-        if (rand() < 0.008) {
+        if (rand() < 0.02) {
           const dx = Math.floor(rand() * 3) - 1
           const dy = -1
           const nx = x + dx, ny = y + dy
@@ -1400,7 +1400,7 @@ function updatePhysics() {
           const bnx = x + bdx, bny = y + bdy
           if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) continue
           const bi = idx(bnx, bny), bc = g[bi]
-          if (bc === EMPTY || bc === BLACK_HOLE || bc === TAP || bc === VOLCANO || bc === GUN || bc === ANTHILL || bc === HIVE) continue
+          if (bc === EMPTY || bc === BLACK_HOLE || bc === VOLCANO || bc === GUN || bc === ANTHILL || bc === HIVE) continue
           const stepX = bdx > 0 ? -1 : (bdx < 0 ? 1 : 0)
           const stepY = bdy > 0 ? -1 : (bdy < 0 ? 1 : 0)
           const targetX = bnx + stepX, targetY = bny + stepY
