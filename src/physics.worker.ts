@@ -1226,10 +1226,31 @@ function updatePhysics() {
           }
         }
       }
-      // SEED
+      // PLANT - spreads through water
+      else if (c === PLANT) {
+        // Plants grow through adjacent water
+        if (rand() < 0.03) {
+          const pdx = Math.floor(rand() * 3) - 1
+          const pdy = rand() < 0.6 ? -1 : Math.floor(rand() * 3) - 1  // Bias upward
+          const pnx = x + pdx, pny = y + pdy
+          if (pnx >= 0 && pnx < cols && pny >= 0 && pny < rows) {
+            if (g[idx(pnx, pny)] === WATER) {
+              g[idx(pnx, pny)] = rand() < 0.1 ? FLOWER : PLANT
+            }
+          }
+        }
+      }
+      // SEED - floats in water
       else if (c === SEED) {
-        if (belowCell === EMPTY) { g[below] = SEED; g[p] = EMPTY; continue }
-        else if (belowCell === WATER && rand() < 0.5) { g[below] = SEED; g[p] = WATER; continue }
+        // Float up through water
+        const aboveIdx = y > 0 ? idx(x, y - 1) : -1
+        const aboveCell = aboveIdx >= 0 ? g[aboveIdx] : EMPTY
+        if (belowCell === WATER && aboveCell !== WATER && rand() < 0.7) {
+          // Stay floating on water surface
+        } else if (belowCell === WATER && aboveCell === WATER) {
+          // Float up through water
+          g[aboveIdx] = SEED; g[p] = WATER; continue
+        } else if (belowCell === EMPTY) { g[below] = SEED; g[p] = EMPTY; continue }
         const fireCheck = Math.floor(rand() * 8)
         const fdx = [0,1,1,1,0,-1,-1,-1][fireCheck]
         const fdy = [-1,-1,0,1,1,1,0,-1][fireCheck]
@@ -1273,7 +1294,8 @@ function updatePhysics() {
         if (stemHeight > 10 && rand() < (nearSun ? 0.2 : 0.1)) {
           const bx = x + (rand() < 0.5 ? -1 : 1)
           const by = y - Math.floor(rand() * Math.min(stemHeight, 15)) - 5
-          if (bx >= 0 && bx < cols && by >= 0 && g[idx(bx, by)] === EMPTY) {
+          const branchCell = bx >= 0 && bx < cols && by >= 0 ? g[idx(bx, by)] : -1
+          if (branchCell === EMPTY || branchCell === WATER) {
             g[idx(bx, by)] = rand() < 0.4 ? FLOWER : PLANT
           }
         }
