@@ -15,8 +15,9 @@ const MOLD = 45, MERCURY = 46, VOID = 47, SEED = 48, RUST = 49
 const SPORE = 50, ALGAE = 51, POISON = 52, DUST = 53, FIREWORK = 54
 const BUBBLE = 55, GLITTER = 56, STAR = 57, COMET = 58, BLUE_FIRE = 59
 const BLACK_HOLE = 60, FIREFLY = 61
+const WORM = 62, FAIRY = 63
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy'
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
@@ -28,6 +29,7 @@ const MATERIAL_TO_ID: Record<Material, number> = {
   rust: RUST, spore: SPORE, algae: ALGAE, poison: POISON, dust: DUST,
   firework: FIREWORK, bubble: BUBBLE, glitter: GLITTER, star: STAR, comet: COMET, blackhole: BLACK_HOLE,
   firefly: FIREFLY,
+  worm: WORM, fairy: FAIRY,
 }
 
 const CELL_SIZE = 4
@@ -53,6 +55,7 @@ const COLORS_U32 = new Uint32Array([
   0xFFEE687B, 0xFFC8C0B8, 0xFF54082E, 0xFF74A5D4, 0xFF0E41B7,
   0xFFAAB220, 0xFF3D7025, 0xFF8B008B, 0xFF87B8DE, 0xFF0066FF,
   0xFFEBCE87, 0xFFC0C0C0, 0xFF00DFFF, 0xFFFFF97D, 0xFFFF901E, 0xFF000000, 0xFF00FFBF,
+  0xFF8090C0, 0xFFFF88FF,  // WORM (pinkish flesh), FAIRY (bright pink)
 ])
 
 const FIRE_COLORS = new Uint32Array(32)
@@ -854,6 +857,39 @@ function updatePhysics() {
             g[ani] = ALIEN; g[p] = SLIME
           } else if (anc === PLANT || anc === FLOWER) { g[ani] = ALIEN; g[p] = SLIME }
           else if (anc === FIRE || anc === PLASMA || anc === LIGHTNING) { g[p] = SLIME }
+        }
+      }
+      // WORM - burrows through dirt/sand, eaten by birds
+      else if (c === WORM) {
+        if (rand() < 0.4) continue
+        const wx = Math.floor(rand() * 3) - 1
+        const wy = rand() < 0.6 ? 1 : Math.floor(rand() * 3) - 1  // Tends downward
+        if (wx === 0 && wy === 0) continue
+        const wnx = x + wx, wny = y + wy
+        if (wnx >= 0 && wnx < cols && wny >= 0 && wny < rows) {
+          const wni = idx(wnx, wny), wnc = g[wni]
+          if (wnc === FIRE || wnc === LAVA || wnc === ACID) { g[p] = EMPTY; continue }
+          if (wnc === BIRD) { g[p] = EMPTY; continue }  // Eaten by birds
+          if (wnc === DIRT || wnc === SAND) { g[wni] = WORM; g[p] = EMPTY }  // Burrow, leave tunnel
+          else if (wnc === EMPTY) { g[wni] = WORM; g[p] = EMPTY }
+          else if (wnc === WATER) { g[wni] = WORM; g[p] = WATER }
+        }
+      }
+      // FAIRY - magical floating creature, transforms things into flowers/glitter
+      else if (c === FAIRY) {
+        if (rand() < 0.3) continue
+        const fx = Math.floor(rand() * 3) - 1
+        const fy = rand() < 0.6 ? -1 : Math.floor(rand() * 3) - 1  // Floats upward
+        if (fx === 0 && fy === 0) continue
+        const fnx = x + fx, fny = y + fy
+        if (fnx >= 0 && fnx < cols && fny >= 0 && fny < rows) {
+          const fni = idx(fnx, fny), fnc = g[fni]
+          if (fnc === FIRE || fnc === LAVA || fnc === PLASMA) { g[p] = GLITTER; continue }  // Dies beautifully
+          if (fnc === EMPTY) { g[fni] = FAIRY; g[p] = rand() < 0.15 ? GLITTER : EMPTY }
+          else if (fnc === DIRT || fnc === SAND) { g[fni] = FAIRY; g[p] = FLOWER }  // Transforms to flower
+          else if (fnc === WATER) { g[fni] = FAIRY; g[p] = GLITTER }  // Sparkles on water
+          else if (fnc === PLANT) { g[fni] = FAIRY; g[p] = FLOWER }  // Makes flowers bloom
+          else if (fnc === STONE) { g[p] = rand() < 0.1 ? GLITTER : EMPTY }  // Bounces off stone with sparkle
         }
       }
       // QUARK
