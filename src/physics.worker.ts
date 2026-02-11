@@ -850,10 +850,10 @@ function updatePhysics() {
       }
       // ALIEN
       else if (c === ALIEN) {
-        // Erratic movement with gravity bias - can move sideways while falling
+        // Fully erratic movement - creates emergent swirling patterns
         if (rand() < 0.6) continue
         const ax = Math.floor(rand() * 5) - 2
-        const ay = rand() < 0.5 ? (rand() < 0.8 ? 2 : 1) : Math.floor(rand() * 5) - 2 // 50% strong downward bias
+        const ay = Math.floor(rand() * 5) - 2
         if (ax === 0 && ay === 0) continue
         const anx = x + ax, any = y + ay
         if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
