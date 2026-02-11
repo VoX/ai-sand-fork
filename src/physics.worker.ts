@@ -764,7 +764,7 @@ function updatePhysics() {
       }
       // NITRO
       else if (c === NITRO) {
-        // Check for explosion triggers
+        // Nitroglycerine - explodes on contact with almost anything
         let exploded = false
         for (let i = 0; i < 3; i++) {
           const ndx = Math.floor(rand() * 3) - 1, ndy = Math.floor(rand() * 3) - 1
@@ -772,9 +772,8 @@ function updatePhysics() {
           const nnx = x + ndx, nny = y + ndy
           if (nnx >= 0 && nnx < cols && nny >= 0 && nny < rows) {
             const nnc = g[idx(nnx, nny)]
-            // Explode on contact with fire types, lightning, or gunpowder
-            if (nnc === FIRE || nnc === PLASMA || nnc === EMBER || nnc === LAVA ||
-                nnc === LIGHTNING || nnc === BLUE_FIRE || nnc === GUNPOWDER) {
+            // Explode on contact with anything except empty, water, and nitro
+            if (nnc !== EMPTY && nnc !== WATER && nnc !== NITRO) {
               const r = 12
               for (let edy = -r; edy <= r; edy++) {
                 for (let edx = -r; edx <= r; edx++) {
@@ -855,14 +854,14 @@ function updatePhysics() {
       }
       // ALIEN
       else if (c === ALIEN) {
-        // Emergent flocking behavior - aliens interact to create patterns
-        if (rand() < 0.5) continue
+        // Emergent flocking behavior - aliens interact to create slime patterns
+        if (rand() < 0.4) continue
 
         // Detect nearby aliens and calculate flocking direction
         let nearbyAliens = 0
         let avgDx = 0, avgDy = 0
-        for (let i = 0; i < 4; i++) {
-          const sdx = Math.floor(rand() * 7) - 3, sdy = Math.floor(rand() * 7) - 3
+        for (let i = 0; i < 6; i++) {
+          const sdx = Math.floor(rand() * 9) - 4, sdy = Math.floor(rand() * 9) - 4
           const snx = x + sdx, sny = y + sdy
           if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
             if (g[idx(snx, sny)] === ALIEN) {
@@ -874,24 +873,31 @@ function updatePhysics() {
         }
 
         let ax, ay
-        if (nearbyAliens > 0) {
-          // Swirl around other aliens (perpendicular + slight attraction)
+        if (nearbyAliens > 1) {
+          // Swirl around other aliens (perpendicular + attraction) - creates spiral patterns
           const perpX = -Math.sign(avgDy)
           const perpY = Math.sign(avgDx)
-          ax = perpX + Math.floor(rand() * 3) - 1
-          ay = perpY + Math.floor(rand() * 3) - 1
-          // Leave glowing trail when flocking
-          if (rand() < 0.15) {
+          // Attraction toward center of group
+          const attrX = avgDx > 0 ? 1 : avgDx < 0 ? -1 : 0
+          const attrY = avgDy > 0 ? 1 : avgDy < 0 ? -1 : 0
+          ax = perpX + (rand() < 0.3 ? attrX : 0) + Math.floor(rand() * 3) - 1
+          ay = perpY + (rand() < 0.3 ? attrY : 0) + Math.floor(rand() * 3) - 1
+          // Leave slime trail when flocking - creates geometric patterns
+          if (rand() < 0.2) {
             const tx = x + Math.floor(rand() * 3) - 1
             const ty = y + Math.floor(rand() * 3) - 1
             if (tx >= 0 && tx < cols && ty >= 0 && ty < rows && g[idx(tx, ty)] === EMPTY) {
-              g[idx(tx, ty)] = STATIC
+              g[idx(tx, ty)] = SLIME
             }
           }
+        } else if (nearbyAliens === 1) {
+          // Follow another alien at distance
+          ax = Math.sign(avgDx) + Math.floor(rand() * 3) - 1
+          ay = Math.sign(avgDy) + Math.floor(rand() * 3) - 1
         } else {
-          // Random exploration when alone
+          // Random exploration when alone, with gravity bias
           ax = Math.floor(rand() * 5) - 2
-          ay = Math.floor(rand() * 5) - 2
+          ay = rand() < 0.4 ? 1 : Math.floor(rand() * 5) - 2
         }
 
         if (ax === 0 && ay === 0) continue
@@ -900,21 +906,23 @@ function updatePhysics() {
           const ani = idx(anx, any), anc = g[ani]
           if (anc === EMPTY) { g[ani] = ALIEN; g[p] = EMPTY }
           else if (anc === ALIEN) {
-            // Aliens meeting - create pattern burst
-            if (rand() < 0.1) {
-              for (let i = 0; i < 3; i++) {
-                const bx = x + Math.floor(rand() * 5) - 2
-                const by = y + Math.floor(rand() * 5) - 2
+            // Aliens meeting - create slime pattern burst
+            if (rand() < 0.12) {
+              for (let i = 0; i < 4; i++) {
+                const angle = (i / 4) * Math.PI * 2 + rand() * 0.5
+                const dist = 1 + Math.floor(rand() * 3)
+                const bx = x + Math.round(Math.cos(angle) * dist)
+                const by = y + Math.round(Math.sin(angle) * dist)
                 if (bx >= 0 && bx < cols && by >= 0 && by < rows && g[idx(bx, by)] === EMPTY) {
-                  g[idx(bx, by)] = rand() < 0.7 ? STATIC : QUARK
+                  g[idx(bx, by)] = SLIME
                 }
               }
             }
           }
           else if (anc === BUG || anc === ANT || anc === BIRD || anc === BEE || anc === SLIME) {
-            g[ani] = ALIEN; g[p] = rand() < 0.6 ? ALIEN : STATIC
-          } else if (anc === PLANT || anc === FLOWER) { g[ani] = ALIEN; g[p] = STATIC }
-          else if (anc === FIRE || anc === PLASMA || anc === LIGHTNING) { g[p] = QUARK }
+            g[ani] = ALIEN; g[p] = rand() < 0.5 ? ALIEN : SLIME
+          } else if (anc === PLANT || anc === FLOWER) { g[ani] = ALIEN; g[p] = SLIME }
+          else if (anc === FIRE || anc === PLASMA || anc === LIGHTNING) { g[p] = SLIME }
         }
       }
       // QUARK
@@ -1253,8 +1261,8 @@ function updatePhysics() {
         for (let h = 1; h <= maxHeight; h++) {
           if (y - h < 0) break
           const cell = g[idx(x, y - h)]
-          if (cell === EMPTY) { growY = y - h; break }
-          if (cell !== PLANT && cell !== FLOWER && cell !== WATER && cell !== DIRT && cell !== SEED) break
+          if (cell === EMPTY || cell === WATER) { growY = y - h; break }
+          if (cell !== PLANT && cell !== FLOWER && cell !== DIRT && cell !== SEED) break
         }
         if (growY >= 0) {
           const flowerChance = nearSun ? 0.3 : (nearWater ? 0.15 : 0.1)
@@ -1297,12 +1305,14 @@ function updatePhysics() {
         else if (y < rows - 1 && g[idx(x, y + 1)] === WATER) inWater = true
         else if (x > 0 && g[idx(x - 1, y)] === WATER) inWater = true
         else if (x < cols - 1 && g[idx(x + 1, y)] === WATER) inWater = true
-        if (!inWater && rand() < 0.008) { g[p] = PLANT; continue }
-        if (inWater && rand() < 0.01 && y > 0) {
+        // Much slower conversion to plant when out of water
+        if (!inWater && rand() < 0.001) { g[p] = PLANT; continue }
+        if (inWater && rand() < 0.015 && y > 0) {
           const above = idx(x, y - 1)
           if (g[above] === WATER) g[above] = GAS
         }
-        if (inWater && rand() < 0.02) {
+        // Faster growth through water
+        if (inWater && rand() < 0.06) {
           const adx = Math.floor(rand() * 3) - 1
           const ady = Math.floor(rand() * 3) - 1
           const anx = x + adx, any = y + ady
