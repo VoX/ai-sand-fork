@@ -735,15 +735,29 @@ function updatePhysics() {
       }
       // BUG
       else if (c === BUG) {
+        // Check for hazards first
+        for (let i = 0; i < 2; i++) {
+          const bdx = Math.floor(rand() * 3) - 1, bdy = Math.floor(rand() * 3) - 1
+          if (bdx === 0 && bdy === 0) continue
+          const bnx = x + bdx, bny = y + bdy
+          if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
+            const bnc = g[idx(bnx, bny)]
+            if (bnc === FIRE || bnc === PLASMA || bnc === LIGHTNING || bnc === EMBER) { g[p] = FIRE; break }
+          }
+        }
+        if (g[p] !== BUG) continue
+        // Fall first (gravity)
+        if (belowCell === EMPTY) { g[below] = BUG; g[p] = EMPTY; continue }
+        if (belowCell === WATER) { g[below] = BUG; g[p] = WATER; continue }
+        // Then crawl around
         if (rand() < 0.5) continue
         const dx = Math.floor(rand() * 3) - 1, dy = Math.floor(rand() * 3) - 1
         if (dx === 0 && dy === 0) continue
         const nx = x + dx, ny = y + dy
         if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
           const ni = idx(nx, ny), nc = g[ni]
-          if (nc === FIRE || nc === PLASMA || nc === LIGHTNING || nc === EMBER) { g[p] = FIRE }
-          else if (nc === PLANT) { g[ni] = BUG; g[p] = rand() < 0.3 ? EMPTY : DIRT }
-          else if (nc === EMPTY || nc === WATER) { g[ni] = BUG; g[p] = EMPTY }
+          if (nc === PLANT) { g[ni] = BUG; g[p] = rand() < 0.3 ? EMPTY : DIRT }
+          else if (nc === EMPTY) { g[ni] = BUG; g[p] = EMPTY }
         }
       }
       // NITRO
@@ -819,6 +833,9 @@ function updatePhysics() {
           }
         }
         if (dead) continue
+        // Fall first (gravity)
+        if (belowCell === EMPTY) { g[below] = ANT; g[p] = EMPTY; continue }
+        // Then crawl around (ants can burrow through dirt/sand)
         if (rand() < 0.5) continue
         const ax = Math.floor(rand() * 3) - 1, ay = Math.floor(rand() * 3) - 1
         if (ax === 0 && ay === 0) continue
@@ -832,6 +849,9 @@ function updatePhysics() {
       }
       // ALIEN
       else if (c === ALIEN) {
+        // Fall first (gravity) - aliens are affected by gravity
+        if (belowCell === EMPTY) { g[below] = ALIEN; g[p] = rand() < 0.05 ? QUARK : EMPTY; continue }
+        // Then move around erratically
         if (rand() < 0.6) continue
         const ax = Math.floor(rand() * 5) - 2, ay = Math.floor(rand() * 5) - 2
         if (ax === 0 && ay === 0) continue
