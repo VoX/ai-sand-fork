@@ -854,87 +854,37 @@ function updatePhysics() {
         }
         if (dead) continue
         if (rand() < 0.5) continue
-        // Movement with gravity bias - ants can burrow while falling
-        const ax = Math.floor(rand() * 3) - 1
-        const ay = rand() < 0.6 ? 1 : Math.floor(rand() * 3) - 1 // 60% chance to go down
+        // Check for plant nearby - ants climb to eat plants
+        let plantAbove = y > 0 && (g[idx(x, y - 1)] === PLANT || g[idx(x, y - 1)] === FLOWER)
+        let plantLeft = x > 0 && (g[idx(x - 1, y)] === PLANT || g[idx(x - 1, y)] === FLOWER)
+        let plantRight = x < cols - 1 && (g[idx(x + 1, y)] === PLANT || g[idx(x + 1, y)] === FLOWER)
+        const ax = plantLeft ? -1 : (plantRight ? 1 : Math.floor(rand() * 3) - 1)
+        const ay = plantAbove ? -1 : (rand() < 0.3 ? 1 : Math.floor(rand() * 3) - 1)
         if (ax === 0 && ay === 0) continue
         const anx = x + ax, any = y + ay
         if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
           const ani = idx(anx, any), anc = g[ani]
           if (anc === DIRT || anc === SAND) { g[ani] = ANT; g[p] = EMPTY }
           else if (anc === EMPTY) { g[ani] = ANT; g[p] = EMPTY }
-          else if (anc === PLANT || anc === FLOWER) { g[ani] = ANT; g[p] = rand() < 0.5 ? EMPTY : DIRT }
+          else if (anc === PLANT || anc === FLOWER) { g[ani] = ANT; g[p] = EMPTY }
         }
       }
-      // ALIEN
+      // ALIEN - simple random movement with slime trails
       else if (c === ALIEN) {
-        // Emergent flocking behavior - aliens interact to create slime patterns
         if (rand() < 0.4) continue
-
-        // Detect nearby aliens and calculate flocking direction
-        let nearbyAliens = 0
-        let avgDx = 0, avgDy = 0
-        for (let i = 0; i < 6; i++) {
-          const sdx = Math.floor(rand() * 9) - 4, sdy = Math.floor(rand() * 9) - 4
-          const snx = x + sdx, sny = y + sdy
-          if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
-            if (g[idx(snx, sny)] === ALIEN) {
-              nearbyAliens++
-              avgDx += sdx
-              avgDy += sdy
-            }
-          }
-        }
-
-        let ax, ay
-        if (nearbyAliens > 1) {
-          // Swirl around other aliens (perpendicular + attraction) - creates spiral patterns
-          const perpX = -Math.sign(avgDy)
-          const perpY = Math.sign(avgDx)
-          // Attraction toward center of group
-          const attrX = avgDx > 0 ? 1 : avgDx < 0 ? -1 : 0
-          const attrY = avgDy > 0 ? 1 : avgDy < 0 ? -1 : 0
-          ax = perpX + (rand() < 0.3 ? attrX : 0) + Math.floor(rand() * 3) - 1
-          ay = perpY + (rand() < 0.3 ? attrY : 0) + Math.floor(rand() * 3) - 1
-          // Leave slime trail when flocking - creates geometric patterns
-          if (rand() < 0.2) {
-            const tx = x + Math.floor(rand() * 3) - 1
-            const ty = y + Math.floor(rand() * 3) - 1
-            if (tx >= 0 && tx < cols && ty >= 0 && ty < rows && g[idx(tx, ty)] === EMPTY) {
-              g[idx(tx, ty)] = SLIME
-            }
-          }
-        } else if (nearbyAliens === 1) {
-          // Follow another alien at distance
-          ax = Math.sign(avgDx) + Math.floor(rand() * 3) - 1
-          ay = Math.sign(avgDy) + Math.floor(rand() * 3) - 1
-        } else {
-          // Random exploration when alone, with gravity bias
-          ax = Math.floor(rand() * 5) - 2
-          ay = rand() < 0.4 ? 1 : Math.floor(rand() * 5) - 2
-        }
-
+        // Random movement with slight gravity
+        const ax = Math.floor(rand() * 3) - 1
+        const ay = rand() < 0.3 ? 1 : Math.floor(rand() * 3) - 1
         if (ax === 0 && ay === 0) continue
         const anx = x + ax, any = y + ay
         if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
           const ani = idx(anx, any), anc = g[ani]
-          if (anc === EMPTY) { g[ani] = ALIEN; g[p] = EMPTY }
-          else if (anc === ALIEN) {
-            // Aliens meeting - create slime pattern burst
-            if (rand() < 0.12) {
-              for (let i = 0; i < 4; i++) {
-                const angle = (i / 4) * Math.PI * 2 + rand() * 0.5
-                const dist = 1 + Math.floor(rand() * 3)
-                const bx = x + Math.round(Math.cos(angle) * dist)
-                const by = y + Math.round(Math.sin(angle) * dist)
-                if (bx >= 0 && bx < cols && by >= 0 && by < rows && g[idx(bx, by)] === EMPTY) {
-                  g[idx(bx, by)] = SLIME
-                }
-              }
-            }
+          if (anc === EMPTY) {
+            g[ani] = ALIEN
+            g[p] = rand() < 0.1 ? SLIME : EMPTY // Occasional slime trail
           }
           else if (anc === BUG || anc === ANT || anc === BIRD || anc === BEE || anc === SLIME) {
-            g[ani] = ALIEN; g[p] = rand() < 0.5 ? ALIEN : SLIME
+            g[ani] = ALIEN; g[p] = SLIME
           } else if (anc === PLANT || anc === FLOWER) { g[ani] = ALIEN; g[p] = SLIME }
           else if (anc === FIRE || anc === PLASMA || anc === LIGHTNING) { g[p] = SLIME }
         }
