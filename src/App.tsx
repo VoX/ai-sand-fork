@@ -2420,7 +2420,7 @@ function App() {
 
   const render = useCallback(() => {
     const canvas = canvasRef.current
-    const ctx = canvas?.getContext('2d')
+    const ctx = canvas?.getContext('2d', { willReadFrequently: false })
     const imageData = imageDataRef.current
     if (!canvas || !ctx || !imageData) return
 
@@ -2429,10 +2429,16 @@ function App() {
     const width = canvas.width
     const data32 = new Uint32Array(imageData.data.buffer)
 
+    // Fast fill background
     data32.fill(BG_COLOR)
+
+    // Pre-compute row stride for faster indexing
+    const cellSize = CELL_SIZE
 
     for (let cy = 0; cy < rows; cy++) {
       const rowOff = cy * cols
+      const baseY = cy * cellSize * width
+
       for (let cx = 0; cx < cols; cx++) {
         const c = g[rowOff + cx]
         if (c === EMPTY) continue
@@ -2444,14 +2450,18 @@ function App() {
         else if (c === BLUE_FIRE) color = BLUE_FIRE_COLORS[(cx + cy) & 31]
         else color = COLORS_U32[c]
 
-        const startX = cx * CELL_SIZE
-        const startY = cy * CELL_SIZE
-        for (let py = 0; py < CELL_SIZE; py++) {
-          const rowStart = (startY + py) * width + startX
-          for (let px = 0; px < CELL_SIZE; px++) {
-            data32[rowStart + px] = color
-          }
-        }
+        // Optimized 4x4 block fill - unrolled for CELL_SIZE=4
+        const baseX = cx * cellSize
+        const row0 = baseY + baseX
+        const row1 = row0 + width
+        const row2 = row1 + width
+        const row3 = row2 + width
+
+        // Fill each row of the 4x4 cell
+        data32[row0] = data32[row0 + 1] = data32[row0 + 2] = data32[row0 + 3] = color
+        data32[row1] = data32[row1 + 1] = data32[row1 + 2] = data32[row1 + 3] = color
+        data32[row2] = data32[row2 + 1] = data32[row2 + 2] = data32[row2 + 3] = color
+        data32[row3] = data32[row3 + 1] = data32[row3 + 2] = data32[row3 + 3] = color
       }
     }
     ctx.putImageData(imageData, 0, 0)
