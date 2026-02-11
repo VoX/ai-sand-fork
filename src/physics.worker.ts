@@ -819,15 +819,16 @@ function updatePhysics() {
       // ANT
       else if (c === ANT) {
         if (rand() < 0.5) continue
-        // Movement - ants seek plant/flower to eat
+        // Movement with gravity - ants fall but can move sideways
         const ax = Math.floor(rand() * 3) - 1
-        const ay = Math.floor(rand() * 3) - 1
+        const ay = rand() < 0.7 ? 1 : Math.floor(rand() * 3) - 1  // 70% down like bugs
         if (ax === 0 && ay === 0) continue
         const anx = x + ax, any = y + ay
         if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
           const ani = idx(anx, any), anc = g[ani]
           if (anc === FIRE || anc === PLASMA || anc === LAVA) { g[p] = FIRE; continue }
-          if (anc === WATER || anc === ACID) { g[p] = EMPTY; continue }
+          if (anc === ACID) { g[p] = EMPTY; continue }
+          if (anc === WATER) { g[ani] = ANT; g[p] = WATER; continue }  // Float on water
           if (anc === DIRT || anc === SAND) { g[ani] = ANT; g[p] = EMPTY }
           else if (anc === EMPTY) { g[ani] = ANT; g[p] = EMPTY }
           else if (anc === PLANT || anc === FLOWER) { g[ani] = ANT; g[p] = EMPTY }
