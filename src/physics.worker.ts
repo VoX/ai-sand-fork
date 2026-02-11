@@ -95,7 +95,7 @@ function addParticles(cellX: number, cellY: number, tool: Material | 'erase', br
   if (matId === GUN) {
     if (cellX >= 0 && cellX < cols && cellY >= 0 && cellY < rows) {
       const idx = cellY * cols + cellX
-      if (grid[idx] !== STONE && grid[idx] !== TAP && grid[idx] !== GUN) {
+      if (grid[idx] !== STONE && grid[idx] !== TAP && grid[idx] !== GUN && grid[idx] !== BLACK_HOLE) {
         grid[idx] = GUN
       }
     }
@@ -113,7 +113,7 @@ function addParticles(cellX: number, cellY: number, tool: Material | 'erase', br
           else if (matId === ANT || matId === BUG || matId === SLIME) spawnChance = 0.7
           else if (matId === ALIEN || matId === QUARK) spawnChance = 0.92
           else if (matId === MOLD || matId === SPORE) spawnChance = 0.6
-          if ((tool === 'erase' || Math.random() > spawnChance) && (tool === 'erase' || (grid[idx] !== STONE && grid[idx] !== TAP))) {
+          if ((tool === 'erase' || Math.random() > spawnChance) && (tool === 'erase' || (grid[idx] !== STONE && grid[idx] !== TAP && grid[idx] !== BLACK_HOLE))) {
             grid[idx] = matId
           }
         }
