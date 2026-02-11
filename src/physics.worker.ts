@@ -738,21 +738,18 @@ function updatePhysics() {
       }
       // BUG
       else if (c === BUG) {
-        // Check for hazards first
-        for (let i = 0; i < 2; i++) {
-          const bdx = Math.floor(rand() * 3) - 1, bdy = Math.floor(rand() * 3) - 1
-          if (bdx === 0 && bdy === 0) continue
+        // Quick hazard check - just one random neighbor
+        const bdx = Math.floor(rand() * 3) - 1, bdy = Math.floor(rand() * 3) - 1
+        if (bdx !== 0 || bdy !== 0) {
           const bnx = x + bdx, bny = y + bdy
           if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
             const bnc = g[idx(bnx, bny)]
-            if (bnc === FIRE || bnc === PLASMA || bnc === LIGHTNING || bnc === EMBER) { g[p] = FIRE; break }
+            if (bnc === FIRE || bnc === PLASMA || bnc === LIGHTNING || bnc === EMBER) { g[p] = FIRE; continue }
           }
         }
-        if (g[p] !== BUG) continue
         if (rand() < 0.5) continue
-        // Movement with gravity bias - can move sideways while falling
         const dx = Math.floor(rand() * 3) - 1
-        const dy = rand() < 0.7 ? 1 : Math.floor(rand() * 3) - 1 // 70% chance to go down
+        const dy = rand() < 0.7 ? 1 : Math.floor(rand() * 3) - 1
         if (dx === 0 && dy === 0) continue
         const nx = x + dx, ny = y + dy
         if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
@@ -821,29 +818,16 @@ function updatePhysics() {
       }
       // ANT
       else if (c === ANT) {
-        let dead = false
-        for (let i = 0; i < 2; i++) {
-          const adx = Math.floor(rand() * 3) - 1, ady = Math.floor(rand() * 3) - 1
-          if (adx === 0 && ady === 0) continue
-          const anx = x + adx, any = y + ady
-          if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
-            const anc = g[idx(anx, any)]
-            if (anc === FIRE || anc === PLASMA || anc === LIGHTNING || anc === EMBER || anc === LAVA) { g[p] = FIRE; dead = true; break }
-            if (anc === WATER || anc === ACID) { g[p] = EMPTY; dead = true; break }
-          }
-        }
-        if (dead) continue
         if (rand() < 0.5) continue
-        // Check for plant nearby - ants climb to eat plants
-        let plantAbove = y > 0 && (g[idx(x, y - 1)] === PLANT || g[idx(x, y - 1)] === FLOWER)
-        let plantLeft = x > 0 && (g[idx(x - 1, y)] === PLANT || g[idx(x - 1, y)] === FLOWER)
-        let plantRight = x < cols - 1 && (g[idx(x + 1, y)] === PLANT || g[idx(x + 1, y)] === FLOWER)
-        const ax = plantLeft ? -1 : (plantRight ? 1 : Math.floor(rand() * 3) - 1)
-        const ay = plantAbove ? -1 : (rand() < 0.3 ? 1 : Math.floor(rand() * 3) - 1)
+        // Movement - ants seek plant/flower to eat
+        const ax = Math.floor(rand() * 3) - 1
+        const ay = Math.floor(rand() * 3) - 1
         if (ax === 0 && ay === 0) continue
         const anx = x + ax, any = y + ay
         if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
           const ani = idx(anx, any), anc = g[ani]
+          if (anc === FIRE || anc === PLASMA || anc === LAVA) { g[p] = FIRE; continue }
+          if (anc === WATER || anc === ACID) { g[p] = EMPTY; continue }
           if (anc === DIRT || anc === SAND) { g[ani] = ANT; g[p] = EMPTY }
           else if (anc === EMPTY) { g[ani] = ANT; g[p] = EMPTY }
           else if (anc === PLANT || anc === FLOWER) { g[ani] = ANT; g[p] = EMPTY }
