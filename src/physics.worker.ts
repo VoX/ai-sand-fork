@@ -764,8 +764,13 @@ function updatePhysics() {
       }
       // NITRO
       else if (c === NITRO) {
-        // Nitroglycerine - explodes on contact with almost anything
-        const explode = () => {
+        // Nitroglycerine - explodes on contact with solids
+        // Check below (landing) and above (something fell on it)
+        const aboveCell = y > 0 ? g[idx(x, y - 1)] : EMPTY
+        const shouldExplode =
+          (belowCell !== EMPTY && belowCell !== WATER && belowCell !== NITRO) ||
+          (aboveCell !== EMPTY && aboveCell !== WATER && aboveCell !== NITRO)
+        if (shouldExplode) {
           const r = 12
           for (let edy = -r; edy <= r; edy++) {
             for (let edx = -r; edx <= r; edx++) {
@@ -779,33 +784,8 @@ function updatePhysics() {
               }
             }
           }
+          continue
         }
-        // Check if touching anything solid (not empty, water, or nitro)
-        let shouldExplode = false
-        for (let ndy = -1; ndy <= 1 && !shouldExplode; ndy++) {
-          for (let ndx = -1; ndx <= 1 && !shouldExplode; ndx++) {
-            if (ndx === 0 && ndy === 0) continue
-            const nnx = x + ndx, nny = y + ndy
-            if (nnx >= 0 && nnx < cols && nny >= 0 && nny < rows) {
-              const nnc = g[idx(nnx, nny)]
-              if (nnc !== EMPTY && nnc !== WATER && nnc !== NITRO) {
-                shouldExplode = true
-              }
-            }
-          }
-        }
-        // Also explode if can't fall and not on water (landed on something)
-        if (!shouldExplode && belowCell !== EMPTY && belowCell !== WATER && belowCell !== NITRO) {
-          shouldExplode = true
-        }
-        // Also explode if something landed on top of nitro
-        if (!shouldExplode && y > 0) {
-          const aboveCell = g[idx(x, y - 1)]
-          if (aboveCell !== EMPTY && aboveCell !== WATER && aboveCell !== NITRO) {
-            shouldExplode = true
-          }
-        }
-        if (shouldExplode) { explode(); continue }
         if (g[p] !== NITRO) continue
         if (belowCell === EMPTY) { g[below] = NITRO; g[p] = EMPTY }
         else if (belowCell === WATER) { g[below] = NITRO; g[p] = WATER }
@@ -1189,31 +1169,14 @@ function updatePhysics() {
           }
         }
       }
-      // PLANT - spreads through water
+      // PLANT - spreads through water (optimized: only check one random direction)
       else if (c === PLANT) {
-        // Check if touching water - if so, grow aggressively
-        let touchingWater = false
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (dx === 0 && dy === 0) continue
-            const nx = x + dx, ny = y + dy
-            if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[idx(nx, ny)] === WATER) {
-              touchingWater = true
-              break
-            }
-          }
-          if (touchingWater) break
-        }
-        // Grow through water - faster when in contact with water
-        if (touchingWater && rand() < 0.15) {
-          const pdx = Math.floor(rand() * 3) - 1
-          const pdy = rand() < 0.7 ? -1 : Math.floor(rand() * 3) - 1  // Strong upward bias
-          const pnx = x + pdx, pny = y + pdy
-          if (pnx >= 0 && pnx < cols && pny >= 0 && pny < rows) {
-            if (g[idx(pnx, pny)] === WATER) {
-              g[idx(pnx, pny)] = rand() < 0.1 ? FLOWER : PLANT
-            }
-          }
+        if (rand() < 0.92) continue // Only 8% of plants check each frame
+        const pdx = Math.floor(rand() * 3) - 1
+        const pdy = rand() < 0.7 ? -1 : Math.floor(rand() * 3) - 1
+        const pnx = x + pdx, pny = y + pdy
+        if (pnx >= 0 && pnx < cols && pny >= 0 && pny < rows && g[idx(pnx, pny)] === WATER) {
+          g[idx(pnx, pny)] = rand() < 0.1 ? FLOWER : PLANT
         }
       }
       // SEED - floats in water
