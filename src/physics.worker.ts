@@ -749,18 +749,17 @@ function updatePhysics() {
           }
         }
         if (g[p] !== BUG) continue
-        // Fall first (gravity)
-        if (belowCell === EMPTY) { g[below] = BUG; g[p] = EMPTY; continue }
-        if (belowCell === WATER) { g[below] = BUG; g[p] = WATER; continue }
-        // Then crawl around
         if (rand() < 0.5) continue
-        const dx = Math.floor(rand() * 3) - 1, dy = Math.floor(rand() * 3) - 1
+        // Movement with gravity bias - can move sideways while falling
+        const dx = Math.floor(rand() * 3) - 1
+        const dy = rand() < 0.7 ? 1 : Math.floor(rand() * 3) - 1 // 70% chance to go down
         if (dx === 0 && dy === 0) continue
         const nx = x + dx, ny = y + dy
         if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
           const ni = idx(nx, ny), nc = g[ni]
           if (nc === PLANT) { g[ni] = BUG; g[p] = rand() < 0.3 ? EMPTY : DIRT }
           else if (nc === EMPTY) { g[ni] = BUG; g[p] = EMPTY }
+          else if (nc === WATER) { g[ni] = BUG; g[p] = WATER }
         }
       }
       // NITRO
@@ -836,11 +835,10 @@ function updatePhysics() {
           }
         }
         if (dead) continue
-        // Fall first (gravity)
-        if (belowCell === EMPTY) { g[below] = ANT; g[p] = EMPTY; continue }
-        // Then crawl around (ants can burrow through dirt/sand)
         if (rand() < 0.5) continue
-        const ax = Math.floor(rand() * 3) - 1, ay = Math.floor(rand() * 3) - 1
+        // Movement with gravity bias - ants can burrow while falling
+        const ax = Math.floor(rand() * 3) - 1
+        const ay = rand() < 0.6 ? 1 : Math.floor(rand() * 3) - 1 // 60% chance to go down
         if (ax === 0 && ay === 0) continue
         const anx = x + ax, any = y + ay
         if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
@@ -852,11 +850,10 @@ function updatePhysics() {
       }
       // ALIEN
       else if (c === ALIEN) {
-        // Fall first (gravity) - aliens are affected by gravity
-        if (belowCell === EMPTY) { g[below] = ALIEN; g[p] = rand() < 0.05 ? QUARK : EMPTY; continue }
-        // Then move around erratically
+        // Erratic movement with gravity bias - can move sideways while falling
         if (rand() < 0.6) continue
-        const ax = Math.floor(rand() * 5) - 2, ay = Math.floor(rand() * 5) - 2
+        const ax = Math.floor(rand() * 5) - 2
+        const ay = rand() < 0.5 ? (rand() < 0.8 ? 2 : 1) : Math.floor(rand() * 5) - 2 // 50% strong downward bias
         if (ax === 0 && ay === 0) continue
         const anx = x + ax, any = y + ay
         if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
