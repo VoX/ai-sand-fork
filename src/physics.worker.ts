@@ -764,13 +764,17 @@ function updatePhysics() {
       }
       // NITRO
       else if (c === NITRO) {
-        for (let i = 0; i < 2; i++) {
+        // Check for explosion triggers
+        let exploded = false
+        for (let i = 0; i < 3; i++) {
           const ndx = Math.floor(rand() * 3) - 1, ndy = Math.floor(rand() * 3) - 1
           if (ndx === 0 && ndy === 0) continue
           const nnx = x + ndx, nny = y + ndy
           if (nnx >= 0 && nnx < cols && nny >= 0 && nny < rows) {
             const nnc = g[idx(nnx, nny)]
-            if (nnc === FIRE || nnc === PLASMA || nnc === EMBER || nnc === LAVA) {
+            // Explode on contact with fire types, lightning, or gunpowder
+            if (nnc === FIRE || nnc === PLASMA || nnc === EMBER || nnc === LAVA ||
+                nnc === LIGHTNING || nnc === BLUE_FIRE || nnc === GUNPOWDER) {
               const r = 12
               for (let edy = -r; edy <= r; edy++) {
                 for (let edx = -r; edx <= r; edx++) {
@@ -784,11 +788,12 @@ function updatePhysics() {
                   }
                 }
               }
+              exploded = true
               break
             }
           }
         }
-        if (g[p] !== NITRO) continue
+        if (exploded || g[p] !== NITRO) continue
         if (belowCell === EMPTY) { g[below] = NITRO; g[p] = EMPTY }
         else if (belowCell === WATER) { g[below] = NITRO; g[p] = WATER }
         else {
