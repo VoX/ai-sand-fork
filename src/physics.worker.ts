@@ -16,8 +16,9 @@ const SPORE = 50, ALGAE = 51, POISON = 52, DUST = 53, FIREWORK = 54
 const BUBBLE = 55, GLITTER = 56, STAR = 57, COMET = 58, BLUE_FIRE = 59
 const BLACK_HOLE = 60, FIREFLY = 61
 const WORM = 62, FAIRY = 63
+const FISH = 64, MOTH = 65
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy'
+type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth'
 
 const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
@@ -30,6 +31,7 @@ const MATERIAL_TO_ID: Record<Material, number> = {
   firework: FIREWORK, bubble: BUBBLE, glitter: GLITTER, star: STAR, comet: COMET, blackhole: BLACK_HOLE,
   firefly: FIREFLY,
   worm: WORM, fairy: FAIRY,
+  fish: FISH, moth: MOTH,
 }
 
 const CELL_SIZE = 4
@@ -56,6 +58,7 @@ const COLORS_U32 = new Uint32Array([
   0xFFAAB220, 0xFF3D7025, 0xFF8B008B, 0xFF87B8DE, 0xFF0066FF,
   0xFFEBCE87, 0xFFC0C0C0, 0xFF00DFFF, 0xFFFFF97D, 0xFFFF901E, 0xFF000000, 0xFF00FFBF,
   0xFF8090C0, 0xFFFF88FF,  // WORM (pinkish flesh), FAIRY (bright pink)
+  0xFF00A5FF, 0xFF8CB4D2,  // FISH (orange/gold), MOTH (tan/beige)
 ])
 
 const FIRE_COLORS = new Uint32Array(32)
@@ -890,6 +893,52 @@ function updatePhysics() {
           else if (fnc === WATER) { g[fni] = FAIRY; g[p] = GLITTER }  // Sparkles on water
           else if (fnc === PLANT) { g[fni] = FAIRY; g[p] = FLOWER }  // Makes flowers bloom
           else if (fnc === STONE) { g[p] = rand() < 0.1 ? GLITTER : EMPTY }  // Bounces off stone with sparkle
+        }
+      }
+      // FISH - swims in water, eats bugs/algae, dies outside water
+      else if (c === FISH) {
+        // Check if in water
+        let inWater = false
+        if (belowCell === WATER || (y > 0 && g[idx(x, y - 1)] === WATER)) inWater = true
+        else if ((x > 0 && g[idx(x - 1, y)] === WATER) || (x < cols - 1 && g[idx(x + 1, y)] === WATER)) inWater = true
+        if (!inWater) { g[p] = EMPTY; continue }  // Dies outside water
+        if (rand() < 0.4) continue
+        const fx = Math.floor(rand() * 3) - 1
+        const fy = Math.floor(rand() * 3) - 1
+        if (fx === 0 && fy === 0) continue
+        const fnx = x + fx, fny = y + fy
+        if (fnx >= 0 && fnx < cols && fny >= 0 && fny < rows) {
+          const fni = idx(fnx, fny), fnc = g[fni]
+          if (fnc === WATER) { g[fni] = FISH; g[p] = WATER }
+          else if (fnc === BUG || fnc === ALGAE || fnc === WORM) { g[fni] = FISH; g[p] = WATER }  // Eats bugs, algae, worms
+        }
+      }
+      // MOTH - flies toward light/fire, dies in fire
+      else if (c === MOTH) {
+        if (rand() < 0.3) continue
+        // Look for fire/light nearby and fly toward it
+        let targetDx = 0, targetDy = 0
+        for (let i = 0; i < 2; i++) {
+          const sdx = Math.floor(rand() * 9) - 4, sdy = Math.floor(rand() * 9) - 4
+          const snx = x + sdx, sny = y + sdy
+          if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
+            const snc = g[idx(snx, sny)]
+            if (snc === FIRE || snc === EMBER || snc === FIREFLY || snc === LIGHTNING) {
+              targetDx = sdx > 0 ? 1 : (sdx < 0 ? -1 : 0)
+              targetDy = sdy > 0 ? 1 : (sdy < 0 ? -1 : 0)
+              break
+            }
+          }
+        }
+        const mx = targetDx !== 0 ? targetDx : Math.floor(rand() * 3) - 1
+        const my = targetDy !== 0 ? targetDy : (rand() < 0.4 ? -1 : Math.floor(rand() * 3) - 1)  // Slight upward bias
+        if (mx === 0 && my === 0) continue
+        const mnx = x + mx, mny = y + my
+        if (mnx >= 0 && mnx < cols && mny >= 0 && mny < rows) {
+          const mni = idx(mnx, mny), mnc = g[mni]
+          if (mnc === FIRE || mnc === EMBER || mnc === LAVA || mnc === PLASMA) { g[p] = FIRE; continue }  // Dies in fire
+          if (mnc === EMPTY) { g[mni] = MOTH; g[p] = EMPTY }
+          else if (mnc === PLANT || mnc === FLOWER) { g[mni] = MOTH; g[p] = rand() < 0.3 ? EMPTY : PLANT }
         }
       }
       // QUARK
