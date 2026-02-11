@@ -850,17 +850,17 @@ function updatePhysics() {
       }
       // ALIEN
       else if (c === ALIEN) {
-        // Fully erratic movement - creates emergent swirling patterns
-        if (rand() < 0.6) continue
+        // Erratic movement with quark trails - creates emergent swirling patterns
+        if (rand() < 0.4) continue // More active (was 0.6)
         const ax = Math.floor(rand() * 5) - 2
         const ay = Math.floor(rand() * 5) - 2
         if (ax === 0 && ay === 0) continue
         const anx = x + ax, any = y + ay
         if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
           const ani = idx(anx, any), anc = g[ani]
-          if (anc === EMPTY) { g[ani] = ALIEN; g[p] = rand() < 0.95 ? EMPTY : QUARK }
+          if (anc === EMPTY) { g[ani] = ALIEN; g[p] = rand() < 0.92 ? EMPTY : QUARK } // More quarks (was 0.95)
           else if (anc === BUG || anc === ANT || anc === BIRD || anc === BEE || anc === SLIME) {
-            g[ani] = ALIEN; g[p] = rand() < 0.7 ? ALIEN : QUARK
+            g[ani] = ALIEN; g[p] = rand() < 0.5 ? ALIEN : QUARK // More breeding & quarks
           } else if (anc === PLANT || anc === FLOWER) { g[ani] = ALIEN; g[p] = QUARK }
           else if (anc === FIRE || anc === PLASMA || anc === LIGHTNING) { g[p] = QUARK }
         }
