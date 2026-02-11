@@ -1287,7 +1287,6 @@ function updatePhysics() {
           if ((fc === BUG || fc === ANT || fc === BIRD) && rand() < 0.3) { g[p] = EMPTY; continue }
         }
         if (rand() > 0.35) continue
-        const aboveCell = y > 0 ? g[idx(x, y - 1)] : EMPTY
         const canGrow = (y < rows - 1 && (g[below] === DIRT || g[below] === WATER)) ||
                         (aboveCell === DIRT || aboveCell === WATER || aboveCell === PLANT)
         if (!canGrow) continue
