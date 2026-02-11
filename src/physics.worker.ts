@@ -683,7 +683,10 @@ function updatePhysics() {
         if (rand() < 0.08) {
           const bulletTypes = [BULLET_N, BULLET_NE, BULLET_E, BULLET_SE, BULLET_S, BULLET_SW, BULLET_W, BULLET_NW]
           const offsets = [[0,-1], [1,-1], [1,0], [1,1], [0,1], [-1,1], [-1,0], [-1,-1]]
-          for (let d = 0; d < 8; d++) {
+          // Pick a random direction to shoot
+          const startDir = Math.floor(rand() * 8)
+          for (let i = 0; i < 8; i++) {
+            const d = (startDir + i) % 8
             const [ox, oy] = offsets[d]
             const tx = x + ox, ty = y + oy
             if (tx >= 0 && tx < cols && ty >= 0 && ty < rows && g[idx(tx, ty)] === EMPTY) {
@@ -1059,18 +1062,19 @@ function updatePhysics() {
           }
         }
         if (g[p] === STONE) continue
-        if (rand() < 0.35 && y > 0) {
+        // Increased lava flow rates for more eruption
+        if (rand() < 0.55 && y > 0) {
           const vi = idx(x, y - 1)
           if (g[vi] === EMPTY) g[vi] = LAVA
         }
-        if (rand() < 0.1) {
+        if (rand() < 0.25) {
           const vdx = rand() < 0.5 ? -1 : 1
           if (x + vdx >= 0 && x + vdx < cols && y > 0) {
             const vsi = idx(x + vdx, y - 1)
             if (g[vsi] === EMPTY) g[vsi] = LAVA
           }
         }
-        if (rand() < 0.05) {
+        if (rand() < 0.1) {
           const vdx = Math.floor(rand() * 3) - 1
           const vdy = Math.floor(rand() * 2) - 1
           const vnx = x + vdx, vny = y + vdy
