@@ -819,19 +819,21 @@ function updatePhysics() {
       // ANT
       else if (c === ANT) {
         if (rand() < 0.5) continue
-        // Movement with gravity - ants fall but can move sideways
+        // Check for food above/around - ants eat through plant and dirt
+        const above = y > 0 ? g[idx(x, y - 1)] : EMPTY
+        const hasFood = above === PLANT || above === FLOWER || above === DIRT
+        // If food above, go up. Otherwise gravity pulls down
         const ax = Math.floor(rand() * 3) - 1
-        const ay = rand() < 0.7 ? 1 : Math.floor(rand() * 3) - 1  // 70% down like bugs
+        const ay = hasFood ? -1 : (rand() < 0.7 ? 1 : Math.floor(rand() * 3) - 1)
         if (ax === 0 && ay === 0) continue
         const anx = x + ax, any = y + ay
         if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
           const ani = idx(anx, any), anc = g[ani]
           if (anc === FIRE || anc === PLASMA || anc === LAVA) { g[p] = FIRE; continue }
           if (anc === ACID) { g[p] = EMPTY; continue }
-          if (anc === WATER) { g[ani] = ANT; g[p] = WATER; continue }  // Float on water
-          if (anc === DIRT || anc === SAND) { g[ani] = ANT; g[p] = EMPTY }
+          if (anc === WATER) { g[ani] = ANT; g[p] = WATER; continue }
+          if (anc === DIRT || anc === SAND || anc === PLANT || anc === FLOWER) { g[ani] = ANT; g[p] = EMPTY }
           else if (anc === EMPTY) { g[ani] = ANT; g[p] = EMPTY }
-          else if (anc === PLANT || anc === FLOWER) { g[ani] = ANT; g[p] = EMPTY }
         }
       }
       // ALIEN - simple random movement with slime trails
