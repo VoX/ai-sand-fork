@@ -877,8 +877,8 @@ function updatePhysics() {
       }
       // CRYSTAL
       else if (c === CRYSTAL) {
-        if (belowCell === EMPTY && rand() < 0.5) { g[below] = CRYSTAL; g[p] = EMPTY }
-        else if (belowCell === WATER) { g[below] = CRYSTAL; g[p] = WATER }
+        // Crystal is stationary, slowly decays to sand
+        if (rand() < 0.002) { g[p] = SAND }
       }
       // EMBER
       else if (c === EMBER) {
