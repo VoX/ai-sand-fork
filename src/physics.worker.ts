@@ -766,29 +766,30 @@ function updatePhysics() {
       else if (c === NITRO) {
         // Nitroglycerine - explodes on contact with almost anything
         let exploded = false
-        for (let i = 0; i < 3; i++) {
-          const ndx = Math.floor(rand() * 3) - 1, ndy = Math.floor(rand() * 3) - 1
-          if (ndx === 0 && ndy === 0) continue
-          const nnx = x + ndx, nny = y + ndy
-          if (nnx >= 0 && nnx < cols && nny >= 0 && nny < rows) {
-            const nnc = g[idx(nnx, nny)]
-            // Explode on contact with anything except empty, water, and nitro
-            if (nnc !== EMPTY && nnc !== WATER && nnc !== NITRO) {
-              const r = 12
-              for (let edy = -r; edy <= r; edy++) {
-                for (let edx = -r; edx <= r; edx++) {
-                  if (edx * edx + edy * edy <= r * r) {
-                    const ex = x + edx, ey = y + edy
-                    if (ex >= 0 && ex < cols && ey >= 0 && ey < rows) {
-                      const ei = idx(ex, ey), ec = g[ei]
-                      if (ec === WATER) g[ei] = rand() < 0.7 ? STONE : EMPTY
-                      else if (ec !== STONE && ec !== GLASS) g[ei] = FIRE
+        // Check all 8 neighbors for collision
+        for (let ndy = -1; ndy <= 1 && !exploded; ndy++) {
+          for (let ndx = -1; ndx <= 1 && !exploded; ndx++) {
+            if (ndx === 0 && ndy === 0) continue
+            const nnx = x + ndx, nny = y + ndy
+            if (nnx >= 0 && nnx < cols && nny >= 0 && nny < rows) {
+              const nnc = g[idx(nnx, nny)]
+              // Explode on contact with anything except empty, water, and nitro
+              if (nnc !== EMPTY && nnc !== WATER && nnc !== NITRO) {
+                const r = 12
+                for (let edy = -r; edy <= r; edy++) {
+                  for (let edx = -r; edx <= r; edx++) {
+                    if (edx * edx + edy * edy <= r * r) {
+                      const ex = x + edx, ey = y + edy
+                      if (ex >= 0 && ex < cols && ey >= 0 && ey < rows) {
+                        const ei = idx(ex, ey), ec = g[ei]
+                        if (ec === WATER) g[ei] = rand() < 0.7 ? STONE : EMPTY
+                        else if (ec !== STONE && ec !== GLASS) g[ei] = FIRE
+                      }
                     }
                   }
                 }
+                exploded = true
               }
-              exploded = true
-              break
             }
           }
         }
