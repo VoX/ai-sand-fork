@@ -850,18 +850,65 @@ function updatePhysics() {
       }
       // ALIEN
       else if (c === ALIEN) {
-        // Erratic movement with quark trails - creates emergent swirling patterns
-        if (rand() < 0.4) continue // More active (was 0.6)
-        const ax = Math.floor(rand() * 5) - 2
-        const ay = Math.floor(rand() * 5) - 2
+        // Emergent flocking behavior - aliens interact to create patterns
+        if (rand() < 0.5) continue
+
+        // Detect nearby aliens and calculate flocking direction
+        let nearbyAliens = 0
+        let avgDx = 0, avgDy = 0
+        for (let i = 0; i < 4; i++) {
+          const sdx = Math.floor(rand() * 7) - 3, sdy = Math.floor(rand() * 7) - 3
+          const snx = x + sdx, sny = y + sdy
+          if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
+            if (g[idx(snx, sny)] === ALIEN) {
+              nearbyAliens++
+              avgDx += sdx
+              avgDy += sdy
+            }
+          }
+        }
+
+        let ax, ay
+        if (nearbyAliens > 0) {
+          // Swirl around other aliens (perpendicular + slight attraction)
+          const perpX = -Math.sign(avgDy)
+          const perpY = Math.sign(avgDx)
+          ax = perpX + Math.floor(rand() * 3) - 1
+          ay = perpY + Math.floor(rand() * 3) - 1
+          // Leave glowing trail when flocking
+          if (rand() < 0.15) {
+            const tx = x + Math.floor(rand() * 3) - 1
+            const ty = y + Math.floor(rand() * 3) - 1
+            if (tx >= 0 && tx < cols && ty >= 0 && ty < rows && g[idx(tx, ty)] === EMPTY) {
+              g[idx(tx, ty)] = STATIC
+            }
+          }
+        } else {
+          // Random exploration when alone
+          ax = Math.floor(rand() * 5) - 2
+          ay = Math.floor(rand() * 5) - 2
+        }
+
         if (ax === 0 && ay === 0) continue
         const anx = x + ax, any = y + ay
         if (anx >= 0 && anx < cols && any >= 0 && any < rows) {
           const ani = idx(anx, any), anc = g[ani]
-          if (anc === EMPTY) { g[ani] = ALIEN; g[p] = rand() < 0.92 ? EMPTY : QUARK } // More quarks (was 0.95)
+          if (anc === EMPTY) { g[ani] = ALIEN; g[p] = EMPTY }
+          else if (anc === ALIEN) {
+            // Aliens meeting - create pattern burst
+            if (rand() < 0.1) {
+              for (let i = 0; i < 3; i++) {
+                const bx = x + Math.floor(rand() * 5) - 2
+                const by = y + Math.floor(rand() * 5) - 2
+                if (bx >= 0 && bx < cols && by >= 0 && by < rows && g[idx(bx, by)] === EMPTY) {
+                  g[idx(bx, by)] = rand() < 0.7 ? STATIC : QUARK
+                }
+              }
+            }
+          }
           else if (anc === BUG || anc === ANT || anc === BIRD || anc === BEE || anc === SLIME) {
-            g[ani] = ALIEN; g[p] = rand() < 0.5 ? ALIEN : QUARK // More breeding & quarks
-          } else if (anc === PLANT || anc === FLOWER) { g[ani] = ALIEN; g[p] = QUARK }
+            g[ani] = ALIEN; g[p] = rand() < 0.6 ? ALIEN : STATIC
+          } else if (anc === PLANT || anc === FLOWER) { g[ani] = ALIEN; g[p] = STATIC }
           else if (anc === FIRE || anc === PLASMA || anc === LIGHTNING) { g[p] = QUARK }
         }
       }
