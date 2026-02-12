@@ -1,8 +1,8 @@
 // ChunkMap — spatial subdivision for sleep/wake and dirty-rect optimization
 // The global grid stays as a single Uint8Array; chunks are metadata overlays.
 
-export const CHUNK_SIZE = 64
-export const CHUNK_SHIFT = 6  // log2(64) — for bitwise division
+export const CHUNK_SIZE = 32
+export const CHUNK_SHIFT = 5  // log2(32) — for bitwise division
 const SLEEP_THRESHOLD = 60    // ticks of no change before a chunk sleeps
 
 export class ChunkMap {
