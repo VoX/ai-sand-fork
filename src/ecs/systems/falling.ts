@@ -11,6 +11,7 @@ import {
   MOLD, MERCURY, VOID, RUST, PLANT, SEED, ALGAE,
   POISON,
   TAP, ANTHILL, HIVE, NEST, GUN, VOLCANO, STAR, BLACK_HOLE,
+  NITRO_EXPLOSION_RADIUS, GUNPOWDER_EXPLOSION_RADIUS,
 } from '../constants'
 import { updateBug, updateAnt, updateAlien, updateWorm, updateFairy, updateFish, updateMoth } from './creatures'
 import { updateBulletFalling, updateBulletTrail } from './projectiles'
@@ -25,12 +26,65 @@ import {
 import { applyGravity } from './gravity'
 import { applyLiquid } from './liquid'
 import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../../sim/ChunkMap'
+import { createIdx } from '../orchestration'
+
+// Handler type shared by all particle updaters
+type ParticleHandler = (g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number) => void
+
+// Dispatch tables (indexed by particle type ID)
+const SPAWNER_DISPATCH: Partial<Record<number, ParticleHandler>> = {
+  [TAP]: updateTap, [ANTHILL]: updateAnthill, [HIVE]: updateHive, [NEST]: updateNest,
+  [GUN]: updateGun, [VOLCANO]: updateVolcano, [STAR]: updateStar, [BLACK_HOLE]: updateBlackHole,
+}
+const CREATURE_DISPATCH: Partial<Record<number, ParticleHandler>> = {
+  [BUG]: updateBug, [ANT]: updateAnt, [ALIEN]: updateAlien, [WORM]: updateWorm,
+  [FAIRY]: updateFairy, [FISH]: updateFish, [MOTH]: updateMoth,
+}
+const CORROSIVE_DISPATCH: Partial<Record<number, ParticleHandler>> = {
+  [ACID]: updateAcid, [LAVA]: updateLava, [MERCURY]: updateMercury, [VOID]: updateVoid, [POISON]: updatePoison,
+}
+const INFECTIOUS_DISPATCH: Partial<Record<number, ParticleHandler>> = {
+  [MOLD]: updateMold, [RUST]: updateRust,
+}
+const GROWTH_DISPATCH: Partial<Record<number, ParticleHandler>> = {
+  [PLANT]: updatePlant, [SEED]: updateSeed, [ALGAE]: updateAlgae,
+}
+const EFFECTS_DISPATCH: Partial<Record<number, ParticleHandler>> = {
+  [QUARK]: updateQuark, [CRYSTAL]: updateCrystal, [EMBER]: updateEmber,
+  [STATIC]: updateStatic, [DUST]: updateDust, [GLITTER]: updateGlitter,
+}
 
 // Combined mask for particles that have handler flags (dispatched by flag group)
 const HANDLER_MASK = F_PROJECTILE | F_CREATURE | F_CORROSIVE | F_INFECTIOUS | F_GROWTH | F_SPAWNER
 
+/**
+ * Shared settle/fall movement for inline particles.
+ * Tries: fall into empty → sink through liquid → diagonal(s) → lateral(s).
+ */
+function settleFall(
+  g: Uint8Array, x: number, y: number, p: number, c: number,
+  cols: number, _rows: number, below: number, belowCell: number,
+  rand: () => number, stampGrid: Uint8Array, tickParity: number,
+  idx: (x: number, y: number) => number,
+  sinkType: number,       // -1 = no sinking, otherwise particle type to swap with
+  diagBoth: boolean,      // try both diagonal directions?
+  lateralChance: number,  // 0 = no lateral, >0 = chance of lateral movement
+  lateralBoth: boolean,   // try both lateral directions?
+): void {
+  if (belowCell === EMPTY) { g[below] = c; g[p] = EMPTY; stampGrid[below] = tickParity; return }
+  if (sinkType >= 0 && belowCell === sinkType) { g[below] = c; g[p] = sinkType; stampGrid[below] = tickParity; return }
+  const dx = rand() < 0.5 ? -1 : 1
+  const nx1 = x + dx, nx2 = x - dx
+  if (nx1 >= 0 && nx1 < cols && g[idx(nx1, y + 1)] === EMPTY) { const d = idx(nx1, y + 1); g[d] = c; g[p] = EMPTY; stampGrid[d] = tickParity; return }
+  if (diagBoth && nx2 >= 0 && nx2 < cols && g[idx(nx2, y + 1)] === EMPTY) { const d = idx(nx2, y + 1); g[d] = c; g[p] = EMPTY; stampGrid[d] = tickParity; return }
+  if (lateralChance > 0 && rand() < lateralChance) {
+    if (nx1 >= 0 && nx1 < cols && g[idx(nx1, y)] === EMPTY) { const d = idx(nx1, y); g[d] = c; g[p] = EMPTY; stampGrid[d] = tickParity; return }
+    if (lateralBoth && nx2 >= 0 && nx2 < cols && g[idx(nx2, y)] === EMPTY) { const d = idx(nx2, y); g[d] = c; g[p] = EMPTY; stampGrid[d] = tickParity; return }
+  }
+}
+
 export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, chunkMap: ChunkMap, rand: () => number): void {
-  const idx = (x: number, y: number) => y * cols + x
+  const idx = createIdx(cols)
   const { chunkCols, active, stampGrid, tickParity } = chunkMap
 
   for (let y = rows - 2; y >= 0; y--) {
@@ -59,16 +113,7 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
       // ── Handler-flagged particles (flag-based dispatch) ──
       if (flags & HANDLER_MASK) {
         if (flags & F_SPAWNER) {
-          switch (c) {
-            case TAP:        updateTap(g, x, y, p, cols, rows, rand); break
-            case ANTHILL:    updateAnthill(g, x, y, p, cols, rows, rand); break
-            case HIVE:       updateHive(g, x, y, p, cols, rows, rand); break
-            case NEST:       updateNest(g, x, y, p, cols, rows, rand); break
-            case GUN:        updateGun(g, x, y, p, cols, rows, rand); break
-            case VOLCANO:    updateVolcano(g, x, y, p, cols, rows, rand); break
-            case STAR:       updateStar(g, x, y, p, cols, rows, rand); break
-            case BLACK_HOLE: updateBlackHole(g, x, y, p, cols, rows, rand); break
-          }
+          SPAWNER_DISPATCH[c]?.(g, x, y, p, cols, rows, rand)
           chunkMap.wakeRadius(x, y, SPAWNER_WAKE_RADIUS[c] ?? 2)
         } else if (flags & F_PROJECTILE) {
           if (c === BULLET_S || c === BULLET_SE || c === BULLET_SW) {
@@ -78,48 +123,20 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
           }
           // Other bullet directions handled in rising pass
         } else if (flags & F_CREATURE) {
-          // Skip flying creatures (handled in rising pass)
-          switch (c) {
-            case BUG: updateBug(g, x, y, p, cols, rows, rand); break
-            case ANT: updateAnt(g, x, y, p, cols, rows, rand); break
-            case ALIEN: updateAlien(g, x, y, p, cols, rows, rand); break
-            case WORM: updateWorm(g, x, y, p, cols, rows, rand); break
-            case FAIRY: updateFairy(g, x, y, p, cols, rows, rand); break
-            case FISH: updateFish(g, x, y, p, cols, rows, rand); break
-            case MOTH: updateMoth(g, x, y, p, cols, rows, rand); break
-            // BIRD, BEE, FIREFLY: handled in rising pass
-          }
+          CREATURE_DISPATCH[c]?.(g, x, y, p, cols, rows, rand)
         } else if (flags & F_CORROSIVE) {
-          switch (c) {
-            case ACID: updateAcid(g, x, y, p, cols, rows, rand); break
-            case LAVA: updateLava(g, x, y, p, cols, rows, rand); break
-            case MERCURY: updateMercury(g, x, y, p, cols, rows, rand); break
-            case VOID: updateVoid(g, x, y, p, cols, rows, rand); break
-            case POISON: updatePoison(g, x, y, p, cols, rows, rand); break
-          }
+          CORROSIVE_DISPATCH[c]?.(g, x, y, p, cols, rows, rand)
         } else if (flags & F_INFECTIOUS) {
-          switch (c) {
-            case MOLD: updateMold(g, x, y, p, cols, rows, rand); break
-            case RUST: updateRust(g, x, y, p, cols, rows, rand); break
-            // SPORE: handled in rising pass (has F_BUOYANCY, skipped above)
-          }
+          INFECTIOUS_DISPATCH[c]?.(g, x, y, p, cols, rows, rand)
         } else if (flags & F_GROWTH) {
-          switch (c) {
-            case PLANT: updatePlant(g, x, y, p, cols, rows, rand); break
-            case SEED: updateSeed(g, x, y, p, cols, rows, rand); break
-            case ALGAE: updateAlgae(g, x, y, p, cols, rows, rand); break
-          }
+          GROWTH_DISPATCH[c]?.(g, x, y, p, cols, rows, rand)
         }
         continue
       }
 
       // ── Effects handlers (type-specific, unique behaviors without handler flags) ──
-      if (c === QUARK) { updateQuark(g, x, y, p, cols, rows, rand); continue }
-      if (c === CRYSTAL) { updateCrystal(g, x, y, p, cols, rows, rand); continue }
-      if (c === EMBER) { updateEmber(g, x, y, p, cols, rows, rand); continue }
-      if (c === STATIC) { updateStatic(g, x, y, p, cols, rows, rand); continue }
-      if (c === DUST) { updateDust(g, x, y, p, cols, rows, rand); continue }
-      if (c === GLITTER) { updateGlitter(g, x, y, p, cols, rows, rand); continue }
+      const effectHandler = EFFECTS_DISPATCH[c]
+      if (effectHandler) { effectHandler(g, x, y, p, cols, rows, rand); continue }
 
       // ── Inline complex particles (unique reactions + movement) ──
 
@@ -133,7 +150,7 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
           (belowCell !== EMPTY && belowCell !== WATER && belowCell !== NITRO) ||
           (aboveCell !== EMPTY && aboveCell !== WATER && aboveCell !== NITRO)
         if (shouldExplode) {
-          const r = 12
+          const r = NITRO_EXPLOSION_RADIUS
           for (let edy = -r; edy <= r; edy++) {
             for (let edx = -r; edx <= r; edx++) {
               if (edx * edx + edy * edy <= r * r) {
@@ -149,16 +166,7 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
           continue
         }
         if (g[p] !== NITRO) continue
-        if (belowCell === EMPTY) { g[below] = NITRO; g[p] = EMPTY; stampGrid[below] = tickParity }
-        else if (belowCell === WATER) { g[below] = NITRO; g[p] = WATER; stampGrid[below] = tickParity }
-        else {
-          const dx = rand() < 0.5 ? -1 : 1
-          const nx1 = x + dx, nx2 = x - dx
-          if (nx1 >= 0 && nx1 < cols && g[idx(nx1, y + 1)] === EMPTY) { const d = idx(nx1, y + 1); g[d] = NITRO; g[p] = EMPTY; stampGrid[d] = tickParity }
-          else if (nx2 >= 0 && nx2 < cols && g[idx(nx2, y + 1)] === EMPTY) { const d = idx(nx2, y + 1); g[d] = NITRO; g[p] = EMPTY; stampGrid[d] = tickParity }
-          else if (nx1 >= 0 && nx1 < cols && g[idx(nx1, y)] === EMPTY) { const d = idx(nx1, y); g[d] = NITRO; g[p] = EMPTY; stampGrid[d] = tickParity }
-          else if (nx2 >= 0 && nx2 < cols && g[idx(nx2, y)] === EMPTY) { const d = idx(nx2, y); g[d] = NITRO; g[p] = EMPTY; stampGrid[d] = tickParity }
-        }
+        settleFall(g, x, y, p, NITRO, cols, rows, below, belowCell, rand, stampGrid, tickParity, idx, WATER, true, 1, true)
         continue
       }
 
@@ -171,7 +179,7 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
           if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows) {
             const gnc = g[idx(gnx, gny)]
             if (gnc === FIRE || gnc === PLASMA || gnc === EMBER || gnc === LAVA) {
-              const r = 6
+              const r = GUNPOWDER_EXPLOSION_RADIUS
               for (let edy = -r; edy <= r; edy++) {
                 for (let edx = -r; edx <= r; edx++) {
                   if (edx * edx + edy * edy <= r * r) {
@@ -188,14 +196,7 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
           }
         }
         if (g[p] !== GUNPOWDER) continue
-        if (belowCell === EMPTY) { g[below] = GUNPOWDER; g[p] = EMPTY; stampGrid[below] = tickParity }
-        else if (belowCell === WATER) { g[below] = GUNPOWDER; g[p] = WATER; stampGrid[below] = tickParity }
-        else {
-          const dx = rand() < 0.5 ? -1 : 1
-          const nx1 = x + dx, nx2 = x - dx
-          if (nx1 >= 0 && nx1 < cols && g[idx(nx1, y + 1)] === EMPTY) { const d = idx(nx1, y + 1); g[d] = GUNPOWDER; g[p] = EMPTY; stampGrid[d] = tickParity }
-          else if (nx2 >= 0 && nx2 < cols && g[idx(nx2, y + 1)] === EMPTY) { const d = idx(nx2, y + 1); g[d] = GUNPOWDER; g[p] = EMPTY; stampGrid[d] = tickParity }
-        }
+        settleFall(g, x, y, p, GUNPOWDER, cols, rows, below, belowCell, rand, stampGrid, tickParity, idx, WATER, true, 0, false)
         continue
       }
 
@@ -212,13 +213,7 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
         }
         if (g[p] !== SLIME) continue
         if (rand() < 0.6) continue
-        if (belowCell === EMPTY) { g[below] = SLIME; g[p] = EMPTY; stampGrid[below] = tickParity }
-        else {
-          const dx = rand() < 0.5 ? -1 : 1
-          const nx = x + dx
-          if (nx >= 0 && nx < cols && g[idx(nx, y + 1)] === EMPTY) { const d = idx(nx, y + 1); g[d] = SLIME; g[p] = EMPTY; stampGrid[d] = tickParity }
-          else if (nx >= 0 && nx < cols && g[idx(nx, y)] === EMPTY && rand() < 0.3) { const d = idx(nx, y); g[d] = SLIME; g[p] = EMPTY; stampGrid[d] = tickParity }
-        }
+        settleFall(g, x, y, p, SLIME, cols, rows, below, belowCell, rand, stampGrid, tickParity, idx, -1, false, 0.3, false)
         continue
       }
 

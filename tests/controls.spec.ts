@@ -6,41 +6,37 @@ test.describe('Control Buttons', () => {
     await page.waitForSelector('canvas')
   })
 
-  test('play button is active by default', async ({ page }) => {
-    const playBtn = page.locator('.ctrl-btn.play')
-    await expect(playBtn).toHaveClass(/active/)
+  test('simulation is playing by default', async ({ page }) => {
+    const btn = page.locator('.ctrl-btn.playpause')
+    await expect(btn).toHaveClass(/playing/)
   })
 
-  test('clicking pause activates pause button', async ({ page }) => {
-    const pauseBtn = page.locator('.ctrl-btn.pause')
-    await pauseBtn.click()
-    await expect(pauseBtn).toHaveClass(/active/)
+  test('clicking play/pause toggles paused state', async ({ page }) => {
+    const btn = page.locator('.ctrl-btn.playpause')
+    await btn.click()
+    await expect(btn).toHaveClass(/paused/)
+    await btn.click()
+    await expect(btn).toHaveClass(/playing/)
   })
 
-  test('clicking erase toggles erase mode', async ({ page }) => {
-    const eraseBtn = page.locator('.ctrl-btn.erase')
-    await eraseBtn.click()
-    await expect(eraseBtn).toHaveClass(/active/)
-    await eraseBtn.click()
-    await expect(eraseBtn).not.toHaveClass(/active/)
-  })
-
-  test('material buttons exist and are clickable', async ({ page }) => {
-    const sandBtn = page.locator('.material-btn', { hasText: 'sand' })
+  test('material dropdown opens and shows items', async ({ page }) => {
+    const trigger = page.locator('.material-dropdown-trigger')
+    await trigger.click()
+    const sandBtn = page.locator('.material-dropdown-item', { hasText: 'sand' })
     await expect(sandBtn).toBeVisible()
     await sandBtn.click()
-    await expect(sandBtn).toHaveClass(/active/)
+    await expect(sandBtn).not.toBeVisible()
   })
 
   test('control buttons have SVG icons', async ({ page }) => {
-    const playBtn = page.locator('.ctrl-btn.play svg')
-    const pauseBtn = page.locator('.ctrl-btn.pause svg')
-    const resetBtn = page.locator('.ctrl-btn.reset svg')
-    const eraseBtn = page.locator('.ctrl-btn.erase svg')
-    
-    await expect(playBtn).toBeVisible()
-    await expect(pauseBtn).toBeVisible()
-    await expect(resetBtn).toBeVisible()
-    await expect(eraseBtn).toBeVisible()
+    const playpause = page.locator('.ctrl-btn.playpause svg')
+    const reset = page.locator('.ctrl-btn.reset svg')
+    const save = page.locator('.ctrl-btn.save svg')
+    const load = page.locator('.ctrl-btn.load svg')
+
+    await expect(playpause).toBeVisible()
+    await expect(reset).toBeVisible()
+    await expect(save).toBeVisible()
+    await expect(load).toBeVisible()
   })
 })

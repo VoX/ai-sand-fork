@@ -2,7 +2,8 @@ import {
   EMPTY, WATER, ANT, BEE, BIRD, LAVA, GAS, STONE, SNOW, EMBER,
   STATIC, GLITTER, PLANT, FLOWER, ALGAE, DIRT, MOLD,
   BULLET_N, BULLET_NE, BULLET_E, BULLET_SE, BULLET_S, BULLET_SW, BULLET_W, BULLET_NW,
-  TAP, VOLCANO, GUN, ANTHILL, HIVE, NEST, STAR, BLACK_HOLE
+  TAP, VOLCANO, GUN, ANTHILL, HIVE, NEST, STAR, BLACK_HOLE,
+  BLACK_HOLE_PULL_RADIUS, BLACK_HOLE_SAMPLE_COUNT,
 } from '../constants'
 
 /** Per-spawner-type wake radius (grid cells). */
@@ -146,8 +147,8 @@ export function updateStar(g: Uint8Array, x: number, y: number, _p: number, cols
 export function updateBlackHole(g: Uint8Array, x: number, y: number, _p: number, cols: number, rows: number, rand: () => number): void {
   const idx = (x: number, y: number) => y * cols + x
   if (rand() > 0.5) return
-  const pullRadius = 10
-  for (let sample = 0; sample < 16; sample++) {
+  const pullRadius = BLACK_HOLE_PULL_RADIUS
+  for (let sample = 0; sample < BLACK_HOLE_SAMPLE_COUNT; sample++) {
     const angle = rand() * 6.28318
     const dist = rand() * pullRadius + 1
     const bdx = Math.round(Math.cos(angle) * dist)

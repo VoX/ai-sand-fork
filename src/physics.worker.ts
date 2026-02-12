@@ -3,8 +3,8 @@
 // Uses two-canvas pipeline: world buffer (1px/cell) → GPU-scaled display canvas
 
 import { MATERIAL_TO_ID, type Material, EMPTY, STONE, TAP, GUN, BLACK_HOLE,
-  BIRD, BEE, FIREFLY, ANT, BUG, SLIME, ALIEN, QUARK, MOLD, SPORE,
   WORLD_COLS, WORLD_ROWS, DEFAULT_ZOOM, BG_COLOR } from './ecs/constants'
+import { ARCHETYPES } from './ecs/archetypes'
 import { risingPhysicsSystem } from './ecs/systems/rising'
 import { fallingPhysicsSystem } from './ecs/systems/falling'
 import { renderSystem } from './ecs/systems/render'
@@ -74,12 +74,8 @@ function addParticles(cellX: number, cellY: number, tool: Material | 'erase', br
         const nx = cellX + dx, ny = cellY + dy
         if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
           const idx = ny * cols + nx
-          let spawnChance = 0.55
-          if (matId === BIRD || matId === BEE || matId === FIREFLY) spawnChance = 0.85
-          else if (matId === ANT || matId === BUG || matId === SLIME) spawnChance = 0.75
-          else if (matId === ALIEN || matId === QUARK) spawnChance = 0.92
-          else if (matId === MOLD || matId === SPORE) spawnChance = 0.65
-          if ((tool === 'erase' || (rand() > spawnChance && grid[idx] === EMPTY))) {
+          const spawnRate = ARCHETYPES[matId]?.spawnRate ?? 0.45
+          if ((tool === 'erase' || (rand() < spawnRate && grid[idx] === EMPTY))) {
             grid[idx] = matId
           }
         }
@@ -119,6 +115,9 @@ let lastUpdateTime = 0
 let physicsAccum = 0
 const PHYSICS_STEP = 1000 / 60
 
+let fpsFrameCount = 0
+let fpsLastReport = 0
+
 function gameLoop(timestamp: number) {
   if (lastUpdateTime === 0) lastUpdateTime = timestamp
   const delta = Math.min(timestamp - lastUpdateTime, 100)
@@ -154,6 +153,16 @@ function gameLoop(timestamp: number) {
   }
 
   render()
+
+  // Report FPS every ~500ms
+  fpsFrameCount++
+  if (timestamp - fpsLastReport >= 500) {
+    const fps = Math.round(fpsFrameCount / ((timestamp - fpsLastReport) / 1000))
+    ;(self as unknown as Worker).postMessage({ type: 'fps', data: fps })
+    fpsFrameCount = 0
+    fpsLastReport = timestamp
+  }
+
   requestAnimationFrame(gameLoop)
 }
 
@@ -209,8 +218,8 @@ self.onmessage = (e: MessageEvent) => {
       break
 
     case 'save': {
-      // Binary format: "SAND" magic (4) + cols u16 (2) + rows u16 (2) + grid data (cols*rows)
-      const headerSize = 4 + 2 + 2
+      // Binary format v1: "SAND" magic (4) + version u8 (1) + cols u16 (2) + rows u16 (2) + grid data (cols*rows)
+      const headerSize = 4 + 1 + 2 + 2
       const totalSize = headerSize + grid.length
       const buf = new ArrayBuffer(totalSize)
       const view = new DataView(buf)
@@ -218,8 +227,9 @@ self.onmessage = (e: MessageEvent) => {
 
       // Magic "SAND"
       u8[0] = 0x53; u8[1] = 0x41; u8[2] = 0x4E; u8[3] = 0x44
-      view.setUint16(4, cols, true)
-      view.setUint16(6, rows, true)
+      u8[4] = 1 // format version
+      view.setUint16(5, cols, true)
+      view.setUint16(7, rows, true)
 
       // Grid data
       u8.set(grid, headerSize)
@@ -235,12 +245,26 @@ self.onmessage = (e: MessageEvent) => {
 
       // Validate magic
       if (loadU8[0] !== 0x53 || loadU8[1] !== 0x41 || loadU8[2] !== 0x4E || loadU8[3] !== 0x44) break
-      const loadCols = loadView.getUint16(4, true)
-      const loadRows = loadView.getUint16(6, true)
-      if (loadCols !== cols || loadRows !== rows) break
+
+      // Detect format version: v1 has version byte at offset 4, v0 (legacy) has cols at offset 4
+      let headerSize: number
+      const maybeLegacyCols = loadView.getUint16(4, true)
+      if (maybeLegacyCols === cols) {
+        // Legacy v0 format: [magic(4)][cols(2)][rows(2)][grid...]
+        const loadRows = loadView.getUint16(6, true)
+        if (loadRows !== rows) break
+        headerSize = 8
+      } else {
+        // v1 format: [magic(4)][version(1)][cols(2)][rows(2)][grid...]
+        const version = loadU8[4]
+        if (version !== 1) break
+        const loadCols = loadView.getUint16(5, true)
+        const loadRows = loadView.getUint16(7, true)
+        if (loadCols !== cols || loadRows !== rows) break
+        headerSize = 9
+      }
 
       // Restore grid
-      const headerSize = 8
       grid.set(loadU8.subarray(headerSize, headerSize + cols * rows))
 
       chunkMap.wakeAll()

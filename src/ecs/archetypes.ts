@@ -35,6 +35,8 @@ export interface ArchetypeDef {
   killsCreatures?: true
   // Parameterized
   explosive?: [number, number]  // [radius, trigger: 0=heat,1=contact]
+  // Brush spawn
+  spawnRate?: number       // Chance per cell when painting (default 0.45)
   // Handler tags
   spawnerHandler?: true
   creatureHandler?: true
@@ -97,7 +99,7 @@ ARCHETYPES[GLITTER] = { gravity: 0.3, volatile: [0.03, EMPTY], color: COLORS_U32
 ARCHETYPES[WATER] = { gravity: 0.95, liquid: 0.5, density: 2, color: COLORS_U32[WATER] }
 ARCHETYPES[HONEY] = { gravity: 0.15, liquid: 0.3, density: 3, color: COLORS_U32[HONEY] }
 ARCHETYPES[NITRO] = { gravity: 0.95, liquid: 0.5, density: 3, explosive: [12, 1], color: COLORS_U32[NITRO] }
-ARCHETYPES[SLIME] = { gravity: 0.4, liquid: 0.3, density: 2, meltOnHeat: GAS, color: COLORS_U32[SLIME] }
+ARCHETYPES[SLIME] = { gravity: 0.4, liquid: 0.3, density: 2, spawnRate: 0.25, meltOnHeat: GAS, color: COLORS_U32[SLIME] }
 ARCHETYPES[POISON] = { gravity: 0.3, liquid: 0.5, density: 2, killsCreatures: true, corrosiveHandler: true, color: COLORS_U32[POISON] }
 ARCHETYPES[ACID] = { gravity: 0.95, liquid: 0.5, density: 3, killsCreatures: true, corrosiveHandler: true, color: COLORS_U32[ACID] }
 ARCHETYPES[LAVA] = { gravity: 0.15, liquid: 0.3, density: 6, heatSource: true, corrosiveHandler: true, color: COLORS_U32[LAVA] }
@@ -108,7 +110,7 @@ ARCHETYPES[FIRE] = { buoyancy: 0.5, volatile: [0.1, EMPTY], heatSource: true, co
 ARCHETYPES[GAS] = { buoyancy: 1.0, volatile: [0.02, EMPTY], flammable: true, color: COLORS_U32[GAS] }
 ARCHETYPES[PLASMA] = { buoyancy: 1.0, volatile: [0.08, EMPTY], heatSource: true, color: COLORS_U32[PLASMA], palette: 2 }
 ARCHETYPES[BLUE_FIRE] = { buoyancy: 0.5, volatile: [0.08, EMPTY], heatSource: true, color: COLORS_U32[BLUE_FIRE], palette: 4 }
-ARCHETYPES[SPORE] = { buoyancy: 0.4, volatile: [0.01, EMPTY], infectiousHandler: true, color: COLORS_U32[SPORE] }
+ARCHETYPES[SPORE] = { buoyancy: 0.4, spawnRate: 0.35, volatile: [0.01, EMPTY], infectiousHandler: true, color: COLORS_U32[SPORE] }
 ARCHETYPES[CLOUD] = { buoyancy: 0.3, spawnerHandler: true, color: COLORS_U32[CLOUD] }
 ARCHETYPES[FIREWORK] = { buoyancy: 0.95, fireworkHandler: true, color: COLORS_U32[FIREWORK] }
 ARCHETYPES[BUBBLE] = { buoyancy: 0.6, bubbleHandler: true, color: COLORS_U32[BUBBLE] }
@@ -118,7 +120,7 @@ ARCHETYPES[LIGHTNING] = { volatile: [0.2, STATIC], heatSource: true, lightningHa
 // Effects
 ARCHETYPES[EMBER] = { gravity: 0.5, volatile: [0.05, EMPTY], heatSource: true, color: COLORS_U32[EMBER] }
 ARCHETYPES[STATIC] = { randomWalk: 0.5, volatile: [0.08, EMPTY], color: COLORS_U32[STATIC] }
-ARCHETYPES[QUARK] = { randomWalk: 0.5, volatile: [0.03, CRYSTAL], color: COLORS_U32[QUARK] }
+ARCHETYPES[QUARK] = { randomWalk: 0.5, spawnRate: 0.08, volatile: [0.03, CRYSTAL], color: COLORS_U32[QUARK] }
 ARCHETYPES[CRYSTAL] = { immobile: true, volatile: [0.0002, SAND], color: COLORS_U32[CRYSTAL] }
 
 // Immobile solids
@@ -137,16 +139,16 @@ ARCHETYPES[STAR] = { immobile: true, spawnerHandler: true, color: COLORS_U32[STA
 ARCHETYPES[BLACK_HOLE] = { immobile: true, spawnerHandler: true, color: COLORS_U32[BLACK_HOLE] }
 
 // Creatures
-ARCHETYPES[BUG] = { living: true, creatureHandler: true, color: COLORS_U32[BUG] }
-ARCHETYPES[ANT] = { living: true, creatureHandler: true, color: COLORS_U32[ANT] }
-ARCHETYPES[BIRD] = { living: true, creatureHandler: true, color: COLORS_U32[BIRD] }
-ARCHETYPES[BEE] = { living: true, creatureHandler: true, color: COLORS_U32[BEE] }
-ARCHETYPES[FIREFLY] = { living: true, creatureHandler: true, color: COLORS_U32[FIREFLY] }
-ARCHETYPES[ALIEN] = { living: true, creatureHandler: true, color: COLORS_U32[ALIEN] }
-ARCHETYPES[WORM] = { living: true, creatureHandler: true, color: COLORS_U32[WORM] }
-ARCHETYPES[FAIRY] = { living: true, creatureHandler: true, color: COLORS_U32[FAIRY] }
-ARCHETYPES[FISH] = { living: true, creatureHandler: true, color: COLORS_U32[FISH] }
-ARCHETYPES[MOTH] = { living: true, creatureHandler: true, color: COLORS_U32[MOTH] }
+ARCHETYPES[BUG] = { living: true, spawnRate: 0.25, creatureHandler: true, color: COLORS_U32[BUG] }
+ARCHETYPES[ANT] = { living: true, spawnRate: 0.25, creatureHandler: true, color: COLORS_U32[ANT] }
+ARCHETYPES[BIRD] = { living: true, spawnRate: 0.15, creatureHandler: true, color: COLORS_U32[BIRD] }
+ARCHETYPES[BEE] = { living: true, spawnRate: 0.15, creatureHandler: true, color: COLORS_U32[BEE] }
+ARCHETYPES[FIREFLY] = { living: true, spawnRate: 0.15, creatureHandler: true, color: COLORS_U32[FIREFLY] }
+ARCHETYPES[ALIEN] = { living: true, spawnRate: 0.08, creatureHandler: true, color: COLORS_U32[ALIEN] }
+ARCHETYPES[WORM] = { living: true, spawnRate: 0.25, creatureHandler: true, color: COLORS_U32[WORM] }
+ARCHETYPES[FAIRY] = { living: true, spawnRate: 0.15, creatureHandler: true, color: COLORS_U32[FAIRY] }
+ARCHETYPES[FISH] = { living: true, spawnRate: 0.15, creatureHandler: true, color: COLORS_U32[FISH] }
+ARCHETYPES[MOTH] = { living: true, spawnRate: 0.15, creatureHandler: true, color: COLORS_U32[MOTH] }
 
 // Growth
 ARCHETYPES[PLANT] = { immobile: true, flammable: true, growthHandler: true, color: COLORS_U32[PLANT] }
@@ -154,7 +156,7 @@ ARCHETYPES[SEED] = { gravity: 1.0, flammable: true, growthHandler: true, color: 
 ARCHETYPES[ALGAE] = { flammable: true, growthHandler: true, color: COLORS_U32[ALGAE] }
 
 // Reactive
-ARCHETYPES[MOLD] = { immobile: true, volatile: [0.008, EMPTY], infectiousHandler: true, color: COLORS_U32[MOLD] }
+ARCHETYPES[MOLD] = { immobile: true, spawnRate: 0.35, volatile: [0.008, EMPTY], infectiousHandler: true, color: COLORS_U32[MOLD] }
 ARCHETYPES[VOID] = { immobile: true, volatile: [0.003, EMPTY], killsCreatures: true, corrosiveHandler: true, color: COLORS_U32[VOID] }
 
 // Projectiles

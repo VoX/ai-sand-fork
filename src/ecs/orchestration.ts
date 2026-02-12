@@ -9,6 +9,11 @@ export function isSpawnerType(typeId: number): boolean {
   return typeId > 0 && (ARCHETYPE_FLAGS[typeId] & F_SPAWNER) !== 0
 }
 
+/** Create a grid-index closure for the given column count. */
+export function createIdx(cols: number): (x: number, y: number) => number {
+  return (x, y) => y * cols + x
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Grid utilities
 // ═══════════════════════════════════════════════════════════════

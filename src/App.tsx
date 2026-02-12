@@ -32,6 +32,7 @@ function App() {
   const [isPaused, setIsPaused] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [resetArmed, setResetArmed] = useState(false)
+  const [fps, setFps] = useState(0)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const dropdownScrollRef = useRef(0)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -159,6 +160,12 @@ function App() {
     )
     workerRef.current = worker
 
+    worker.onerror = (e) => console.error('Physics worker error:', e.message)
+    worker.onmessageerror = () => console.error('Physics worker message deserialization error')
+    worker.onmessage = (e) => {
+      if (e.data.type === 'fps') setFps(e.data.data)
+    }
+
     // Transfer canvas control to worker
     const offscreen = canvas.transferControlToOffscreen()
     worker.postMessage({ type: 'init', canvas: offscreen }, [offscreen])
@@ -174,6 +181,7 @@ function App() {
     }
 
     window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
   }, [])
 
   // Sync pause state with worker
@@ -224,7 +232,7 @@ function App() {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `sand-${Date.now().toString(36)}.bin`
+        a.download = `sand-${Date.now().toString(36)}.sand`
         a.click()
         URL.revokeObjectURL(url)
       }
@@ -436,6 +444,8 @@ function App() {
       <div className="canvas-container">
         <canvas
           ref={canvasRef}
+          role="application"
+          aria-label="Particle simulation canvas"
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -445,25 +455,26 @@ function App() {
           onContextMenu={(e) => e.preventDefault()}
           style={{ touchAction: 'none' }}
         />
+        <div className="fps-counter">{fps} fps</div>
       </div>
       <div className="controls">
         <div className="action-btns">
-          <button className={`ctrl-btn playpause ${isPaused ? 'paused' : 'playing'}`} onClick={() => setIsPaused(!isPaused)}>
+          <button className={`ctrl-btn playpause ${isPaused ? 'paused' : 'playing'}`} onClick={() => setIsPaused(!isPaused)} aria-label={isPaused ? 'Play simulation' : 'Pause simulation'}>
             {isPaused
               ? <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
               : <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zm8 0h4v16h-4z" /></svg>
             }
           </button>
-          <button className={`ctrl-btn reset ${resetArmed ? 'armed' : ''}`} onClick={reset}>
+          <button className={`ctrl-btn reset ${resetArmed ? 'armed' : ''}`} onClick={reset} aria-label="Reset simulation">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" /></svg>
           </button>
-          <button className="ctrl-btn save" onClick={save}>
+          <button className="ctrl-btn save" onClick={save} aria-label="Save world">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
           </button>
-          <button className="ctrl-btn load" onClick={load}>
+          <button className="ctrl-btn load" onClick={load} aria-label="Load world">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
           </button>
-          <input ref={fileInputRef} type="file" accept=".bin" onChange={handleFileLoad} style={{ display: 'none' }} />
+          <input ref={fileInputRef} type="file" accept=".sand" onChange={handleFileLoad} style={{ display: 'none' }} aria-label="Load world file" />
         </div>
         <div
           className="brush-size"

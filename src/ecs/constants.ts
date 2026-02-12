@@ -78,3 +78,12 @@ for (let i = 0; i < 64; i++) {
 }
 
 export const BG_COLOR = 0xFF1A1A1A
+
+// ── Physics constants ──────────────────────────────────────────────────
+export const NITRO_EXPLOSION_RADIUS = 12
+export const GUNPOWDER_EXPLOSION_RADIUS = 6
+export const FIREWORK_BURST_RADIUS_HIT = 8
+export const FIREWORK_BURST_RADIUS_TIMEOUT = 7
+export const LIGHTNING_NITRO_RADIUS = 15
+export const BLACK_HOLE_PULL_RADIUS = 10
+export const BLACK_HOLE_SAMPLE_COUNT = 16
