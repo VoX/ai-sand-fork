@@ -24,7 +24,7 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 | **Sand** | Tan | Falls, piles up, sinks through water |
 | **Water** | Blue | Flows, spreads sideways, enables plant growth |
 | **Dirt** | Brown | Falls slowly, can sprout plants when touching them |
-| **Stone** | Grey | Static, destroyed by gunpowder explosions and bullets |
+| **Stone** | Grey | Static, survives explosions, can be penetrated by bullets (4-6 blocks), absorbed by black holes |
 | **Glass** | Light blue | Static, created when lightning strikes sand, can crystallize |
 
 ### Organic Elements
@@ -38,12 +38,16 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 ### Creatures
 | Particle | Color | Behavior |
 |----------|-------|----------|
-| **Bug** | Pink | Crawls around, eats dirt/plant/honey/fluff, swims, multiplies from fluff |
-| **Ant** | Brown-red | Tunnels through most materials, floats on water, climbs plants, multiplies from fluff |
-| **Bird** | Light grey | Flies around, eats ants/bugs/bees (spawns more birds), turns to fluff when hungry |
-| **Bee** | Yellow | Buzzes around, creates flowers from plants, makes honey from flowers |
-| **Slime** | Yellow-green | Eats dirt/sand/bugs, floats up through water |
-| **Firefly** | Bright chartreuse | Glowing creature, emits light particles (glitter/static), attracted to flowers, breeds near flowers, drowns in water |
+| **Bug** | Pink | Crawls around, eats plants, swims through water |
+| **Ant** | Brown-red | Tunnels through dirt/sand/plant/flower, floats on water, eats upward toward food |
+| **Bird** | Light grey | Flies around, eats ants/bugs/bees (spawns more birds), turns to fluff when starving |
+| **Bee** | Yellow | Buzzes around, pollinates plants into flowers, harvests flowers for honey |
+| **Firefly** | Bright chartreuse | Glowing creature, emits glitter/static trails, attracted to flowers, breeds near flowers, killed by water/acid/birds |
+| **Worm** | Dusty rose | Burrows through dirt and sand, swims through water, eaten by birds, killed by fire/lava/acid |
+| **Fairy** | Pink-magenta | Floats upward, transforms dirt/sand into flowers, turns plants into flowers, leaves glitter trails, dies to fire/lava/plasma (becomes glitter) |
+| **Fish** | Orange | Aquatic creature, must stay adjacent to water or dies, eats bugs/algae/worms |
+| **Moth** | Tan | Attracted to light sources (fire/ember/firefly/lightning), eats plants/flowers, dies in fire/lava/plasma |
+| **Alien** | Lime green | Consumes creatures and organic matter, leaves slime trails, dies to fire/plasma/lightning (becomes slime) |
 
 ### Energy Elements
 | Particle | Color | Behavior |
@@ -57,8 +61,8 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 ### Explosives
 | Particle | Color | Behavior |
 |----------|-------|----------|
-| **Nitro** | Bright green | Falls, explodes on contact with solids, creates stone from water |
-| **Gunpowder** | Dark grey | Falls like sand, massive explosion on fire (radius 12, destroys stone) |
+| **Nitro** | Bright green | Falls, explodes on contact with solids (radius 12), creates stone from water |
+| **Gunpowder** | Dark grey | Falls like sand, explodes on fire (radius 6), does not destroy stone/glass |
 
 ### Hazardous Elements
 | Particle | Color | Behavior |
@@ -67,6 +71,7 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 | **Lava** | Deep crimson | Molten rock, flows slowly, ignites flammables, melts sand→glass, cools to stone with water/snow |
 | **Snow** | Icy light blue | Falls slowly like fluff, piles up, freezes water→ice, melts near fire/lava/plasma/ember |
 | **Mercury** | Silver metallic | Liquid metal, very dense (sinks through most materials), toxic to creatures, reflects bullets! |
+| **Slime** | Yellow-green | Slow viscous liquid, falls and spreads slowly, melts into gas near heat sources |
 | **Void** | Deep purple | Dark matter, absorbs nearby particles (not stone/glass/crystal), can grow when eating, slowly decays, destroyed by lightning |
 
 ### Growth Elements
@@ -104,9 +109,8 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 |----------|-------|----------|
 | **Gas** | Grey | Rises, dissipates slowly, flammable |
 | **Crystal** | Bright cyan | Static, grows from glass, slowly decays to sand |
-| **Alien** | Lime green | Terraformer - transforms materials into organic matter, duplicates |
-| **Quark** | Magenta | Chaotic terraformer - teleports, shoots lightning/static, creates inorganic matter |
-| **Mold** | Medium purple | Organic terraformer - spreads across organics (plant, flower, dirt, honey), releases gas, dies in fire/acid |
+| **Alien** | Lime green | Predator - consumes creatures and organics, leaves slime trails |
+| **Quark** | Magenta | Chaotic terraformer - random walk, transforms materials into inorganic matter |
 
 ### Spawners
 | Particle | Color | Behavior |
@@ -138,21 +142,21 @@ The game builds to `/docs` folder for GitHub Pages deployment.
 ### Creature Food Chain
 ```
 Bird eats → Ant, Bug, Bee (spawns new bird 60%, leaves plant 40%)
-Ant eats → Sand, Dirt, Plant, Fluff*, Bug, Nitro, Slime, Honey
-Bug eats → Dirt, Plant, Honey, Fluff*
-Slime eats → Dirt, Sand, Bug
-* Eating Fluff causes multiplication
+Ant eats → Dirt, Sand, Plant, Flower (tunnels through and removes)
+Bug eats → Plant (leaves dirt)
+Fish eats → Bug, Algae, Worm (in water)
+Worm eats → Dirt, Sand (burrows through)
+Moth eats → Plant, Flower
+Fairy transforms → Dirt/Sand→Flower, Plant→Flower, Water→Glitter
+Alien eats → Creatures, Plants, Flowers (leaves slime)
 ```
 
-### Terraformer Transformations
+### Alien Behavior
 
-**Alien (organic focus):**
-- Sand → Glass/Plant/Alien
-- Dirt → Plant/Water/Alien
-- Water → Slime/Plant/Water/Alien
-- Plant → Bug/Plant/Alien
-- Glass → Fluff/Alien
-- Stone (rare) → Glass/Dirt
+The Alien is a predator/consumer that moves with an upward bias:
+- Empty space → moves, occasionally leaves slime trail (10%)
+- Creatures (Bug, Ant, Bird, Bee, Slime) + Plants/Flowers → consumed, replaced with slime
+- Fire/Plasma/Lightning → alien dies, becomes slime
 
 **Quark (inorganic focus):**
 - Plant/Dirt → Sand/Stone/Ember
@@ -164,14 +168,15 @@ Slime eats → Dirt, Sand, Bug
 
 ### Explosion Effects
 
-**Gunpowder (radius 12):**
-- Destroys: Stone, Glass, all organic matter
-- Creates: Fire, Glass (from sand), Gas (from water)
+**Gunpowder (radius 6, heat-triggered):**
+- Preserves: Stone, Glass, Water
+- Turns everything else to Fire
 - Chain reaction with other gunpowder
 
-**Nitro (radius 8):**
-- Destroys: Most materials
-- Creates: Fire, Stone (from water)
+**Nitro (radius 12, contact-triggered):**
+- Preserves: Stone, Glass
+- Turns water → Stone (70%) or Empty (30%)
+- Turns everything else to Fire
 
 ### Bullet Behavior
 - **Ignites:** Gunpowder, Nitro (then stops)
@@ -226,12 +231,20 @@ flowchart TD
     Bird -->|eats, spawns bird| Bee
     Ant -->|eats| Dirt
     Ant -->|eats| Plant
-    Ant -->|multiplies from| Fluff
-    Bug -->|eats| Dirt
+    Ant -->|eats| Sand
+    Ant -->|eats| Flower
     Bug -->|eats| Plant
-    Bug -->|multiplies from| Fluff
-    Slime -->|eats| Dirt
-    Slime -->|eats| Bug
+    Fish -->|eats| Bug
+    Fish -->|eats| Algae
+    Fish -->|eats| Worm
+    Worm -->|burrows| Dirt
+    Worm -->|burrows| Sand
+    Moth -->|eats| Plant
+    Moth -->|eats| Flower
+    Fairy -->|transforms| Dirt2[Dirt → Flower]
+    Fairy -->|transforms| Sand2[Sand → Flower]
+    Fairy -->|transforms| Plant2[Plant → Flower]
+    Alien -->|consumes| Creatures[Creatures/Plants → Slime]
 ```
 
 ### Spawner Relationships
@@ -524,14 +537,16 @@ Some particles are internal and not directly paintable:
 These are spawned by other particles (Gun spawns bullets, Comet spawns blue fire).
 
 ### Particle Processing Order
-1. **Rising elements** (top to bottom): Fire, Blue Fire, Gas, Plasma, Lightning, Bullets, Bird, Bee, Bubble, Spore, Firework
-2. **Falling/Static elements** (bottom to top): Sand, Water, Dirt, Fluff, Bug, Nitro, Slime, Ant, Alien, Quark, Crystal, Ember, Static, Glass, Gunpowder, Tap, Anthill, Flower, Hive, Honey, Nest, Gun, Seed, Rust, Algae, Poison, Dust, Glitter, Star, Comet, Black Hole
+1. **Rising elements** (top to bottom): Fire, Blue Fire, Gas, Plasma, Lightning, Bullets, Bird, Bee, Firefly, Bubble, Spore, Firework, Cloud, Comet
+2. **Falling/Static elements** (bottom to top): Sand, Water, Dirt, Fluff, Bug, Nitro, Slime, Ant, Alien, Worm, Fairy, Fish, Moth, Quark, Crystal, Ember, Static, Dust, Glitter, Glass, Gunpowder, Snow, Tap, Anthill, Flower, Hive, Honey, Nest, Gun, Seed, Mold, Rust, Algae, Poison, Volcano, Star, Black Hole
 
 ### Special Spawn Rules
-- **Gun:** Always spawns as single 4px block (1 particle)
-- **Bird/Bee:** Spawn at 20% rate (sparse)
-- **Ant:** Spawn at 40% rate
-- **Alien/Quark:** Spawn at 8% rate (very sparse)
+- **Gun:** Single pixel only (ignores brush size)
+- **Bird/Bee/Firefly:** 15% spawn rate (sparse)
+- **Ant/Bug/Slime:** 25% spawn rate
+- **Alien/Quark:** 8% spawn rate (very sparse)
+- **Mold/Spore:** 35% spawn rate
+- **All other particles:** 45% spawn rate
 - **Black Hole:** Single pixel, high impact - use sparingly
 - **Star (Sun):** Static, affects large area (radius 18), emits static and glitter particles
 - **Firework:** Single pixels that launch upward before exploding
@@ -541,11 +556,19 @@ These are spawned by other particles (Gun spawns bullets, Comet spawns blue fire
 
 ## Controls
 - **Click/drag:** Paint selected particle
-- **Scroll wheel:** Adjust brush size (1-15)
-- **Material buttons:** Select particle type
+- **Scroll wheel:** Zoom in/out (anchored on cursor)
+- **Right-click drag:** Pan the viewport
+- **Right-click + scroll:** Adjust brush size (1-30)
+- **Pinch-to-zoom:** On touch devices (two-finger gesture)
+- **Keyboard `[` / `-`:** Decrease brush size
+- **Keyboard `]` / `=`:** Increase brush size
+- **Brush indicator:** Drag left/right to adjust brush size
+- **Material dropdown:** Select particle type (6 categories: basic, fluid, energy, nature, spawner, critter)
 - **Play/Pause:** Control simulation
-- **Reset:** Clear canvas
-- **Erase:** Remove particles
+- **Reset:** Clear canvas (requires two clicks to confirm)
+- **Save:** Export grid as `.bin` file
+- **Load:** Import a previously saved `.bin` file
+- **Erase:** Remove particles (found in the basic material category)
 
 ---
 
@@ -587,12 +610,3 @@ bun run test:ui       # Interactive UI mode
 ```
 
 Tests cover control buttons, particle selection, and canvas interactions.
-
----
-
-## React + TypeScript + Vite
-
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
-
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
