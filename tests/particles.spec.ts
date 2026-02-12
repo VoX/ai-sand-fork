@@ -75,7 +75,7 @@ test.describe('Particle Interactions', () => {
 })
 
 test.describe('Save / Load', () => {
-  test('save produces a .bin download and load restores it', async ({ page }) => {
+  test('save produces a .sand download and load restores it', async ({ page }) => {
     await page.goto('/')
     await page.waitForSelector('canvas')
 
@@ -85,7 +85,7 @@ test.describe('Save / Load', () => {
       page.locator('.ctrl-btn.save').click(),
     ])
 
-    expect(download.suggestedFilename()).toMatch(/\.bin$/)
+    expect(download.suggestedFilename()).toMatch(/\.sand$/)
 
     // Save to a temp path and load it back
     const path = await download.path()

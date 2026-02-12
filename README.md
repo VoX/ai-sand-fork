@@ -564,8 +564,8 @@ These are spawned by other particles (Gun spawns bullets, Comet spawns blue fire
 - **Material dropdown:** Select particle type (6 categories: basic, fluid, energy, nature, spawner, critter)
 - **Play/Pause:** Control simulation
 - **Reset:** Clear canvas (requires two clicks to confirm)
-- **Save:** Export grid as `.bin` file
-- **Load:** Import a previously saved `.bin` file
+- **Save:** Export grid as `.sand` file
+- **Load:** Import a previously saved `.sand` file
 - **Erase:** Remove particles (found in the basic material category)
 
 ---
