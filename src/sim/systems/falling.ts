@@ -25,7 +25,7 @@ import {
 } from './spawners'
 import { applyGravity } from './gravity'
 import { applyLiquid } from './liquid'
-import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../../sim/ChunkMap'
+import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../ChunkMap'
 import { createIdx } from '../orchestration'
 
 // Handler type shared by all particle updaters

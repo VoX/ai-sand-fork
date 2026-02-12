@@ -3,9 +3,9 @@
 // Uses two-canvas pipeline: world buffer (1px/cell) → GPU-scaled display canvas
 
 import { MATERIAL_TO_ID, type Material, EMPTY, STONE, TAP, GUN, BLACK_HOLE,
-  WORLD_COLS, WORLD_ROWS, DEFAULT_ZOOM, BG_COLOR } from './ecs/constants'
-import { ARCHETYPES } from './ecs/archetypes'
-import { renderSystem } from './ecs/systems/render'
+  WORLD_COLS, WORLD_ROWS, DEFAULT_ZOOM, BG_COLOR } from './sim/constants'
+import { ARCHETYPES } from './sim/archetypes'
+import { renderSystem } from './sim/systems/render'
 import { CHUNK_SIZE } from './sim/ChunkMap'
 import { createRNG } from './sim/rng'
 import { Simulation } from './sim/Simulation'
@@ -20,6 +20,7 @@ let worldData32: Uint32Array | null = null
 
 let sim: Simulation | null = null
 let isPaused = false
+let pauseAtStep: number | null = null
 let debugChunks = false
 let pendingInputs: Array<{ x: number; y: number; prevX: number; prevY: number; tool: Material | 'erase'; brushSize: number }> = []
 
@@ -156,6 +157,11 @@ function gameLoop(timestamp: number) {
     physicsAccum += delta
     if (physicsAccum >= PHYSICS_STEP) {
       sim.step()
+      if (pauseAtStep !== null && sim.simStep >= pauseAtStep) {
+        isPaused = true
+        pauseAtStep = null
+        ;(self as unknown as Worker).postMessage({ type: 'autoPaused' })
+      }
       physicsAccum = Math.min(physicsAccum - PHYSICS_STEP, PHYSICS_STEP)
     }
   }
@@ -217,6 +223,10 @@ self.onmessage = (e: MessageEvent) => {
       isPaused = data.paused
       break
 
+    case 'setPauseAtStep':
+      pauseAtStep = typeof data.step === 'number' ? data.step : null
+      break
+
     case 'toggleDebugChunks':
       debugChunks = !debugChunks
       break
@@ -244,7 +254,7 @@ self.onmessage = (e: MessageEvent) => {
       // Validate magic
       if (loadU8[0] !== 0x53 || loadU8[1] !== 0x41 || loadU8[2] !== 0x4E || loadU8[3] !== 0x44) break
 
-      // Detect format version: v3 has simStep, v2 has rng state, v1 has version byte at offset 4, v0 (legacy) has cols at offset 4
+      // Detect format version: v4 adds initialSeed, v3 has simStep, v2 has rng state, v1 has version byte at offset 4, v0 (legacy) has cols at offset 4
       let headerSize: number
       const maybeLegacyCols = loadView.getUint16(4, true)
       if (maybeLegacyCols === sim.cols) {
@@ -255,6 +265,7 @@ self.onmessage = (e: MessageEvent) => {
         // No RNG state in v0, reseed
         sim.rand = createRNG(Date.now())
         sim.simStep = 0
+        sim.initialSeed = 0
       } else {
         const version = loadU8[4]
         if (version === 1) {
@@ -266,6 +277,7 @@ self.onmessage = (e: MessageEvent) => {
           // No RNG state in v1, reseed
           sim.rand = createRNG(Date.now())
           sim.simStep = 0
+          sim.initialSeed = 0
         } else if (version === 2) {
           // v2 format: [magic(4)][version(1)][cols(2)][rows(2)][rngState(4)][grid...]
           const loadCols = loadView.getUint16(5, true)
@@ -274,6 +286,7 @@ self.onmessage = (e: MessageEvent) => {
           const rngState = loadView.getInt32(9, true)
           sim.rand.setState(rngState)
           sim.simStep = 0
+          sim.initialSeed = 0
           headerSize = 13
         } else if (version === 3) {
           // v3 format: [magic(4)][version(1)][cols(2)][rows(2)][rngState(4)][simStep(4)][grid...]
@@ -283,7 +296,18 @@ self.onmessage = (e: MessageEvent) => {
           const rngState = loadView.getInt32(9, true)
           sim.rand.setState(rngState)
           sim.simStep = loadView.getUint32(13, true)
+          sim.initialSeed = 0
           headerSize = 17
+        } else if (version === 4) {
+          // v4 format: [magic(4)][version(1)][cols(2)][rows(2)][rngState(4)][simStep(4)][initialSeed(4)][grid...]
+          const loadCols = loadView.getUint16(5, true)
+          const loadRows = loadView.getUint16(7, true)
+          if (loadCols !== sim.cols || loadRows !== sim.rows) break
+          const rngState = loadView.getInt32(9, true)
+          sim.rand.setState(rngState)
+          sim.simStep = loadView.getUint32(13, true)
+          sim.initialSeed = loadView.getInt32(17, true)
+          headerSize = 21
         } else {
           break // Unknown version
         }

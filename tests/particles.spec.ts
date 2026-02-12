@@ -1,4 +1,8 @@
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { test, expect } from '@playwright/test'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 test.describe('Particle Interactions', () => {
   test.beforeEach(async ({ page }) => {
@@ -48,9 +52,12 @@ test.describe('Particle Interactions', () => {
     await pauseBtn.click()
     await expect(pauseBtn).toHaveClass(/paused/)
 
+    // Wait for the pause message to reach the worker and settle
+    await page.waitForTimeout(500)
+
     const canvas = page.locator('canvas')
     const screenshot1 = await canvas.screenshot()
-    await page.waitForTimeout(100)
+    await page.waitForTimeout(200)
     const screenshot2 = await canvas.screenshot()
 
     expect(screenshot1.equals(screenshot2)).toBeTruthy()
@@ -75,7 +82,7 @@ test.describe('Particle Interactions', () => {
 })
 
 test.describe('Save / Load', () => {
-  test('save produces a .bin download and load restores it', async ({ page }) => {
+  test('save produces a .sand download and load restores it', async ({ page }) => {
     await page.goto('/')
     await page.waitForSelector('canvas')
 
@@ -85,7 +92,7 @@ test.describe('Save / Load', () => {
       page.locator('.ctrl-btn.save').click(),
     ])
 
-    expect(download.suggestedFilename()).toMatch(/\.bin$/)
+    expect(download.suggestedFilename()).toMatch(/\.sand$/)
 
     // Save to a temp path and load it back
     const path = await download.path()
@@ -97,6 +104,31 @@ test.describe('Save / Load', () => {
 
     // Should not error — canvas still visible
     await expect(page.locator('canvas')).toBeVisible()
+  })
+})
+
+test.describe('Snapshot Load Game Test', () => {
+  test('loaded save file matches visual snapshot', async ({ page }) => {
+    await page.goto('/')
+    await page.waitForSelector('canvas')
+
+    // Pause the simulation
+    const pauseBtn = page.locator('.ctrl-btn.playpause')
+    await pauseBtn.click()
+    await expect(pauseBtn).toHaveClass(/paused/)
+
+    // Load the snapshot-test.sand file
+    const sandFile = path.resolve(__dirname, 'snapshot-test.sand')
+    const fileInput = page.locator('input[type="file"]')
+    await fileInput.setInputFiles(sandFile)
+
+    // Wait for the load to complete and render to settle
+    await page.waitForTimeout(500)
+
+    // Verify the page structure matches the expected visual snapshot
+    await expect(page).toHaveScreenshot({
+      stylePath: path.resolve(__dirname, 'hide-ui.css'),
+    });
   })
 })
 
@@ -118,5 +150,30 @@ test.describe('Brush Size Keyboard Shortcuts', () => {
     await page.keyboard.press('[')
     const restored = await brushDisplay.textContent()
     expect(parseInt(restored ?? '0', 10)).toBe(initialSize)
+  })
+})
+
+test.describe('Simulation Regression Snapshot', () => {
+  test('simulate forward some steps and then match snapshot to find sim regressions', async ({ page }) => {
+    // Navigate with pauseAtStep=3248 (snapshot-test.sand starts at simStep=3048)
+    await page.goto('/?pauseAtStep=3248')
+    await page.waitForSelector('canvas')
+
+    // Load the snapshot-test.sand file (simulation is playing by default)
+    const sandFile = path.resolve(__dirname, 'snapshot-test.sand')
+    const fileInput = page.locator('input[type="file"]')
+    await fileInput.setInputFiles(sandFile)
+
+    // Wait for auto-pause: the play/pause button should gain the .paused class
+    const pauseBtn = page.locator('.ctrl-btn.playpause')
+    await expect(pauseBtn).toHaveClass(/paused/, { timeout: 10000 })
+
+    // Wait for render to settle after pause
+    await page.waitForTimeout(500)
+
+    // Verify the page matches the expected visual snapshot
+    await expect(page).toHaveScreenshot({
+      stylePath: path.resolve(__dirname, 'hide-ui.css'),
+    })
   })
 })
