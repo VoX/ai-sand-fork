@@ -1,6 +1,6 @@
 import {
-  ARCHETYPE_FLAGS,
-  F_PROJECTILE, F_CREATURE, F_INFECTIOUS, F_FLAMMABLE,
+  ARCHETYPES, ARCHETYPE_FLAGS,
+  F_PROJECTILE, F_CREATURE, F_INFECTIOUS, F_FLAMMABLE, F_IMMOBILE,
 } from '../archetypes'
 import {
   EMPTY, FIRE, BLUE_FIRE, GAS, SPORE, CLOUD, FIREWORK, BUBBLE, COMET, PLASMA, LIGHTNING,
@@ -43,6 +43,13 @@ function updateFireRising(
   }
 }
 
+function canGasDisplace(c: number): boolean {
+  if (c === EMPTY) return true
+  if (ARCHETYPE_FLAGS[c] & F_IMMOBILE) return false
+  const a = ARCHETYPES[c]
+  return !!a && a.density !== undefined
+}
+
 function updateGasRising(
   g: Uint8Array, x: number, y: number, p: number,
   cols: number, _rows: number, rand: () => number,
@@ -60,13 +67,20 @@ function updateGasRising(
   // Slow the rise: skip upward movement 30% of the time
   if (rand() < 0.3) return
   const up = idx(x, y - 1)
-  if (y > 0 && g[up] === EMPTY) { g[up] = GAS; g[p] = EMPTY; stampGrid[up] = tickParity }
+  const upCell = y > 0 ? g[up] : -1
+  if (upCell === EMPTY) { g[up] = GAS; g[p] = EMPTY; stampGrid[up] = tickParity }
+  else if (canGasDisplace(upCell)) { g[up] = GAS; g[p] = upCell; stampGrid[up] = tickParity }
   else {
     const dx = rand() < 0.5 ? -1 : 1
-    if (y > 0 && x + dx >= 0 && x + dx < cols && g[idx(x + dx, y - 1)] === EMPTY) {
-      const d = idx(x + dx, y - 1); g[d] = GAS; g[p] = EMPTY; stampGrid[d] = tickParity
-    } else if (x + dx >= 0 && x + dx < cols && g[idx(x + dx, y)] === EMPTY) {
-      const d = idx(x + dx, y); g[d] = GAS; g[p] = EMPTY; stampGrid[d] = tickParity
+    const diagX = x + dx
+    if (y > 0 && diagX >= 0 && diagX < cols) {
+      const dc = g[idx(diagX, y - 1)]
+      if (canGasDisplace(dc)) {
+        const d = idx(diagX, y - 1); g[d] = GAS; g[p] = dc; stampGrid[d] = tickParity; return
+      }
+    }
+    if (diagX >= 0 && diagX < cols && g[idx(diagX, y)] === EMPTY) {
+      const d = idx(diagX, y); g[d] = GAS; g[p] = EMPTY; stampGrid[d] = tickParity
     }
   }
 }

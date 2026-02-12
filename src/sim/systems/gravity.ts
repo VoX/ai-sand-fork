@@ -1,4 +1,4 @@
-import { ARCHETYPES, ARCHETYPE_FLAGS, F_LIQUID } from '../archetypes'
+import { ARCHETYPES, ARCHETYPE_FLAGS, F_LIQUID, F_IMMOBILE } from '../archetypes'
 import { EMPTY, DIRT } from '../constants'
 
 /**
@@ -30,12 +30,12 @@ export function applyGravity(
     return true
   }
 
-  // 2. Density sinking through lighter liquids
+  // 2. Density sinking: swap with any lighter mobile particle below
   if (arch.density !== undefined) {
     const belowArch = ARCHETYPES[belowType]
     if (belowArch && belowArch.density !== undefined &&
       arch.density > belowArch.density &&
-      (ARCHETYPE_FLAGS[belowType] & F_LIQUID)) {
+      !(ARCHETYPE_FLAGS[belowType] & F_IMMOBILE)) {
       g[below] = type
       g[p] = belowType
       stamp[below] = tp

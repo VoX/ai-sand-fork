@@ -249,6 +249,20 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
         continue
       }
 
+      // WATER: extinguish adjacent fire
+      if (c === WATER) {
+        for (let wdy = -1; wdy <= 1; wdy++) {
+          for (let wdx = -1; wdx <= 1; wdx++) {
+            if (wdy === 0 && wdx === 0) continue
+            const wnx = x + wdx, wny = y + wdy
+            if (wnx >= 0 && wnx < cols && wny >= 0 && wny < rows) {
+              const wi = idx(wnx, wny)
+              if (g[wi] === FIRE) g[wi] = EMPTY
+            }
+          }
+        }
+      }
+
       // SLIME: heat melt + slow liquid movement
       if (c === SLIME) {
         for (let si = 0; si < 2; si++) {
