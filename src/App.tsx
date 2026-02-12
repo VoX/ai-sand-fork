@@ -51,6 +51,7 @@ function App() {
   const [resetArmed, setResetArmed] = useState(false)
   const [fps, setFps] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [gridDims, setGridDims] = useState({ cols: 0, rows: 0 })
   const dropdownRef = useRef<HTMLDivElement>(null)
   const dropdownScrollRef = useRef(0)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -168,6 +169,7 @@ function App() {
     const initCols = Math.floor(width / 2)
     const initRows = Math.floor(height / 2)
     dimensionsRef.current = { cols: initCols, rows: initRows }
+    setGridDims({ cols: initCols, rows: initRows })
 
     // Camera: zoom out to show entire grid
     const initZoom = Math.min(width / initCols, height / initRows)
@@ -189,7 +191,9 @@ function App() {
       if (e.data.type === 'fps') setFps(e.data.data)
       if (e.data.type === 'autoPaused') setIsPaused(true)
       if (e.data.type === 'gridResized') {
-        dimensionsRef.current = { cols: e.data.data.cols, rows: e.data.data.rows }
+        const dims = { cols: e.data.data.cols, rows: e.data.data.rows }
+        dimensionsRef.current = dims
+        setGridDims(dims)
         const canvas = canvasRef.current
         if (canvas) {
           const rect = canvas.getBoundingClientRect()
@@ -627,7 +631,7 @@ function App() {
           <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
             <div className="settings-title">Map Size</div>
             <div className="settings-subtitle">
-              Current: {dimensionsRef.current.cols} x {dimensionsRef.current.rows}
+              Current: {gridDims.cols} x {gridDims.rows}
             </div>
             <div className="settings-options">
               {PRESET_SIZES.map((size) => (
