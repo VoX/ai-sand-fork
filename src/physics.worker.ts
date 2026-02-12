@@ -5,12 +5,10 @@
 import { MATERIAL_TO_ID, type Material, EMPTY, STONE, TAP, GUN, BLACK_HOLE,
   WORLD_COLS, WORLD_ROWS, DEFAULT_ZOOM, BG_COLOR } from './ecs/constants'
 import { ARCHETYPES } from './ecs/archetypes'
-import { risingPhysicsSystem } from './ecs/systems/rising'
-import { fallingPhysicsSystem } from './ecs/systems/falling'
 import { renderSystem } from './ecs/systems/render'
-import { ChunkMap, CHUNK_SIZE } from './sim/ChunkMap'
-import { isSpawnerType } from './ecs/orchestration'
+import { CHUNK_SIZE } from './sim/ChunkMap'
 import { createRNG } from './sim/rng'
+import { Simulation } from './sim/Simulation'
 
 // Worker state — display canvas (viewport-sized) + world canvas (1px/cell)
 let displayCanvas: OffscreenCanvas | null = null
@@ -20,13 +18,10 @@ let worldCtx: OffscreenCanvasRenderingContext2D | null = null
 let worldImageData: ImageData | null = null
 let worldData32: Uint32Array | null = null
 
-let grid: Uint8Array = new Uint8Array(0)
-let cols = 0, rows = 0
+let sim: Simulation | null = null
 let isPaused = false
 let debugChunks = false
 let pendingInputs: Array<{ x: number; y: number; prevX: number; prevY: number; tool: Material | 'erase'; brushSize: number }> = []
-const chunkMap = new ChunkMap()
-let rand = createRNG(Date.now())
 
 // Camera state
 let camX = 0    // top-left world cell (float)
@@ -34,14 +29,12 @@ let camY = 0
 let zoom = DEFAULT_ZOOM  // display pixels per world cell
 
 function initGrid(displayWidth: number, displayHeight: number) {
-  cols = WORLD_COLS
-  rows = WORLD_ROWS
-  grid = new Uint8Array(cols * rows)
+  sim = new Simulation(WORLD_COLS, WORLD_ROWS, Date.now())
 
   // World backing buffer (1px/cell)
-  worldCanvas = new OffscreenCanvas(cols, rows)
+  worldCanvas = new OffscreenCanvas(sim.cols, sim.rows)
   worldCtx = worldCanvas.getContext('2d')!
-  worldImageData = worldCtx.createImageData(cols, rows)
+  worldImageData = worldCtx.createImageData(sim.cols, sim.rows)
   worldData32 = new Uint32Array(worldImageData.data.buffer)
   worldData32.fill(BG_COLOR)
 
@@ -49,13 +42,13 @@ function initGrid(displayWidth: number, displayHeight: number) {
   zoom = DEFAULT_ZOOM
   const viewW = displayWidth / zoom
   const viewH = displayHeight / zoom
-  camX = Math.max(0, (cols - viewW) / 2)
-  camY = Math.max(0, rows - viewH)
-
-  chunkMap.init(cols, rows)
+  camX = Math.max(0, (sim.cols - viewW) / 2)
+  camY = Math.max(0, sim.rows - viewH)
 }
 
 function addParticles(cellX: number, cellY: number, tool: Material | 'erase', brushSize: number) {
+  if (!sim) return
+  const { grid, cols, rows, rand, chunkMap } = sim
   const matId = tool === 'erase' ? EMPTY : MATERIAL_TO_ID[tool as Material]
 
   if (matId === GUN) {
@@ -87,10 +80,10 @@ function addParticles(cellX: number, cellY: number, tool: Material | 'erase', br
 }
 
 function render() {
-  if (!displayCtx || !displayCanvas || !worldCtx || !worldCanvas || !worldImageData || !worldData32) return
+  if (!sim || !displayCtx || !displayCanvas || !worldCtx || !worldCanvas || !worldImageData || !worldData32) return
 
   // 1. Update world buffer with dirty chunks (1px/cell)
-  renderSystem(grid, cols, rows, worldData32, chunkMap)
+  renderSystem(sim.grid, sim.cols, sim.rows, worldData32, sim.chunkMap)
   worldCtx.putImageData(worldImageData, 0, 0)
 
   // 2. Composite viewport to display canvas with GPU-scaled nearest-neighbor
@@ -98,8 +91,8 @@ function render() {
   const viewW = dw / zoom, viewH = dh / zoom
 
   // Clamp camera to world bounds
-  const maxCamX = Math.max(0, cols - viewW)
-  const maxCamY = Math.max(0, rows - viewH)
+  const maxCamX = Math.max(0, sim.cols - viewW)
+  const maxCamY = Math.max(0, sim.rows - viewH)
   const cx = Math.max(0, Math.min(camX, maxCamX))
   const cy = Math.max(0, Math.min(camY, maxCamY))
 
@@ -115,9 +108,9 @@ function render() {
   if (debugChunks) {
     displayCtx.strokeStyle = 'rgba(255, 0, 0, 0.6)'
     displayCtx.lineWidth = 2
-    for (let chy = 0; chy < chunkMap.chunkRows; chy++) {
-      for (let chx = 0; chx < chunkMap.chunkCols; chx++) {
-        if (chunkMap.active[chy * chunkMap.chunkCols + chx]) continue
+    for (let chy = 0; chy < sim.chunkMap.chunkRows; chy++) {
+      for (let chx = 0; chx < sim.chunkMap.chunkCols; chx++) {
+        if (sim.chunkMap.active[chy * sim.chunkMap.chunkCols + chx]) continue
         // Chunk world-space origin → screen-space
         const sx = (chx * CHUNK_SIZE - cx) * (dw / viewW)
         const sy = (chy * CHUNK_SIZE - cy) * (dh / viewH)
@@ -159,13 +152,10 @@ function gameLoop(timestamp: number) {
   }
   pendingInputs = []
 
-  if (!isPaused) {
+  if (!isPaused && sim) {
     physicsAccum += delta
     if (physicsAccum >= PHYSICS_STEP) {
-      chunkMap.flipTick()
-      risingPhysicsSystem(grid, cols, rows, chunkMap, rand)
-      fallingPhysicsSystem(grid, cols, rows, chunkMap, rand)
-      chunkMap.updateActivity(grid, isSpawnerType)
+      sim.step()
       physicsAccum = Math.min(physicsAccum - PHYSICS_STEP, PHYSICS_STEP)
     }
   }
@@ -232,35 +222,21 @@ self.onmessage = (e: MessageEvent) => {
       break
 
     case 'reset':
-      grid.fill(0)
-      chunkMap.wakeAll()
-      rand = createRNG(Date.now())
-      // Reset world buffer to background
-      if (worldData32) worldData32.fill(BG_COLOR)
+      if (sim) {
+        sim.reset(Date.now())
+        if (worldData32) worldData32.fill(BG_COLOR)
+      }
       break
 
     case 'save': {
-      // Binary format v1: "SAND" magic (4) + version u8 (1) + cols u16 (2) + rows u16 (2) + grid data (cols*rows)
-      const headerSize = 4 + 1 + 2 + 2
-      const totalSize = headerSize + grid.length
-      const buf = new ArrayBuffer(totalSize)
-      const view = new DataView(buf)
-      const u8 = new Uint8Array(buf)
-
-      // Magic "SAND"
-      u8[0] = 0x53; u8[1] = 0x41; u8[2] = 0x4E; u8[3] = 0x44
-      u8[4] = 1 // format version
-      view.setUint16(5, cols, true)
-      view.setUint16(7, rows, true)
-
-      // Grid data
-      u8.set(grid, headerSize)
-
+      if (!sim) break
+      const buf = sim.save()
       ;(self as unknown as Worker).postMessage({ type: 'saveData', data: buf }, [buf])
       break
     }
 
     case 'load': {
+      if (!sim) break
       const loadBuf = data.buffer as ArrayBuffer
       const loadView = new DataView(loadBuf)
       const loadU8 = new Uint8Array(loadBuf)
@@ -268,28 +244,55 @@ self.onmessage = (e: MessageEvent) => {
       // Validate magic
       if (loadU8[0] !== 0x53 || loadU8[1] !== 0x41 || loadU8[2] !== 0x4E || loadU8[3] !== 0x44) break
 
-      // Detect format version: v1 has version byte at offset 4, v0 (legacy) has cols at offset 4
+      // Detect format version: v3 has simStep, v2 has rng state, v1 has version byte at offset 4, v0 (legacy) has cols at offset 4
       let headerSize: number
       const maybeLegacyCols = loadView.getUint16(4, true)
-      if (maybeLegacyCols === cols) {
+      if (maybeLegacyCols === sim.cols) {
         // Legacy v0 format: [magic(4)][cols(2)][rows(2)][grid...]
         const loadRows = loadView.getUint16(6, true)
-        if (loadRows !== rows) break
+        if (loadRows !== sim.rows) break
         headerSize = 8
+        // No RNG state in v0, reseed
+        sim.rand = createRNG(Date.now())
+        sim.simStep = 0
       } else {
-        // v1 format: [magic(4)][version(1)][cols(2)][rows(2)][grid...]
         const version = loadU8[4]
-        if (version !== 1) break
-        const loadCols = loadView.getUint16(5, true)
-        const loadRows = loadView.getUint16(7, true)
-        if (loadCols !== cols || loadRows !== rows) break
-        headerSize = 9
+        if (version === 1) {
+          // v1 format: [magic(4)][version(1)][cols(2)][rows(2)][grid...]
+          const loadCols = loadView.getUint16(5, true)
+          const loadRows = loadView.getUint16(7, true)
+          if (loadCols !== sim.cols || loadRows !== sim.rows) break
+          headerSize = 9
+          // No RNG state in v1, reseed
+          sim.rand = createRNG(Date.now())
+          sim.simStep = 0
+        } else if (version === 2) {
+          // v2 format: [magic(4)][version(1)][cols(2)][rows(2)][rngState(4)][grid...]
+          const loadCols = loadView.getUint16(5, true)
+          const loadRows = loadView.getUint16(7, true)
+          if (loadCols !== sim.cols || loadRows !== sim.rows) break
+          const rngState = loadView.getInt32(9, true)
+          sim.rand.setState(rngState)
+          sim.simStep = 0
+          headerSize = 13
+        } else if (version === 3) {
+          // v3 format: [magic(4)][version(1)][cols(2)][rows(2)][rngState(4)][simStep(4)][grid...]
+          const loadCols = loadView.getUint16(5, true)
+          const loadRows = loadView.getUint16(7, true)
+          if (loadCols !== sim.cols || loadRows !== sim.rows) break
+          const rngState = loadView.getInt32(9, true)
+          sim.rand.setState(rngState)
+          sim.simStep = loadView.getUint32(13, true)
+          headerSize = 17
+        } else {
+          break // Unknown version
+        }
       }
 
       // Restore grid
-      grid.set(loadU8.subarray(headerSize, headerSize + cols * rows))
+      sim.grid.set(loadU8.subarray(headerSize, headerSize + sim.cols * sim.rows))
 
-      chunkMap.wakeAll()
+      sim.chunkMap.wakeAll()
       if (worldData32) worldData32.fill(BG_COLOR)
       break
     }
