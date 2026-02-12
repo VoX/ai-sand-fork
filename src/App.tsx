@@ -496,20 +496,7 @@ function App() {
     sendCamera()
   }, [sendCamera])
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false)
-      }
-    }
-    if (dropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside)
-      return () => document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [dropdownOpen])
-
-  // Restore dropdown scroll position when it opens
+  // Restore modal scroll position when it opens
   useEffect(() => {
     if (dropdownOpen && menuRef.current) {
       menuRef.current.scrollTop = dropdownScrollRef.current
@@ -599,12 +586,11 @@ function App() {
           >
             <span className="material-dot" style={{ background: BUTTON_COLORS[tool] }} />
             <span>{tool}</span>
-            <svg className="dropdown-arrow" viewBox="0 0 24 24" fill="currentColor" style={{ transform: dropdownOpen ? 'rotate(180deg)' : undefined }}>
-              <path d="M7 10l5 5 5-5z" />
-            </svg>
           </button>
-          {dropdownOpen && (
-            <div className="material-dropdown-menu" ref={menuRef} onScroll={(e) => { dropdownScrollRef.current = e.currentTarget.scrollTop }}>
+        </div>
+        {dropdownOpen && (
+          <div className="material-modal-overlay" onClick={() => setDropdownOpen(false)}>
+            <div className="material-modal" onClick={(e) => e.stopPropagation()} ref={menuRef} onScroll={(e) => { dropdownScrollRef.current = e.currentTarget.scrollTop }}>
               {categories.map((cat) => (
                 <div key={cat.label} className="material-category">
                   <div className="material-category-label">{cat.label}</div>
@@ -623,8 +609,8 @@ function App() {
                 </div>
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
       {settingsOpen && (
         <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>

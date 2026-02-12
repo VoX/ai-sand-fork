@@ -7,7 +7,7 @@ import {
   BULLET_TRAIL, CLOUD, ACID, LAVA, SNOW, VOLCANO,
   MOLD, MERCURY, VOID, SEED, RUST, SPORE, ALGAE, POISON, DUST, FIREWORK,
   BUBBLE, GLITTER, STAR, COMET, BLUE_FIRE, BLACK_HOLE, FIREFLY,
-  WORM, FAIRY, FISH, MOTH, VENT, COLORS_U32,
+  WORM, FAIRY, FISH, MOTH, VENT, LIT_GUNPOWDER, COLORS_U32,
 } from './constants'
 
 // ---------------------------------------------------------------------------
@@ -89,6 +89,7 @@ ARCHETYPES[EMPTY] = null
 ARCHETYPES[SAND] = { gravity: 0.95, density: 5, color: COLORS_U32[SAND] }
 ARCHETYPES[DIRT] = { gravity: 0.95, density: 4, color: COLORS_U32[DIRT] }
 ARCHETYPES[GUNPOWDER] = { gravity: 0.95, density: 4, explosive: [6, 0], flammable: true, color: COLORS_U32[GUNPOWDER] }
+ARCHETYPES[LIT_GUNPOWDER] = { gravity: 0.95, density: 4, heatSource: true, color: COLORS_U32[LIT_GUNPOWDER] }
 ARCHETYPES[SNOW] = { gravity: 0.25, meltOnHeat: WATER, color: COLORS_U32[SNOW] }
 ARCHETYPES[RUST] = { gravity: 0.1, volatile: [0.005, DIRT], infectiousHandler: true, color: COLORS_U32[RUST] }
 ARCHETYPES[FLUFF] = { gravity: 0.3, flammable: true, color: COLORS_U32[FLUFF] }
@@ -175,8 +176,8 @@ ARCHETYPES[BULLET_TRAIL] = { projectileHandler: true, volatile: [0.3, EMPTY], co
 // ARCHETYPE_FLAGS  -- precomputed bitmask array for fast dispatch
 // ---------------------------------------------------------------------------
 
-export const ARCHETYPE_FLAGS = new Uint32Array(67)
-for (let i = 0; i < 67; i++) {
+export const ARCHETYPE_FLAGS = new Uint32Array(68)
+for (let i = 0; i < 68; i++) {
   const a = ARCHETYPES[i]
   if (!a) continue
   let f = 0

@@ -14,6 +14,7 @@ export const BUBBLE = 55, GLITTER = 56, STAR = 57, COMET = 58, BLUE_FIRE = 59
 export const BLACK_HOLE = 60, FIREFLY = 61
 export const WORM = 62, FAIRY = 63
 export const FISH = 64, MOTH = 65, VENT = 66
+export const LIT_GUNPOWDER = 67
 
 export type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent'
 
@@ -64,6 +65,7 @@ export const COLORS_U32 = new Uint32Array([
   0xFF8090C0, 0xFFFF88FF,
   0xFF00A5FF, 0xFF8CB4D2,
   0xFF607860,
+  0xFF2060FF, // LIT_GUNPOWDER: bright orange-red
 ])
 
 export const FIRE_COLORS = new Uint32Array(32)
@@ -84,6 +86,7 @@ export const BG_COLOR = 0xFF1A1A1A
 // ── Physics constants ──────────────────────────────────────────────────
 export const NITRO_EXPLOSION_RADIUS = 12
 export const GUNPOWDER_EXPLOSION_RADIUS = 6
+export const GUNPOWDER_BLAST_RADIUS = 12
 export const FIREWORK_BURST_RADIUS_HIT = 8
 export const FIREWORK_BURST_RADIUS_TIMEOUT = 7
 export const LIGHTNING_NITRO_RADIUS = 15
