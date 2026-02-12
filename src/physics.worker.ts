@@ -3,7 +3,7 @@
 // Uses two-canvas pipeline: world buffer (1px/cell) → GPU-scaled display canvas
 
 import { MATERIAL_TO_ID, type Material, EMPTY, STONE, TAP, GUN, BLACK_HOLE,
-  WORLD_COLS, WORLD_ROWS, DEFAULT_ZOOM, BG_COLOR } from './sim/constants'
+  DEFAULT_ZOOM, BG_COLOR } from './sim/constants'
 import { ARCHETYPES } from './sim/archetypes'
 import { renderSystem } from './sim/systems/render'
 import { CHUNK_SIZE } from './sim/ChunkMap'
@@ -29,8 +29,10 @@ let camX = 0    // top-left world cell (float)
 let camY = 0
 let zoom = DEFAULT_ZOOM  // display pixels per world cell
 
-function initGrid(displayWidth: number, displayHeight: number) {
-  sim = new Simulation(WORLD_COLS, WORLD_ROWS, Date.now())
+function initGrid(displayWidth: number, displayHeight: number, cols?: number, rows?: number) {
+  const gridCols = cols ?? Math.floor(displayWidth / 2)
+  const gridRows = rows ?? Math.floor(displayHeight / 2)
+  sim = new Simulation(gridCols, gridRows, Date.now())
 
   // World backing buffer (1px/cell)
   worldCanvas = new OffscreenCanvas(sim.cols, sim.rows)
@@ -39,12 +41,10 @@ function initGrid(displayWidth: number, displayHeight: number) {
   worldData32 = new Uint32Array(worldImageData.data.buffer)
   worldData32.fill(BG_COLOR)
 
-  // Camera: center horizontally, align bottom of viewport to bottom of grid
-  zoom = DEFAULT_ZOOM
-  const viewW = displayWidth / zoom
-  const viewH = displayHeight / zoom
-  camX = Math.max(0, (sim.cols - viewW) / 2)
-  camY = Math.max(0, sim.rows - viewH)
+  // Camera: zoom out to show entire grid, centered
+  zoom = Math.min(displayWidth / sim.cols, displayHeight / sim.rows)
+  camX = 0
+  camY = 0
 }
 
 function addParticles(cellX: number, cellY: number, tool: Material | 'erase', brushSize: number) {
@@ -91,11 +91,9 @@ function render() {
   const dw = displayCanvas.width, dh = displayCanvas.height
   const viewW = dw / zoom, viewH = dh / zoom
 
-  // Clamp camera to world bounds
-  const maxCamX = Math.max(0, sim.cols - viewW)
-  const maxCamY = Math.max(0, sim.rows - viewH)
-  const cx = Math.max(0, Math.min(camX, maxCamX))
-  const cy = Math.max(0, Math.min(camY, maxCamY))
+  // Clamp camera to world bounds (center when viewport exceeds grid)
+  const cx = viewW >= sim.cols ? (sim.cols - viewW) / 2 : Math.max(0, Math.min(camX, sim.cols - viewW))
+  const cy = viewH >= sim.rows ? (sim.rows - viewH) / 2 : Math.max(0, Math.min(camY, sim.rows - viewH))
 
   // Background fill (for edges when zoomed out past world)
   displayCtx.fillStyle = '#1a1a1a'
@@ -121,6 +119,15 @@ function render() {
       }
     }
   }
+
+  // Bounding box around grid edges
+  displayCtx.strokeStyle = 'rgba(255, 255, 255, 0.15)'
+  displayCtx.lineWidth = 1
+  const bx = -cx * zoom
+  const by = -cy * zoom
+  const bw = sim.cols * zoom
+  const bh = sim.rows * zoom
+  displayCtx.strokeRect(bx, by, bw, bh)
 }
 
 let lastUpdateTime = 0
@@ -188,11 +195,30 @@ self.onmessage = (e: MessageEvent) => {
     case 'init':
       displayCanvas = e.data.canvas as OffscreenCanvas
       displayCtx = displayCanvas.getContext('2d')!
-      initGrid(displayCanvas.width, displayCanvas.height)
+      initGrid(displayCanvas.width, displayCanvas.height, data?.cols, data?.rows)
+      ;(self as unknown as Worker).postMessage({
+        type: 'gridResized',
+        data: { cols: sim!.cols, rows: sim!.rows }
+      })
       lastUpdateTime = 0
       physicsAccum = 0
       requestAnimationFrame(gameLoop)
       break
+
+    case 'setGridSize': {
+      if (!displayCanvas) break
+      initGrid(displayCanvas.width, displayCanvas.height, data.cols, data.rows)
+      ;(self as unknown as Worker).postMessage({
+        type: 'gridResized',
+        data: { cols: sim!.cols, rows: sim!.rows }
+      })
+      // Send camera state so main thread stays in sync
+      ;(self as unknown as Worker).postMessage({
+        type: 'cameraSync',
+        data: { camX, camY, zoom }
+      })
+      break
+    }
 
     case 'resize':
       if (displayCanvas) {
@@ -246,7 +272,7 @@ self.onmessage = (e: MessageEvent) => {
     }
 
     case 'load': {
-      if (!sim) break
+      if (!displayCanvas) break
       const loadBuf = data.buffer as ArrayBuffer
       const loadView = new DataView(loadBuf)
       const loadU8 = new Uint8Array(loadBuf)
@@ -254,70 +280,82 @@ self.onmessage = (e: MessageEvent) => {
       // Validate magic
       if (loadU8[0] !== 0x53 || loadU8[1] !== 0x41 || loadU8[2] !== 0x4E || loadU8[3] !== 0x44) break
 
-      // Detect format version: v4 adds initialSeed, v3 has simStep, v2 has rng state, v1 has version byte at offset 4, v0 (legacy) has cols at offset 4
+      // Parse header to determine format version and grid dimensions
       let headerSize: number
+      let loadCols: number
+      let loadRows: number
+      let rngState: number | null = null
+      let simStep = 0
+      let initialSeed = 0
+
       const maybeLegacyCols = loadView.getUint16(4, true)
-      if (maybeLegacyCols === sim.cols) {
+      const maybeLegacyRows = loadView.getUint16(6, true)
+      // v0 detection: offset 4 is cols directly (no version byte), value should look like a valid dimension
+      // We check if bytes 4-7 yield plausible dims AND total file size matches
+      const v0GridSize = maybeLegacyCols * maybeLegacyRows
+      if (loadBuf.byteLength === 8 + v0GridSize && maybeLegacyCols > 0 && maybeLegacyRows > 0 && maybeLegacyCols <= 10000 && maybeLegacyRows <= 10000) {
         // Legacy v0 format: [magic(4)][cols(2)][rows(2)][grid...]
-        const loadRows = loadView.getUint16(6, true)
-        if (loadRows !== sim.rows) break
+        loadCols = maybeLegacyCols
+        loadRows = maybeLegacyRows
         headerSize = 8
-        // No RNG state in v0, reseed
-        sim.rand = createRNG(Date.now())
-        sim.simStep = 0
-        sim.initialSeed = 0
       } else {
         const version = loadU8[4]
+        loadCols = loadView.getUint16(5, true)
+        loadRows = loadView.getUint16(7, true)
         if (version === 1) {
-          // v1 format: [magic(4)][version(1)][cols(2)][rows(2)][grid...]
-          const loadCols = loadView.getUint16(5, true)
-          const loadRows = loadView.getUint16(7, true)
-          if (loadCols !== sim.cols || loadRows !== sim.rows) break
           headerSize = 9
-          // No RNG state in v1, reseed
-          sim.rand = createRNG(Date.now())
-          sim.simStep = 0
-          sim.initialSeed = 0
         } else if (version === 2) {
-          // v2 format: [magic(4)][version(1)][cols(2)][rows(2)][rngState(4)][grid...]
-          const loadCols = loadView.getUint16(5, true)
-          const loadRows = loadView.getUint16(7, true)
-          if (loadCols !== sim.cols || loadRows !== sim.rows) break
-          const rngState = loadView.getInt32(9, true)
-          sim.rand.setState(rngState)
-          sim.simStep = 0
-          sim.initialSeed = 0
+          rngState = loadView.getInt32(9, true)
           headerSize = 13
         } else if (version === 3) {
-          // v3 format: [magic(4)][version(1)][cols(2)][rows(2)][rngState(4)][simStep(4)][grid...]
-          const loadCols = loadView.getUint16(5, true)
-          const loadRows = loadView.getUint16(7, true)
-          if (loadCols !== sim.cols || loadRows !== sim.rows) break
-          const rngState = loadView.getInt32(9, true)
-          sim.rand.setState(rngState)
-          sim.simStep = loadView.getUint32(13, true)
-          sim.initialSeed = 0
+          rngState = loadView.getInt32(9, true)
+          simStep = loadView.getUint32(13, true)
           headerSize = 17
         } else if (version === 4) {
-          // v4 format: [magic(4)][version(1)][cols(2)][rows(2)][rngState(4)][simStep(4)][initialSeed(4)][grid...]
-          const loadCols = loadView.getUint16(5, true)
-          const loadRows = loadView.getUint16(7, true)
-          if (loadCols !== sim.cols || loadRows !== sim.rows) break
-          const rngState = loadView.getInt32(9, true)
-          sim.rand.setState(rngState)
-          sim.simStep = loadView.getUint32(13, true)
-          sim.initialSeed = loadView.getInt32(17, true)
+          rngState = loadView.getInt32(9, true)
+          simStep = loadView.getUint32(13, true)
+          initialSeed = loadView.getInt32(17, true)
           headerSize = 21
         } else {
           break // Unknown version
         }
       }
 
-      // Restore grid
-      sim.grid.set(loadU8.subarray(headerSize, headerSize + sim.cols * sim.rows))
+      if (loadCols <= 0 || loadRows <= 0) break
 
-      sim.chunkMap.wakeAll()
+      // Re-create simulation at loaded dimensions if needed
+      const needsResize = !sim || loadCols !== sim.cols || loadRows !== sim.rows
+      if (needsResize) {
+        sim = new Simulation(loadCols, loadRows)
+        worldCanvas = new OffscreenCanvas(loadCols, loadRows)
+        worldCtx = worldCanvas.getContext('2d')!
+        worldImageData = worldCtx.createImageData(loadCols, loadRows)
+        worldData32 = new Uint32Array(worldImageData.data.buffer)
+      }
+
+      // Restore state
+      if (rngState !== null) sim!.rand.setState(rngState)
+      else sim!.rand = createRNG(Date.now())
+      sim!.simStep = simStep
+      sim!.initialSeed = initialSeed
+      sim!.grid.set(loadU8.subarray(headerSize, headerSize + loadCols * loadRows))
+      sim!.chunkMap.wakeAll()
       if (worldData32) worldData32.fill(BG_COLOR)
+
+      // Zoom to fit loaded grid
+      zoom = Math.min(displayCanvas.width / loadCols, displayCanvas.height / loadRows)
+      camX = 0
+      camY = 0
+
+      // Notify main thread of new dimensions
+      ;(self as unknown as Worker).postMessage({
+        type: 'gridResized',
+        data: { cols: loadCols, rows: loadRows }
+      })
+      ;(self as unknown as Worker).postMessage({
+        type: 'cameraSync',
+        data: { camX, camY, zoom }
+      })
       break
     }
   }
