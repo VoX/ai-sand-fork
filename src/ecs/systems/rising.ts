@@ -1,11 +1,11 @@
 import {
   ARCHETYPE_FLAGS,
-  F_PROJECTILE, F_CREATURE, F_INFECTIOUS,
+  F_PROJECTILE, F_CREATURE, F_INFECTIOUS, F_FLAMMABLE,
 } from '../archetypes'
 import {
   EMPTY, FIRE, BLUE_FIRE, GAS, SPORE, CLOUD, FIREWORK, BUBBLE, COMET, PLASMA, LIGHTNING,
   BULLET_N, BULLET_NW, BULLET_S, BULLET_SE, BULLET_SW, BULLET_TRAIL,
-  PLANT, FLUFF, BUG, GUNPOWDER, FLOWER, HIVE, NEST, EMBER, SAND, GLASS,
+  PLANT, FLUFF, BUG, FLOWER, EMBER, SAND, GLASS,
   WATER, ACID, HONEY, POISON, MOLD, ALGAE, DIRT, STONE, STATIC, NITRO, GLITTER,
   BIRD, BEE, FIREFLY,
   FIREWORK_BURST_RADIUS_HIT, FIREWORK_BURST_RADIUS_TIMEOUT, LIGHTNING_NITRO_RADIUS,
@@ -23,14 +23,14 @@ function updateFireRising(
 ): void {
   const idx = (bx: number, by: number) => by * cols + bx
   if (y === 0) { g[p] = EMPTY; return }
-  if (rand() < 0.1) { g[p] = rand() < 0.25 ? GAS : rand() < 0.15 ? EMBER : EMPTY; return }
+  if (rand() < 0.03) { g[p] = rand() < 0.25 ? GAS : rand() < 0.15 ? EMBER : EMPTY; return }
   for (let fi = 0; fi < 3; fi++) {
-    const dx = Math.floor(rand() * 3) - 1, dy = Math.floor(rand() * 3) - 1
+    const dx = Math.floor(rand() * 7) - 3, dy = Math.floor(rand() * 7) - 3
     if (dx === 0 && dy === 0) continue
     const nx = x + dx, ny = y + dy
     if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
       const ni = idx(nx, ny), nc = g[ni]
-      if ((nc === PLANT || nc === FLUFF || nc === BUG || nc === GAS || nc === GUNPOWDER || nc === FLOWER || nc === HIVE || nc === NEST) && rand() < 0.5) g[ni] = FIRE
+      if (nc !== EMPTY && (ARCHETYPE_FLAGS[nc] & F_FLAMMABLE) && rand() < 0.4) g[ni] = FIRE
     }
   }
   const up = idx(x, y - 1)

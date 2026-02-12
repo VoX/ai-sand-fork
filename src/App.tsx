@@ -8,7 +8,7 @@ type Tool = Material | 'erase'
 const BUTTON_COLORS: Record<Tool, string> = {
   erase: '#f87171',
   sand: '#e6c86e', water: '#4a90d9', dirt: '#8b5a2b', stone: '#666666',
-  plant: '#228b22', fire: '#ff6600', gas: '#888888', fluff: '#f5e6d3',
+  plant: '#228b22', fire: '#ff6600', gas: '#a8b844', fluff: '#f5e6d3',
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
   lightning: '#ffff88', slime: '#9acd32', ant: '#6b2a1a', alien: '#00ff00', quark: '#ff00ff',
   crystal: '#80d0ff', ember: '#ff4020', static: '#44ffff', bird: '#e8e8e8', gunpowder: '#303030', tap: '#c0c0c0', anthill: '#b08030',
