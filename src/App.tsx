@@ -170,19 +170,30 @@ function App() {
     const offscreen = canvas.transferControlToOffscreen()
     worker.postMessage({ type: 'init', canvas: offscreen }, [offscreen])
 
-    // Handle resize
+  }, [])
+
+  // Handle resize — separate effect so it survives React StrictMode remount
+  // (the init effect's guard prevents re-registration on the second mount)
+  useEffect(() => {
     const handleResize = () => {
+      const canvas = canvasRef.current
+      if (!canvas) return
       const container = canvas.parentElement
       if (!container) return
       const width = container.clientWidth
       const height = container.clientHeight
       minZoomRef.current = height / WORLD_ROWS
-      worker.postMessage({ type: 'resize', data: { width, height } })
+      if (zoomRef.current < minZoomRef.current) {
+        zoomRef.current = minZoomRef.current
+      }
+      workerRef.current?.postMessage({ type: 'resize', data: { width, height } })
+      clampCamera()
+      sendCamera()
     }
 
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [])
+  }, [clampCamera, sendCamera])
 
   // Sync pause state with worker
   useEffect(() => {
