@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
-import { WORLD_COLS, WORLD_ROWS, DEFAULT_ZOOM, MAX_ZOOM } from './sim/constants'
+import { DEFAULT_ZOOM, MAX_ZOOM } from './sim/constants'
 
 type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent'
 type Tool = Material | 'erase'
@@ -23,6 +23,22 @@ const BUTTON_COLORS: Record<Tool, string> = {
   vent: '#607860',
 }
 
+interface MapSize { label: string; cols: number; rows: number }
+
+const PRESET_SIZES: MapSize[] = [
+  { label: 'Small', cols: 400, rows: 250 },
+  { label: 'Medium', cols: 800, rows: 500 },
+  { label: 'Large', cols: 1600, rows: 1000 },
+]
+
+function getScreenSize(): MapSize {
+  return {
+    label: 'Screen',
+    cols: Math.floor(window.innerWidth / 2),
+    rows: Math.floor(window.innerHeight / 2),
+  }
+}
+
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const workerRef = useRef<Worker | null>(null)
@@ -34,11 +50,12 @@ function App() {
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [resetArmed, setResetArmed] = useState(false)
   const [fps, setFps] = useState(0)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const dropdownScrollRef = useRef(0)
   const menuRef = useRef<HTMLDivElement>(null)
   const lastMaterialRef = useRef<Material>('sand')
-  const dimensionsRef = useRef({ cols: WORLD_COLS, rows: WORLD_ROWS })
+  const dimensionsRef = useRef({ cols: 0, rows: 0 })
   const pointerPosRef = useRef<{ x: number; y: number } | null>(null)
   const toolRef = useRef<Tool>('sand')
   const brushSizeRef = useRef(3)
@@ -77,8 +94,11 @@ function App() {
     const z = zoomRef.current
     const { cols, rows } = dimensionsRef.current
     const viewW = rect.width / z, viewH = rect.height / z
-    camXRef.current = Math.max(0, Math.min(camXRef.current, Math.max(0, cols - viewW)))
-    camYRef.current = Math.max(0, Math.min(camYRef.current, Math.max(0, rows - viewH)))
+    // When viewport is larger than grid, center; otherwise clamp within bounds
+    if (viewW >= cols) { camXRef.current = (cols - viewW) / 2 }
+    else { camXRef.current = Math.max(0, Math.min(camXRef.current, cols - viewW)) }
+    if (viewH >= rows) { camYRef.current = (rows - viewH) / 2 }
+    else { camYRef.current = Math.max(0, Math.min(camYRef.current, rows - viewH)) }
   }, [])
 
   const sendCamera = useCallback(() => {
@@ -98,10 +118,8 @@ function App() {
 
     // Clamp camera the same way the worker renderer does
     const viewW = rect.width / z, viewH = rect.height / z
-    const maxCamX = Math.max(0, cols - viewW)
-    const maxCamY = Math.max(0, rows - viewH)
-    const cx = Math.max(0, Math.min(camXRef.current, maxCamX))
-    const cy = Math.max(0, Math.min(camYRef.current, maxCamY))
+    const cx = viewW >= cols ? (cols - viewW) / 2 : Math.max(0, Math.min(camXRef.current, cols - viewW))
+    const cy = viewH >= rows ? (rows - viewH) / 2 : Math.max(0, Math.min(camYRef.current, rows - viewH))
 
     const x = Math.floor(cx + (clientX - rect.left) / z)
     const y = Math.floor(cy + (clientY - rect.top) / z)
@@ -146,13 +164,17 @@ function App() {
     canvas.width = width
     canvas.height = height
 
-    // Camera: center horizontally, align bottom of viewport to bottom of grid
-    minZoomRef.current = height / WORLD_ROWS
-    const viewW = width / DEFAULT_ZOOM
-    const viewH = height / DEFAULT_ZOOM
-    camXRef.current = Math.max(0, (WORLD_COLS - viewW) / 2)
-    camYRef.current = Math.max(0, WORLD_ROWS - viewH)
-    zoomRef.current = DEFAULT_ZOOM
+    // Default grid: half screen size
+    const initCols = Math.floor(width / 2)
+    const initRows = Math.floor(height / 2)
+    dimensionsRef.current = { cols: initCols, rows: initRows }
+
+    // Camera: zoom out to show entire grid
+    const initZoom = Math.min(width / initCols, height / initRows)
+    minZoomRef.current = Math.min(width / initCols, height / initRows)
+    camXRef.current = 0
+    camYRef.current = 0
+    zoomRef.current = initZoom
 
     // Create worker
     const worker = new Worker(
@@ -166,11 +188,28 @@ function App() {
     worker.onmessage = (e) => {
       if (e.data.type === 'fps') setFps(e.data.data)
       if (e.data.type === 'autoPaused') setIsPaused(true)
+      if (e.data.type === 'gridResized') {
+        dimensionsRef.current = { cols: e.data.data.cols, rows: e.data.data.rows }
+        const canvas = canvasRef.current
+        if (canvas) {
+          const rect = canvas.getBoundingClientRect()
+          minZoomRef.current = Math.min(rect.width / e.data.data.cols, rect.height / e.data.data.rows)
+        }
+      }
+      if (e.data.type === 'cameraSync') {
+        camXRef.current = e.data.data.camX
+        camYRef.current = e.data.data.camY
+        zoomRef.current = e.data.data.zoom
+      }
     }
 
     // Transfer canvas control to worker
     const offscreen = canvas.transferControlToOffscreen()
-    worker.postMessage({ type: 'init', canvas: offscreen }, [offscreen])
+    worker.postMessage({
+      type: 'init',
+      canvas: offscreen,
+      data: { cols: initCols, rows: initRows }
+    }, [offscreen])
 
     // Support ?pauseAtStep=N query param for testing/debugging
     const params = new URLSearchParams(window.location.search)
@@ -194,7 +233,10 @@ function App() {
       if (!container) return
       const width = container.clientWidth
       const height = container.clientHeight
-      minZoomRef.current = height / WORLD_ROWS
+      const { cols, rows } = dimensionsRef.current
+      if (cols > 0 && rows > 0) {
+        minZoomRef.current = Math.min(width / cols, height / rows)
+      }
       if (zoomRef.current < minZoomRef.current) {
         zoomRef.current = minZoomRef.current
       }
@@ -288,10 +330,19 @@ function App() {
     e.target.value = ''
   }, [])
 
+  const selectMapSize = useCallback((size: MapSize) => {
+    workerRef.current?.postMessage({
+      type: 'setGridSize',
+      data: { cols: size.cols, rows: size.rows }
+    })
+    setSettingsOpen(false)
+  }, [])
+
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault()
     setDropdownOpen(false)
     setResetArmed(false)
+    setSettingsOpen(false)
 
     const ptrs = activePtrsRef.current
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY })
@@ -505,6 +556,9 @@ function App() {
           <button className="ctrl-btn load" onClick={load} aria-label="Load world">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
           </button>
+          <button className="ctrl-btn settings" onClick={() => setSettingsOpen(!settingsOpen)} aria-label="Map settings">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.6 3.6 0 0112 15.6z" /></svg>
+          </button>
           <input ref={fileInputRef} type="file" accept=".sand" onChange={handleFileLoad} style={{ display: 'none' }} aria-label="Load world file" />
         </div>
         <div
@@ -568,6 +622,36 @@ function App() {
           )}
         </div>
       </div>
+      {settingsOpen && (
+        <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
+          <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="settings-title">Map Size</div>
+            <div className="settings-subtitle">
+              Current: {dimensionsRef.current.cols} x {dimensionsRef.current.rows}
+            </div>
+            <div className="settings-options">
+              {PRESET_SIZES.map((size) => (
+                <button
+                  key={size.label}
+                  className="settings-option"
+                  onClick={() => selectMapSize(size)}
+                >
+                  <span className="settings-option-label">{size.label}</span>
+                  <span className="settings-option-dims">{size.cols} x {size.rows}</span>
+                </button>
+              ))}
+              <button
+                className="settings-option"
+                onClick={() => selectMapSize(getScreenSize())}
+              >
+                <span className="settings-option-label">Screen</span>
+                <span className="settings-option-dims">{Math.floor(window.innerWidth / 2)} x {Math.floor(window.innerHeight / 2)}</span>
+              </button>
+            </div>
+            <div className="settings-warn">Changing size resets the simulation</div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

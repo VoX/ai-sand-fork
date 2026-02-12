@@ -155,8 +155,7 @@ test.describe('Brush Size Keyboard Shortcuts', () => {
 
 test.describe('Simulation Regression Snapshot', () => {
   test('simulate forward some steps and then match snapshot to find sim regressions', async ({ page }) => {
-    // Navigate with pauseAtStep=3248 (snapshot-test.sand starts at simStep=3048)
-    await page.goto('/?pauseAtStep=3248')
+    await page.goto('/?pauseAtStep=2719')
     await page.waitForSelector('canvas')
 
     // Load the snapshot-test.sand file (simulation is playing by default)

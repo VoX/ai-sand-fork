@@ -365,3 +365,85 @@ body {
   -webkit-touch-callout: none;
   touch-action: manipulation;
 }
+
+/* Settings modal */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.settings-modal {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 280px;
+  max-width: 360px;
+}
+
+.settings-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ddd;
+  margin-bottom: 4px;
+}
+
+.settings-subtitle {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 16px;
+}
+
+.settings-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #222;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #ccc;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.settings-option:hover {
+  background: #2a2a2a;
+  border-color: #555;
+  color: #fff;
+}
+
+.settings-option:active {
+  transform: scale(0.98);
+}
+
+.settings-option-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-option-dims {
+  font-size: 12px;
+  color: #888;
+  font-family: monospace;
+}
+
+.settings-warn {
+  font-size: 11px;
+  color: #665;
+  margin-top: 12px;
+  text-align: center;
+}
