@@ -1,4 +1,4 @@
-import { ARCHETYPES, ARCHETYPE_FLAGS, F_LIQUID, F_IMMOBILE } from '../archetypes'
+import { ARCHETYPES, ARCHETYPE_FLAGS, F_IMMOBILE } from '../archetypes'
 import { EMPTY, DIRT } from '../constants'
 
 /**

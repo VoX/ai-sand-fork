@@ -274,6 +274,17 @@ These cannot be painted over:
 - Lava melts sand to glass, ignites organics, solidifies in water
 - Void consumes anything except Stone/Glass/Crystal/structural particles
 
+## Development Commands
+
+- **Lint:** `npx eslint .`
+- **Typecheck:** `npx tsc -b`
+- **Build:** `npm run build` (runs tsc -b then vite build, output in `dist/`)
+- **E2E tests:** `npx playwright test` (14 Playwright tests in `tests/`)
+- **Unit tests:** `vitest run`
+- **Dev server:** `npm run dev`
+
+TypeScript strict mode is enabled — unused imports/variables will fail both lint and typecheck. Fix these before committing.
+
 ## OffscreenCanvas + React StrictMode
 
 The canvas is transferred to the worker via `transferControlToOffscreen()` which is a one-shot operation. A `workerInitRef` guard prevents React 18 StrictMode's double-mount from breaking this. The worker is a page-lifetime resource with no cleanup.
