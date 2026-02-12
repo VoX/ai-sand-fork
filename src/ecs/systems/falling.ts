@@ -10,7 +10,7 @@ import {
   BULLET_S, BULLET_SE, BULLET_SW, BULLET_TRAIL,
   MOLD, MERCURY, VOID, RUST, PLANT, SEED, ALGAE,
   POISON,
-  TAP, ANTHILL, HIVE, NEST, GUN, VOLCANO, STAR, BLACK_HOLE,
+  TAP, ANTHILL, HIVE, NEST, GUN, VOLCANO, STAR, BLACK_HOLE, VENT,
   NITRO_EXPLOSION_RADIUS, GUNPOWDER_EXPLOSION_RADIUS,
 } from '../constants'
 import { updateBug, updateAnt, updateAlien, updateWorm, updateFairy, updateFish, updateMoth } from './creatures'
@@ -20,7 +20,7 @@ import { updatePlant, updateSeed, updateAlgae } from './growing'
 import { updateQuark, updateCrystal, updateEmber, updateStatic, updateDust, updateGlitter } from './effects'
 import {
   updateTap, updateAnthill, updateHive, updateNest,
-  updateGun, updateVolcano, updateStar, updateBlackHole,
+  updateGun, updateVolcano, updateStar, updateBlackHole, updateVent,
   SPAWNER_WAKE_RADIUS,
 } from './spawners'
 import { applyGravity } from './gravity'
@@ -35,6 +35,7 @@ type ParticleHandler = (g: Uint8Array, x: number, y: number, p: number, cols: nu
 const SPAWNER_DISPATCH: Partial<Record<number, ParticleHandler>> = {
   [TAP]: updateTap, [ANTHILL]: updateAnthill, [HIVE]: updateHive, [NEST]: updateNest,
   [GUN]: updateGun, [VOLCANO]: updateVolcano, [STAR]: updateStar, [BLACK_HOLE]: updateBlackHole,
+  [VENT]: updateVent,
 }
 const CREATURE_DISPATCH: Partial<Record<number, ParticleHandler>> = {
   [BUG]: updateBug, [ANT]: updateAnt, [ALIEN]: updateAlien, [WORM]: updateWorm,

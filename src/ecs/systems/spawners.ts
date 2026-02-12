@@ -2,7 +2,7 @@ import {
   EMPTY, WATER, ANT, BEE, BIRD, LAVA, GAS, STONE, SNOW, EMBER,
   STATIC, GLITTER, PLANT, FLOWER, ALGAE, DIRT, MOLD,
   BULLET_N, BULLET_NE, BULLET_E, BULLET_SE, BULLET_S, BULLET_SW, BULLET_W, BULLET_NW,
-  TAP, VOLCANO, GUN, ANTHILL, HIVE, NEST, STAR, BLACK_HOLE,
+  TAP, VOLCANO, GUN, ANTHILL, HIVE, NEST, STAR, BLACK_HOLE, VENT,
   BLACK_HOLE_PULL_RADIUS, BLACK_HOLE_SAMPLE_COUNT,
 } from '../constants'
 
@@ -16,6 +16,7 @@ export const SPAWNER_WAKE_RADIUS: Partial<Record<number, number>> = {
   [VOLCANO]: 4,
   [STAR]: 6,
   [BLACK_HOLE]: 12,
+  [VENT]: 3,
 }
 
 export function updateTap(g: Uint8Array, x: number, y: number, _p: number, cols: number, rows: number, rand: () => number): void {
@@ -185,6 +186,22 @@ export function updateBlackHole(g: Uint8Array, x: number, y: number, _p: number,
           g[idx(bendX, checkY)] = cc; g[ci] = EMPTY
         }
       }
+    }
+  }
+}
+
+export function updateVent(g: Uint8Array, x: number, y: number, _p: number, cols: number, _rows: number, rand: () => number): void {
+  // Emit gas upward
+  if (y > 0 && rand() < 0.2) {
+    const above = (y - 1) * cols + x
+    if (g[above] === EMPTY) g[above] = GAS
+  }
+  // Occasionally emit gas diagonally upward
+  if (rand() < 0.08) {
+    const dx = rand() < 0.5 ? -1 : 1
+    const nx = x + dx, ny = y - 1
+    if (nx >= 0 && nx < cols && ny >= 0 && g[ny * cols + nx] === EMPTY) {
+      g[ny * cols + nx] = GAS
     }
   }
 }

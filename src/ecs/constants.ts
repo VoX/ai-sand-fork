@@ -13,9 +13,9 @@ export const SPORE = 50, ALGAE = 51, POISON = 52, DUST = 53, FIREWORK = 54
 export const BUBBLE = 55, GLITTER = 56, STAR = 57, COMET = 58, BLUE_FIRE = 59
 export const BLACK_HOLE = 60, FIREFLY = 61
 export const WORM = 62, FAIRY = 63
-export const FISH = 64, MOTH = 65
+export const FISH = 64, MOTH = 65, VENT = 66
 
-export type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth'
+export type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent'
 
 export const MATERIAL_TO_ID: Record<Material, number> = {
   sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
@@ -29,6 +29,7 @@ export const MATERIAL_TO_ID: Record<Material, number> = {
   firefly: FIREFLY,
   worm: WORM, fairy: FAIRY,
   fish: FISH, moth: MOTH,
+  vent: VENT,
 }
 
 export const CELL_SIZE = 4
@@ -62,6 +63,7 @@ export const COLORS_U32 = new Uint32Array([
   0xFFEBCE87, 0xFFC0C0C0, 0xFF00DFFF, 0xFFFFF97D, 0xFFFF901E, 0xFF000000, 0xFF00FFBF,
   0xFF8090C0, 0xFFFF88FF,
   0xFF00A5FF, 0xFF8CB4D2,
+  0xFF607860,
 ])
 
 export const FIRE_COLORS = new Uint32Array(32)

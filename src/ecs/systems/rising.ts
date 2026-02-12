@@ -50,6 +50,15 @@ function updateGasRising(
 ): void {
   const idx = (bx: number, by: number) => by * cols + bx
   if (y === 0) { g[p] = EMPTY; return }
+  // Small random horizontal drift
+  if (rand() < 0.08) {
+    const hdx = rand() < 0.5 ? -1 : 1
+    if (x + hdx >= 0 && x + hdx < cols && g[idx(x + hdx, y)] === EMPTY) {
+      const d = idx(x + hdx, y); g[d] = GAS; g[p] = EMPTY; stampGrid[d] = tickParity; return
+    }
+  }
+  // Slow the rise: skip upward movement 30% of the time
+  if (rand() < 0.3) return
   const up = idx(x, y - 1)
   if (y > 0 && g[up] === EMPTY) { g[up] = GAS; g[p] = EMPTY; stampGrid[up] = tickParity }
   else {
