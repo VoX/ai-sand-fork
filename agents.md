@@ -1,22 +1,12 @@
 # Agent Development Tips
 
-## Build and Deploy Workflow
-
-**ALWAYS run build and push after making code changes:**
-
-```bash
-npm run build && git add -A && git commit -m "Your message" && git push -u origin <branch-name>
-```
-
-The build outputs to `/docs` folder which is deployed via GitHub Pages.
-
 ## Architecture
 
 The game uses a **chunked grid engine** with **component-driven archetypes**:
 - Physics + rendering run in a **Web Worker** (`physics.worker.ts`) using OffscreenCanvas
 - The main thread (`App.tsx`) handles UI and sends input events via `postMessage`
 - The simulation grid (`typeGrid`) is a flat `Uint8Array` where each byte is a particle type ID — this is the **sole source of truth** for particle type identity
-- The grid is subdivided into **64x64 chunks** (`ChunkMap`) that track activity and dirty state
+- The grid is subdivided into **32x32 chunks** (`ChunkMap`) that track activity and dirty state
 - **Sleeping chunks** (no changes for 60 ticks) are skipped by physics — only active chunks are processed
 - **Dirty-rect rendering** — only chunks with changes are re-rendered to the pixel buffer
 - Systems iterate the grid in row order, skipping sleeping chunk columns within each row
@@ -31,7 +21,7 @@ The game uses a **chunked grid engine** with **component-driven archetypes**:
 - `/src/App.tsx` - React UI, material picker, brush controls, camera/zoom, save/load, worker communication
 - `/src/App.css` - UI styling
 - `/src/physics.worker.ts` - System orchestrator: game loop, input handling, ChunkMap lifecycle, save/load binary format, calls physics + render systems
-- `/src/sim/ChunkMap.ts` - Chunk subdivision (64x64), activity tracking, sleep/wake, dirty-rect management, checksum-based change detection
+- `/src/sim/ChunkMap.ts` - Chunk subdivision (32x32), activity tracking, sleep/wake, dirty-rect management, checksum-based change detection
 - `/src/sim/rng.ts` - Mulberry32 fast seedable PRNG (returns [0,1) like Math.random)
 - `/src/ecs/constants.ts` - Particle type IDs (0-65), color tables, `MATERIAL_TO_ID`, world dimensions
 - `/src/ecs/archetypes.ts` - `ArchetypeDef` interface, `ARCHETYPES[]` table (indexed by particle type ID), `ARCHETYPE_FLAGS` bitmask array for fast dispatch, flag bit constants (`F_GRAVITY`, `F_BUOYANCY`, etc.)
@@ -84,10 +74,10 @@ Both `fallingPhysicsSystem` and `risingPhysicsSystem` use `ARCHETYPE_FLAGS[parti
 
 ## Chunking System (`src/sim/ChunkMap.ts`)
 
-The grid is divided into 64x64 chunks for spatial optimization:
+The grid is divided into 32x32 chunks for spatial optimization:
 
-- **CHUNK_SIZE = 64**, **CHUNK_SHIFT = 6** (for bitwise `>> 6` division)
-- `chunkCols = ceil(cols / 64)`, `chunkRows = ceil(rows / 64)`
+- **CHUNK_SIZE = 32**, **CHUNK_SHIFT = 6** (for bitwise `>> 6` division)
+- `chunkCols = ceil(cols / 32)`, `chunkRows = ceil(rows / 32)`
 - Chunk metadata is stored as flat typed arrays (not per-chunk objects)
 
 ### Activity tracking

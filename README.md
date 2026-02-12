@@ -4,15 +4,13 @@ A falling sand physics simulation game built with React + TypeScript + Vite.
 
 **Play at:** [wheats.app](https://wheats.app)
 
-## Development Workflow
+## Deployment
 
-**Important: Always build and push after making changes!**
+The site is automatically built and deployed to GitHub Pages via GitHub Actions whenever
+changes are pushed to `main`. The workflow runs `npm run build` and deploys the `dist`
+output using `actions/deploy-pages@v4`.
 
-```bash
-npm run build && git add -A && git commit -m "Your message" && git push -u origin <branch-name>
-```
-
-The game builds to `/docs` folder for GitHub Pages deployment.
+No manual build or publish step is needed — just merge to `main` and the CI handles the rest.
 
 ---
 
