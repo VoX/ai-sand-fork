@@ -2,7 +2,7 @@ import {
   EMPTY, SAND, WATER, DIRT, STONE, PLANT, FIRE, GAS, FLUFF, BUG,
   PLASMA, SLIME, ANT, GLASS, CRYSTAL, BIRD, BEE, GUNPOWDER, FLOWER,
   HIVE, NEST, HONEY, ACID, LAVA, SNOW, MOLD, MERCURY, VOID, RUST,
-  SPORE, LIGHTNING, STATIC, TAP, VOLCANO, POISON, ALGAE,
+  SPORE, LIGHTNING, STATIC, TAP, VOLCANO, POISON, ALGAE, LIT_GUNPOWDER,
 } from '../constants'
 
 export function updateAcid(g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number): void {
@@ -54,7 +54,8 @@ export function updateLava(g: Uint8Array, x: number, y: number, p: number, cols:
       if (lnc === WATER) { g[lni] = rand() < 0.5 ? STONE : GAS; if (rand() < 0.15) { g[p] = STONE; break } }
       else if (lnc === SNOW) { g[lni] = WATER }
       else if (lnc === SAND && rand() < 0.4) { g[lni] = GLASS }
-      else if ((lnc === PLANT || lnc === FLUFF || lnc === GAS || lnc === FLOWER || lnc === GUNPOWDER || lnc === HIVE || lnc === NEST) && rand() < 0.7) { g[lni] = FIRE }
+      else if ((lnc === PLANT || lnc === FLUFF || lnc === GAS || lnc === FLOWER || lnc === HIVE || lnc === NEST) && rand() < 0.7) { g[lni] = FIRE }
+      else if (lnc === GUNPOWDER && rand() < 0.7) { g[lni] = LIT_GUNPOWDER }
       else if ((lnc === BUG || lnc === ANT || lnc === BIRD || lnc === BEE) && rand() < 0.8) { g[lni] = FIRE }
     }
   }

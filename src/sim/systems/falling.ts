@@ -11,7 +11,8 @@ import {
   MOLD, MERCURY, VOID, RUST, PLANT, SEED, ALGAE,
   POISON,
   TAP, ANTHILL, HIVE, NEST, GUN, VOLCANO, STAR, BLACK_HOLE, VENT,
-  NITRO_EXPLOSION_RADIUS, GUNPOWDER_EXPLOSION_RADIUS,
+  NITRO_EXPLOSION_RADIUS, GUNPOWDER_EXPLOSION_RADIUS, GUNPOWDER_BLAST_RADIUS,
+  LIT_GUNPOWDER,
 } from '../constants'
 import { updateBug, updateAnt, updateAlien, updateWorm, updateFairy, updateFish, updateMoth } from './creatures'
 import { updateBulletFalling, updateBulletTrail } from './projectiles'
@@ -171,7 +172,7 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
         continue
       }
 
-      // GUNPOWDER: heat-triggered explosion + granular movement
+      // GUNPOWDER: touching heat → becomes LIT_GUNPOWDER (fuse)
       if (c === GUNPOWDER) {
         for (let gi = 0; gi < 2; gi++) {
           const gdx = Math.floor(rand() * 3) - 1, gdy = Math.floor(rand() * 3) - 1
@@ -179,25 +180,72 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
           const gnx = x + gdx, gny = y + gdy
           if (gnx >= 0 && gnx < cols && gny >= 0 && gny < rows) {
             const gnc = g[idx(gnx, gny)]
-            if (gnc === FIRE || gnc === PLASMA || gnc === EMBER || gnc === LAVA) {
-              const r = GUNPOWDER_EXPLOSION_RADIUS
-              for (let edy = -r; edy <= r; edy++) {
-                for (let edx = -r; edx <= r; edx++) {
-                  if (edx * edx + edy * edy <= r * r) {
-                    const ex = x + edx, ey = y + edy
-                    if (ex >= 0 && ex < cols && ey >= 0 && ey < rows) {
-                      const ei = idx(ex, ey), ec = g[ei]
-                      if (ec !== STONE && ec !== GLASS && ec !== WATER) g[ei] = FIRE
-                    }
-                  }
-                }
-              }
+            if (gnc === FIRE || gnc === PLASMA || gnc === EMBER || gnc === LAVA || gnc === LIT_GUNPOWDER) {
+              g[p] = LIT_GUNPOWDER
               break
             }
           }
         }
         if (g[p] !== GUNPOWDER) continue
         settleFall(g, x, y, p, GUNPOWDER, cols, rows, below, belowCell, rand, stampGrid, tickParity, idx, WATER, true, 0, false)
+        continue
+      }
+
+      // LIT_GUNPOWDER: fuse burns then detonates with systematic blast wave
+      if (c === LIT_GUNPOWDER) {
+        if (rand() < 0.08) {
+          // Detonation: systematic blast wave pushing ALL particles outward
+          const blastR = GUNPOWDER_BLAST_RADIUS
+          const r = GUNPOWDER_EXPLOSION_RADIUS
+          for (let ring = blastR; ring >= 2; ring--) {
+            for (let bdy = -ring; bdy <= ring; bdy++) {
+              for (let bdx = -ring; bdx <= ring; bdx++) {
+                const d2 = bdx * bdx + bdy * bdy
+                if (d2 > ring * ring || d2 <= (ring - 1) * (ring - 1)) continue
+                const bnx = x + bdx, bny = y + bdy
+                if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) continue
+                const bi = idx(bnx, bny), bc = g[bi]
+                if (bc === EMPTY || bc === FIRE) continue
+                if ((ARCHETYPE_FLAGS[bc] & F_IMMOBILE) && rand() > 0.5) continue
+                const pushX = bdx > 0 ? 1 : (bdx < 0 ? -1 : 0)
+                const pushY = bdy > 0 ? 1 : (bdy < 0 ? -1 : 0)
+                const dist = Math.sqrt(d2)
+                const pushDist = Math.max(2, Math.round((blastR - dist + 4) / 2))
+                let cx = bnx, cy = bny
+                for (let step = 0; step < pushDist; step++) {
+                  const nx = cx + pushX, ny = cy + pushY
+                  if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) break
+                  const ni = idx(nx, ny), nc = g[ni]
+                  if (nc !== EMPTY) {
+                    if ((ARCHETYPE_FLAGS[nc] & F_IMMOBILE) && rand() > 0.5) break
+                    g[ni] = g[idx(cx, cy)]
+                    g[idx(cx, cy)] = EMPTY
+                    cx = nx; cy = ny
+                    continue
+                  }
+                  g[ni] = g[idx(cx, cy)]
+                  g[idx(cx, cy)] = EMPTY
+                  cx = nx; cy = ny
+                }
+              }
+            }
+          }
+          // Small fire core after blast
+          for (let edy = -r; edy <= r; edy++) {
+            for (let edx = -r; edx <= r; edx++) {
+              if (edx * edx + edy * edy <= r * r) {
+                const ex = x + edx, ey = y + edy
+                if (ex >= 0 && ex < cols && ey >= 0 && ey < rows) {
+                  const ei = idx(ex, ey), ec = g[ei]
+                  if (ec !== STONE && ec !== GLASS && ec !== WATER) g[ei] = FIRE
+                }
+              }
+            }
+          }
+          continue
+        }
+        // Not detonating yet — fall like gunpowder
+        settleFall(g, x, y, p, LIT_GUNPOWDER, cols, rows, below, belowCell, rand, stampGrid, tickParity, idx, WATER, true, 0, false)
         continue
       }
 
