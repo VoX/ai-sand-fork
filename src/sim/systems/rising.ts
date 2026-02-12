@@ -12,7 +12,7 @@ import {
 } from '../constants'
 import { updateBulletRising } from './projectiles'
 import { updateBird, updateBee, updateFirefly } from './creatures'
-import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../../sim/ChunkMap'
+import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../ChunkMap'
 
 // ── Extracted rising-pass handlers ──
 

@@ -1,6 +1,6 @@
 import { EMPTY, FIRE, PLASMA, LIGHTNING, BLUE_FIRE,
   COLORS_U32, FIRE_COLORS, PLASMA_COLORS, LIGHTNING_COLORS, BLUE_FIRE_COLORS, BG_COLOR } from '../constants'
-import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../../sim/ChunkMap'
+import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../ChunkMap'
 
 export function renderSystem(
   typeGrid: Uint8Array,

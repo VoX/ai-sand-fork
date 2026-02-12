@@ -4,9 +4,9 @@
 import { ChunkMap } from './ChunkMap'
 import { createRNG } from './rng'
 import type { RNG } from './rng'
-import { risingPhysicsSystem } from '../ecs/systems/rising'
-import { fallingPhysicsSystem } from '../ecs/systems/falling'
-import { isSpawnerType } from '../ecs/orchestration'
+import { risingPhysicsSystem } from './systems/rising'
+import { fallingPhysicsSystem } from './systems/falling'
+import { isSpawnerType } from './orchestration'
 
 // Binary format v3 constants
 const MAGIC = [0x53, 0x41, 0x4E, 0x44] as const  // "SAND"

@@ -23,20 +23,20 @@ The game uses a **chunked grid engine** with **component-driven archetypes**:
 - `/src/physics.worker.ts` - System orchestrator: game loop, input handling, ChunkMap lifecycle, save/load binary format, calls physics + render systems
 - `/src/sim/ChunkMap.ts` - Chunk subdivision (32x32), activity tracking, sleep/wake, dirty-rect management, checksum-based change detection
 - `/src/sim/rng.ts` - Mulberry32 fast seedable PRNG (returns [0,1) like Math.random)
-- `/src/ecs/constants.ts` - Particle type IDs (0-65), color tables, `MATERIAL_TO_ID`, world dimensions
-- `/src/ecs/archetypes.ts` - `ArchetypeDef` interface, `ARCHETYPES[]` table (indexed by particle type ID), `ARCHETYPE_FLAGS` bitmask array for fast dispatch, flag bit constants (`F_GRAVITY`, `F_BUOYANCY`, etc.)
-- `/src/ecs/orchestration.ts` - Grid utilities (`queryCell`, `simSetCell`, `paintCircle`), spawner type detection
-- `/src/ecs/systems/render.ts` - Dirty-chunk-only rendering: fills ImageData only for chunks marked renderDirty
-- `/src/ecs/systems/rising.ts` - Rising pass (top-to-bottom, chunk-aware): flag-based dispatch for projectiles and flying creatures; inline handlers for fire, gas, plasma, lightning, comet, bubbles, firework, spore, cloud
-- `/src/ecs/systems/falling.ts` - Falling pass (bottom-to-top, chunk-aware): flag-based dispatch (`ARCHETYPE_FLAGS` + `HANDLER_MASK`) for spawners, ground creatures, corrosive, infectious, growth; inline handlers for nitro, gunpowder, slime, snow; generic `applyGravity`/`applyLiquid` for data-driven particles
-- `/src/ecs/systems/gravity.ts` - Generic gravity: fall into empty, density-sink through lighter liquids, diagonal slide — driven by archetype `gravity` and `density` values
-- `/src/ecs/systems/liquid.ts` - Generic lateral liquid flow — driven by archetype `liquid` value
-- `/src/ecs/systems/creatures.ts` - 10 creature handlers: bird, bee, bug, ant, alien, firefly, worm, fairy, fish, moth
-- `/src/ecs/systems/spawners.ts` - 8 spawner handlers: tap, anthill, hive, nest, gun, volcano, star, black hole
-- `/src/ecs/systems/reactions.ts` - 7 reaction handlers: acid, lava, mold, mercury, void, rust, poison
-- `/src/ecs/systems/growing.ts` - 3 growth handlers: plant, seed, algae
-- `/src/ecs/systems/effects.ts` - 6 effect handlers: quark, crystal, ember, static, dust, glitter
-- `/src/ecs/systems/projectiles.ts` - Bullet movement (rising/falling), bullet trail fading
+- `/src/sim/constants.ts` - Particle type IDs (0-65), color tables, `MATERIAL_TO_ID`, world dimensions
+- `/src/sim/archetypes.ts` - `ArchetypeDef` interface, `ARCHETYPES[]` table (indexed by particle type ID), `ARCHETYPE_FLAGS` bitmask array for fast dispatch, flag bit constants (`F_GRAVITY`, `F_BUOYANCY`, etc.)
+- `/src/sim/orchestration.ts` - Grid utilities (`queryCell`, `simSetCell`, `paintCircle`), spawner type detection
+- `/src/sim/systems/render.ts` - Dirty-chunk-only rendering: fills ImageData only for chunks marked renderDirty
+- `/src/sim/systems/rising.ts` - Rising pass (top-to-bottom, chunk-aware): flag-based dispatch for projectiles and flying creatures; inline handlers for fire, gas, plasma, lightning, comet, bubbles, firework, spore, cloud
+- `/src/sim/systems/falling.ts` - Falling pass (bottom-to-top, chunk-aware): flag-based dispatch (`ARCHETYPE_FLAGS` + `HANDLER_MASK`) for spawners, ground creatures, corrosive, infectious, growth; inline handlers for nitro, gunpowder, slime, snow; generic `applyGravity`/`applyLiquid` for data-driven particles
+- `/src/sim/systems/gravity.ts` - Generic gravity: fall into empty, density-sink through lighter liquids, diagonal slide — driven by archetype `gravity` and `density` values
+- `/src/sim/systems/liquid.ts` - Generic lateral liquid flow — driven by archetype `liquid` value
+- `/src/sim/systems/creatures.ts` - 10 creature handlers: bird, bee, bug, ant, alien, firefly, worm, fairy, fish, moth
+- `/src/sim/systems/spawners.ts` - 8 spawner handlers: tap, anthill, hive, nest, gun, volcano, star, black hole
+- `/src/sim/systems/reactions.ts` - 7 reaction handlers: acid, lava, mold, mercury, void, rust, poison
+- `/src/sim/systems/growing.ts` - 3 growth handlers: plant, seed, algae
+- `/src/sim/systems/effects.ts` - 6 effect handlers: quark, crystal, ember, static, dust, glitter
+- `/src/sim/systems/projectiles.ts` - Bullet movement (rising/falling), bullet trail fading
 - `/docs/` - Built output for deployment
 - `/README.md` - Full particle documentation, interactions, and mermaid diagrams
 
@@ -171,22 +171,22 @@ ARCHETYPES[BUG] = { living: true, creatureHandler: true, color: COLORS_U32[BUG] 
 
 ## Adding New Particles
 
-1. Add constant in `src/ecs/constants.ts`: `export const NEW_PARTICLE = XX`
+1. Add constant in `src/sim/constants.ts`: `export const NEW_PARTICLE = XX`
 2. Add to `Material` type union (if paintable)
 3. Add to `MATERIAL_TO_ID` (if paintable)
 4. Add color to `COLORS_U32` array at the matching index (ABGR format)
 5. Add button color to `BUTTON_COLORS` in `App.tsx` (if paintable)
 6. Add to `categories` array in `App.tsx` for button display (if paintable)
-7. **Add archetype in `src/ecs/archetypes.ts`**: define the `ArchetypeDef` with appropriate components:
+7. **Add archetype in `src/sim/archetypes.ts`**: define the `ArchetypeDef` with appropriate components:
    - **Data-driven only** (e.g., new granular/liquid): set `gravity`, `liquid`, `density`, etc. — no handler needed, generic `applyGravity`/`applyLiquid` handles movement automatically
    - **Handler-dispatched** (e.g., new creature/spawner): set the handler tag (`creatureHandler: true`, etc.) and write a type-specific handler function
 8. If using a handler tag, add the physics handler in the appropriate system file:
-   - Creatures: `src/ecs/systems/creatures.ts`
-   - Spawners: `src/ecs/systems/spawners.ts`
-   - Reactions: `src/ecs/systems/reactions.ts`
-   - Growing: `src/ecs/systems/growing.ts`
-   - Effects: `src/ecs/systems/effects.ts`
-   - Projectiles: `src/ecs/systems/projectiles.ts`
+   - Creatures: `src/sim/systems/creatures.ts`
+   - Spawners: `src/sim/systems/spawners.ts`
+   - Reactions: `src/sim/systems/reactions.ts`
+   - Growing: `src/sim/systems/growing.ts`
+   - Effects: `src/sim/systems/effects.ts`
+   - Projectiles: `src/sim/systems/projectiles.ts`
 9. Wire the handler into `falling.ts` or `rising.ts` dispatch `switch` statement
 10. Add special spawn rate in `addParticles` if needed (in `physics.worker.ts`)
 11. Add to fire spreading list if flammable

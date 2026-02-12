@@ -3,9 +3,9 @@
 // Uses two-canvas pipeline: world buffer (1px/cell) → GPU-scaled display canvas
 
 import { MATERIAL_TO_ID, type Material, EMPTY, STONE, TAP, GUN, BLACK_HOLE,
-  WORLD_COLS, WORLD_ROWS, DEFAULT_ZOOM, BG_COLOR } from './ecs/constants'
-import { ARCHETYPES } from './ecs/archetypes'
-import { renderSystem } from './ecs/systems/render'
+  WORLD_COLS, WORLD_ROWS, DEFAULT_ZOOM, BG_COLOR } from './sim/constants'
+import { ARCHETYPES } from './sim/archetypes'
+import { renderSystem } from './sim/systems/render'
 import { CHUNK_SIZE } from './sim/ChunkMap'
 import { createRNG } from './sim/rng'
 import { Simulation } from './sim/Simulation'

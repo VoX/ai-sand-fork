@@ -1,8 +1,8 @@
 // Orchestration — grid utilities and spawner type detection.
 
 import { ARCHETYPE_FLAGS, F_SPAWNER } from './archetypes'
-import { CHUNK_SHIFT } from '../sim/ChunkMap'
-import type { ChunkMap } from '../sim/ChunkMap'
+import { CHUNK_SHIFT } from './ChunkMap'
+import type { ChunkMap } from './ChunkMap'
 
 /** Check if a particle type ID has the F_SPAWNER flag. */
 export function isSpawnerType(typeId: number): boolean {
