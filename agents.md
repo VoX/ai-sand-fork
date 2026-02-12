@@ -5,7 +5,7 @@
 **ALWAYS run build and push after making code changes:**
 
 ```bash
-bun run build && git add -A && git commit -m "Your message" && git push -u origin <branch-name>
+npm run build && git add -A && git commit -m "Your message" && git push -u origin <branch-name>
 ```
 
 The build outputs to `/docs` folder which is deployed via GitHub Pages.

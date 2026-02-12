@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "publish": "bun run build && git add docs && git commit -m 'Build for GitHub Pages' && git push",
+    "publish": "npm run build && git add docs && git commit -m 'Build for GitHub Pages' && git push",
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",

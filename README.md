@@ -9,7 +9,7 @@ A falling sand physics simulation game built with React + TypeScript + Vite.
 **Important: Always build and push after making changes!**
 
 ```bash
-bun run build && git add -A && git commit -m "Your message" && git push -u origin <branch-name>
+npm run build && git add -A && git commit -m "Your message" && git push -u origin <branch-name>
 ```
 
 The game builds to `/docs` folder for GitHub Pages deployment.
@@ -574,7 +574,7 @@ These are spawned by other particles (Gun spawns bullets, Comet spawns blue fire
 
 ## Testing
 
-Playwright is set up for automated testing. Requires Node.js >= 18.19 and bun.
+Playwright is set up for automated testing. Requires Node.js >= 18.19.
 
 ### Quick Start
 
@@ -601,12 +601,12 @@ Or use the shell script directly:
 ./run-tests.sh --grep "canvas" # Run specific tests
 ```
 
-Or via bun:
+Or via npm:
 
 ```bash
-bun run test          # Run all tests
-bun run test:headed   # Run with visible browser
-bun run test:ui       # Interactive UI mode
+npm run test          # Run all tests
+npm run test:headed   # Run with visible browser
+npm run test:ui       # Interactive UI mode
 ```
 
 Tests cover control buttons, particle selection, and canvas interactions.
