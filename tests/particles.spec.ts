@@ -127,7 +127,7 @@ test.describe('Snapshot Load Game Test', () => {
 
     // Verify the page structure matches the expected visual snapshot
     await expect(page).toHaveScreenshot({
-      mask: [page.locator('.fps-counter')],
+      stylePath: path.resolve(__dirname, 'hide-ui.css'),
     });
   })
 })
@@ -173,7 +173,7 @@ test.describe('Simulation Regression Snapshot', () => {
 
     // Verify the page matches the expected visual snapshot
     await expect(page).toHaveScreenshot({
-      mask: [page.locator('.fps-counter')],
+      stylePath: path.resolve(__dirname, 'hide-ui.css'),
     })
   })
 })
