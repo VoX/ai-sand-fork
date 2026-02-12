@@ -8,10 +8,10 @@ import { risingPhysicsSystem } from './systems/rising'
 import { fallingPhysicsSystem } from './systems/falling'
 import { isSpawnerType } from './orchestration'
 
-// Binary format v3 constants
+// Binary format v4 constants
 const MAGIC = [0x53, 0x41, 0x4E, 0x44] as const  // "SAND"
-const FORMAT_VERSION = 3
-const HEADER_SIZE = 4 + 1 + 2 + 2 + 4 + 4  // magic + ver + cols + rows + rng + simStep = 17
+const FORMAT_VERSION = 4
+const HEADER_SIZE = 4 + 1 + 2 + 2 + 4 + 4 + 4  // magic + ver + cols + rows + rng + simStep + initialSeed = 21
 
 export class Simulation {
   grid: Uint8Array
@@ -20,6 +20,7 @@ export class Simulation {
   readonly chunkMap: ChunkMap
   rand: RNG
   simStep: number
+  initialSeed: number
 
   constructor(cols: number, rows: number, seed?: number) {
     this.cols = cols
@@ -27,7 +28,9 @@ export class Simulation {
     this.grid = new Uint8Array(cols * rows)
     this.chunkMap = new ChunkMap()
     this.chunkMap.init(cols, rows)
-    this.rand = createRNG(seed ?? Date.now())
+    const s = seed ?? Date.now()
+    this.initialSeed = s
+    this.rand = createRNG(s)
     this.simStep = 0
   }
 
@@ -40,7 +43,7 @@ export class Simulation {
     this.simStep++
   }
 
-  /** Serialize the full simulation state to a v3 binary ArrayBuffer. */
+  /** Serialize the full simulation state to a v4 binary ArrayBuffer. */
   save(): ArrayBuffer {
     const totalSize = HEADER_SIZE + this.grid.length
     const buf = new ArrayBuffer(totalSize)
@@ -53,12 +56,13 @@ export class Simulation {
     view.setUint16(7, this.rows, true)
     view.setInt32(9, this.rand.getState(), true)
     view.setUint32(13, this.simStep, true)
+    view.setInt32(17, this.initialSeed, true)
     u8.set(this.grid, HEADER_SIZE)
 
     return buf
   }
 
-  /** Create a Simulation from a v3 binary save buffer. */
+  /** Create a Simulation from a v3/v4 binary save buffer. */
   static load(buffer: ArrayBuffer): Simulation {
     const view = new DataView(buffer)
     const u8 = new Uint8Array(buffer)
@@ -68,7 +72,7 @@ export class Simulation {
     }
 
     const version = u8[4]
-    if (version !== FORMAT_VERSION) {
+    if (version !== 3 && version !== FORMAT_VERSION) {
       throw new Error(`Unsupported save format version: ${version} (expected ${FORMAT_VERSION})`)
     }
 
@@ -80,7 +84,14 @@ export class Simulation {
     const sim = new Simulation(cols, rows)
     sim.rand.setState(rngState)
     sim.simStep = simStep
-    sim.grid.set(u8.subarray(HEADER_SIZE, HEADER_SIZE + cols * rows))
+
+    if (version === 4) {
+      sim.initialSeed = view.getInt32(17, true)
+      sim.grid.set(u8.subarray(21, 21 + cols * rows))
+    } else {
+      sim.initialSeed = 0
+      sim.grid.set(u8.subarray(17, 17 + cols * rows))
+    }
     sim.chunkMap.wakeAll()
 
     return sim
@@ -90,7 +101,9 @@ export class Simulation {
   reset(seed?: number): void {
     this.grid.fill(0)
     this.chunkMap.wakeAll()
-    this.rand = createRNG(seed ?? Date.now())
+    const s = seed ?? Date.now()
+    this.initialSeed = s
+    this.rand = createRNG(s)
     this.simStep = 0
   }
 }

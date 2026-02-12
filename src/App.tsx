@@ -165,11 +165,22 @@ function App() {
     worker.onmessageerror = () => console.error('Physics worker message deserialization error')
     worker.onmessage = (e) => {
       if (e.data.type === 'fps') setFps(e.data.data)
+      if (e.data.type === 'autoPaused') setIsPaused(true)
     }
 
     // Transfer canvas control to worker
     const offscreen = canvas.transferControlToOffscreen()
     worker.postMessage({ type: 'init', canvas: offscreen }, [offscreen])
+
+    // Support ?pauseAtStep=N query param for testing/debugging
+    const params = new URLSearchParams(window.location.search)
+    const pauseAtStepParam = params.get('pauseAtStep')
+    if (pauseAtStepParam !== null) {
+      const step = parseInt(pauseAtStepParam, 10)
+      if (!isNaN(step) && step > 0) {
+        worker.postMessage({ type: 'setPauseAtStep', data: { step } })
+      }
+    }
 
   }, [])
 
@@ -241,11 +252,18 @@ function App() {
     const handler = (e: MessageEvent) => {
       if (e.data.type === 'saveData') {
         worker.removeEventListener('message', handler)
-        const blob = new Blob([e.data.data], { type: 'application/octet-stream' })
+        const buf = e.data.data as ArrayBuffer
+        const view = new DataView(buf)
+        // v4 format: [magic(4)][version(1)][cols(2)][rows(2)][rngState(4)][simStep(4)][initialSeed(4)][grid...]
+        const simStep = view.getUint32(13, true)
+        const initialSeed = view.getInt32(17, true)
+        const seedId = (initialSeed >>> 0).toString(36).slice(0, 8)
+        const randomSuffix = Math.random().toString(36).slice(2, 5)
+        const blob = new Blob([buf], { type: 'application/octet-stream' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `sand-${Date.now().toString(36)}.sand`
+        a.download = `${seedId}-${simStep}-${randomSuffix}.sand`
         a.click()
         URL.revokeObjectURL(url)
       }
