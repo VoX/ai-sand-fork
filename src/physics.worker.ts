@@ -8,7 +8,7 @@ import { ARCHETYPES } from './ecs/archetypes'
 import { risingPhysicsSystem } from './ecs/systems/rising'
 import { fallingPhysicsSystem } from './ecs/systems/falling'
 import { renderSystem } from './ecs/systems/render'
-import { ChunkMap } from './sim/ChunkMap'
+import { ChunkMap, CHUNK_SIZE } from './sim/ChunkMap'
 import { isSpawnerType } from './ecs/orchestration'
 import { createRNG } from './sim/rng'
 
@@ -23,6 +23,7 @@ let worldData32: Uint32Array | null = null
 let grid: Uint8Array = new Uint8Array(0)
 let cols = 0, rows = 0
 let isPaused = false
+let debugChunks = false
 let pendingInputs: Array<{ x: number; y: number; prevX: number; prevY: number; tool: Material | 'erase'; brushSize: number }> = []
 const chunkMap = new ChunkMap()
 let rand = createRNG(Date.now())
@@ -109,6 +110,23 @@ function render() {
   // Scaled draw — nearest-neighbor for crisp pixel art
   displayCtx.imageSmoothingEnabled = false
   displayCtx.drawImage(worldCanvas, cx, cy, viewW, viewH, 0, 0, dw, dh)
+
+  // Debug overlay: red rectangles on sleeping/inactive chunks
+  if (debugChunks) {
+    displayCtx.strokeStyle = 'rgba(255, 0, 0, 0.6)'
+    displayCtx.lineWidth = 2
+    for (let chy = 0; chy < chunkMap.chunkRows; chy++) {
+      for (let chx = 0; chx < chunkMap.chunkCols; chx++) {
+        if (chunkMap.active[chy * chunkMap.chunkCols + chx]) continue
+        // Chunk world-space origin → screen-space
+        const sx = (chx * CHUNK_SIZE - cx) * (dw / viewW)
+        const sy = (chy * CHUNK_SIZE - cy) * (dh / viewH)
+        const sw = CHUNK_SIZE * (dw / viewW)
+        const sh = CHUNK_SIZE * (dh / viewH)
+        displayCtx.strokeRect(sx, sy, sw, sh)
+      }
+    }
+  }
 }
 
 let lastUpdateTime = 0
@@ -207,6 +225,10 @@ self.onmessage = (e: MessageEvent) => {
 
     case 'pause':
       isPaused = data.paused
+      break
+
+    case 'toggleDebugChunks':
+      debugChunks = !debugChunks
       break
 
     case 'reset':

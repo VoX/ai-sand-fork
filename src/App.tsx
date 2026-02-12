@@ -213,11 +213,12 @@ function App() {
     return () => clearInterval(interval)
   }, [isDrawing, sendInput])
 
-  // Keyboard shortcuts for brush size
+  // Keyboard shortcuts for brush size + debug overlay
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === ']' || e.key === '=') setBrushSize(prev => Math.min(30, prev + 1))
       if (e.key === '[' || e.key === '-') setBrushSize(prev => Math.max(1, prev - 1))
+      if (e.key === 'p' || e.key === 'P') workerRef.current?.postMessage({ type: 'toggleDebugChunks' })
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
