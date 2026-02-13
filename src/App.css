@@ -46,14 +46,7 @@ body,
 }
 
 .material-dropdown {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
   flex-shrink: 0;
-  z-index: 10;
-  pointer-events: auto;
-  padding-top: max(12px, env(safe-area-inset-top));
 }
 
 .material-dropdown-trigger {
@@ -304,10 +297,6 @@ body,
     padding: 8px 10px;
     padding-top: max(8px, env(safe-area-inset-top));
     gap: 8px;
-  }
-
-  .material-dropdown {
-    padding-top: max(8px, env(safe-area-inset-top));
   }
 
   .material-dropdown-trigger {
