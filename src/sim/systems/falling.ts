@@ -249,8 +249,8 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
         continue
       }
 
-      // WATER: extinguish adjacent fire
-      if (c === WATER) {
+      // WATER: extinguish adjacent fire (probabilistic to reduce overhead)
+      if (c === WATER && rand() < 0.3) {
         for (let wdy = -1; wdy <= 1; wdy++) {
           for (let wdx = -1; wdx <= 1; wdx++) {
             if (wdy === 0 && wdx === 0) continue

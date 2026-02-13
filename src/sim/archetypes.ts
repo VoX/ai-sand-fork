@@ -7,7 +7,7 @@ import {
   BULLET_TRAIL, CLOUD, ACID, LAVA, SNOW, VOLCANO,
   MOLD, MERCURY, VOID, SEED, RUST, SPORE, ALGAE, POISON, DUST, FIREWORK,
   BUBBLE, GLITTER, STAR, COMET, BLUE_FIRE, BLACK_HOLE, FIREFLY,
-  WORM, FAIRY, FISH, MOTH, VENT, LIT_GUNPOWDER, COLORS_U32,
+  WORM, FAIRY, FISH, MOTH, VENT, LIT_GUNPOWDER, SMOKE, COLORS_U32,
 } from './constants'
 
 // ---------------------------------------------------------------------------
@@ -109,10 +109,11 @@ ARCHETYPES[MERCURY] = { gravity: 1.0, liquid: 0.5, density: 8, killsCreatures: t
 // Rising / gaseous
 ARCHETYPES[FIRE] = { buoyancy: 0.5, volatile: [0.1, EMPTY], heatSource: true, color: COLORS_U32[FIRE], palette: 1 }
 ARCHETYPES[GAS] = { buoyancy: 1.0, volatile: [0.02, EMPTY], flammable: true, color: COLORS_U32[GAS] }
+ARCHETYPES[SMOKE] = { buoyancy: 1.0, volatile: [0.04, EMPTY], color: COLORS_U32[SMOKE] }
 ARCHETYPES[PLASMA] = { buoyancy: 1.0, volatile: [0.08, EMPTY], heatSource: true, color: COLORS_U32[PLASMA], palette: 2 }
 ARCHETYPES[BLUE_FIRE] = { buoyancy: 0.5, volatile: [0.08, EMPTY], heatSource: true, color: COLORS_U32[BLUE_FIRE], palette: 4 }
 ARCHETYPES[SPORE] = { buoyancy: 0.4, spawnRate: 0.35, volatile: [0.01, EMPTY], infectiousHandler: true, color: COLORS_U32[SPORE] }
-ARCHETYPES[CLOUD] = { buoyancy: 0.3, spawnerHandler: true, color: COLORS_U32[CLOUD] }
+ARCHETYPES[CLOUD] = { buoyancy: 0.3, density: 1, spawnerHandler: true, color: COLORS_U32[CLOUD] }
 ARCHETYPES[FIREWORK] = { buoyancy: 0.95, fireworkHandler: true, color: COLORS_U32[FIREWORK] }
 ARCHETYPES[BUBBLE] = { buoyancy: 0.6, bubbleHandler: true, color: COLORS_U32[BUBBLE] }
 ARCHETYPES[COMET] = { buoyancy: 1.0, heatSource: true, cometHandler: true, color: COLORS_U32[COMET] }
