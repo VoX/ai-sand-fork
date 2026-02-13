@@ -8,11 +8,16 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     minify: 'terser',
+    cssMinify: true,
     terserOptions: {
       compress: {
         drop_console: true,
         drop_debugger: true,
-        pure_funcs: ['console.log'],
+        pure_funcs: ['console.log', 'console.info', 'console.debug'],
+        passes: 2,
+      },
+      mangle: {
+        safari10: true,
       },
     },
     rollupOptions: {
@@ -20,5 +25,7 @@ export default defineConfig({
         manualChunks: undefined,
       },
     },
+    reportCompressedSize: true,
+    chunkSizeWarningLimit: 500,
   },
 })
