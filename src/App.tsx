@@ -453,7 +453,7 @@ function App() {
   }, [])
 
   const handlePointerEnter = useCallback((e: React.PointerEvent) => {
-    if (e.buttons > 0 && !isPanningRef.current) {
+    if (e.buttons > 0 && !isPanningRef.current && !panModeRef.current && !isMultiPanRef.current) {
       setIsDrawing(true)
       pointerPosRef.current = { x: e.clientX, y: e.clientY }
     }

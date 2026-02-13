@@ -98,6 +98,7 @@ body,
   align-items: center;
   justify-content: center;
   z-index: 200;
+  overflow: hidden;
 }
 
 .material-modal {
@@ -105,7 +106,7 @@ body,
   border: 1px solid #333;
   border-radius: 12px;
   padding: 16px;
-  max-height: 80vh;
+  max-height: min(80vh, 100dvh - 24px);
   max-width: calc(100vw - 24px);
   overflow-y: auto;
   overflow-x: hidden;
@@ -290,7 +291,7 @@ body,
 }
 
 .zoom-slider {
-  position: absolute;
+  position: fixed;
   left: max(10px, env(safe-area-inset-left));
   top: 50%;
   transform: translateY(-50%);
@@ -372,7 +373,7 @@ body,
   .material-modal {
     min-width: 0;
     width: calc(100vw - 24px);
-    max-height: 85vh;
+    max-height: min(85vh, 100dvh - 24px);
     padding: 12px;
     gap: 2px;
   }
