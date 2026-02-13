@@ -137,7 +137,7 @@ test.describe('Brush Size Keyboard Shortcuts', () => {
     await page.goto('/')
     await page.waitForSelector('canvas')
 
-    const brushDisplay = page.locator('.brush-size span')
+    const brushDisplay = page.locator('.material-dropdown-trigger span').first()
     const initial = await brushDisplay.textContent()
     const initialSize = parseInt(initial ?? '3', 10)
 
