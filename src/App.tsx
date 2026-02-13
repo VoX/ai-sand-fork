@@ -542,7 +542,8 @@ function App() {
             className="material-dropdown-trigger"
             style={{ '--material-color': BUTTON_COLORS[tool] } as React.CSSProperties}
             onPointerDown={(e) => {
-              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+              e.preventDefault()
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
               brushDragRef.current = { startX: e.clientX, startSize: brushSizeRef.current, moved: false }
             }}
             onPointerMove={(e) => {
@@ -600,53 +601,53 @@ function App() {
         </div>
       )}
       {
-    settingsOpen && (
-      <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
-        <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
-          <div className="settings-section">
-            <div className="settings-title">Map Size</div>
-            <div className="settings-subtitle">
-              Current: {gridDims.cols} x {gridDims.rows}
+        settingsOpen && (
+          <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
+            <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="settings-section">
+                <div className="settings-title">Map Size</div>
+                <div className="settings-subtitle">
+                  Current: {gridDims.cols} x {gridDims.rows}
+                </div>
+                <div className="settings-options">
+                  {PRESET_SIZES.map((size) => (
+                    <button
+                      key={size.label}
+                      className="settings-option"
+                      onClick={() => selectMapSize(size)}
+                    >
+                      <span className="settings-option-label">{size.label}</span>
+                      <span className="settings-option-dims">{size.cols} x {size.rows}</span>
+                    </button>
+                  ))}
+                  <button
+                    className="settings-option"
+                    onClick={() => selectMapSize(getScreenSize())}
+                  >
+                    <span className="settings-option-label">Screen</span>
+                    <span className="settings-option-dims">{Math.floor(window.innerWidth / 2)} x {Math.floor(window.innerHeight / 2)}</span>
+                  </button>
+                </div>
+                <div className="settings-warn">Changing size resets the simulation</div>
+              </div>
+              <div className="settings-divider" />
+              <div className="settings-section">
+                <div className="settings-title">World</div>
+                <div className="settings-options">
+                  <button className="settings-option" onClick={() => { save(); setSettingsOpen(false) }}>
+                    <span className="settings-option-label">Save World</span>
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" className="settings-option-icon"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
+                  </button>
+                  <button className="settings-option" onClick={() => { load(); setSettingsOpen(false) }}>
+                    <span className="settings-option-label">Load World</span>
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" className="settings-option-icon"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="settings-options">
-              {PRESET_SIZES.map((size) => (
-                <button
-                  key={size.label}
-                  className="settings-option"
-                  onClick={() => selectMapSize(size)}
-                >
-                  <span className="settings-option-label">{size.label}</span>
-                  <span className="settings-option-dims">{size.cols} x {size.rows}</span>
-                </button>
-              ))}
-              <button
-                className="settings-option"
-                onClick={() => selectMapSize(getScreenSize())}
-              >
-                <span className="settings-option-label">Screen</span>
-                <span className="settings-option-dims">{Math.floor(window.innerWidth / 2)} x {Math.floor(window.innerHeight / 2)}</span>
-              </button>
-            </div>
-            <div className="settings-warn">Changing size resets the simulation</div>
           </div>
-          <div className="settings-divider" />
-          <div className="settings-section">
-            <div className="settings-title">World</div>
-            <div className="settings-options">
-              <button className="settings-option" onClick={() => { save(); setSettingsOpen(false) }}>
-                <span className="settings-option-label">Save World</span>
-                <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" className="settings-option-icon"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
-              </button>
-              <button className="settings-option" onClick={() => { load(); setSettingsOpen(false) }}>
-                <span className="settings-option-label">Load World</span>
-                <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" className="settings-option-icon"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
+        )
+      }
     </div >
   )
 }
