@@ -106,6 +106,7 @@ body,
   border-radius: 12px;
   padding: 16px;
   max-height: 80vh;
+  max-width: calc(100vw - 24px);
   overflow-y: auto;
   overflow-x: hidden;
   display: flex;
@@ -278,36 +279,53 @@ body,
   color: #ccc;
 }
 
+.brush-size.pan-mode {
+  color: #6cb4ee;
+  background: #1a2a3a;
+}
+
 .brush-size svg {
   width: 18px;
   height: 18px;
 }
 
-.zoom-level {
+.zoom-slider {
+  position: absolute;
+  left: max(10px, env(safe-area-inset-left));
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 6px 10px;
+  padding: 10px 6px;
   background: #1a1a1a;
   border-radius: 8px;
   color: #aaa;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
-  cursor: ew-resize;
+  cursor: ns-resize;
   user-select: none;
   touch-action: none;
   -webkit-tap-highlight-color: transparent;
   transition: color 0.15s ease;
-  flex-shrink: 0;
+  z-index: 10;
+  pointer-events: auto;
 }
 
-.zoom-level:hover {
+.zoom-slider:hover {
   color: #ccc;
 }
 
-.zoom-level svg {
+.zoom-slider svg {
   width: 18px;
   height: 18px;
+}
+
+.zoom-slider span {
+  writing-mode: horizontal-tb;
+  white-space: nowrap;
+  font-size: 11px;
 }
 
 .canvas-container {
@@ -352,16 +370,26 @@ body,
   }
 
   .material-modal {
-    min-width: 280px;
+    min-width: 0;
+    width: calc(100vw - 24px);
+    max-height: 85vh;
+    padding: 12px;
+    gap: 2px;
+  }
+
+  .material-category-label {
+    padding: 6px 6px 2px;
+    font-size: 11px;
   }
 
   .material-category-items {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .material-dropdown-item {
-    padding: 6px 8px;
+    padding: 6px 6px;
     font-size: 12px;
+    gap: 5px;
   }
 
   .action-btns {
@@ -389,14 +417,18 @@ body,
     height: 16px;
   }
 
-  .zoom-level {
-    padding: 5px 8px;
-    font-size: 12px;
+  .zoom-slider {
+    padding: 8px 5px;
+    font-size: 10px;
   }
 
-  .zoom-level svg {
+  .zoom-slider svg {
     width: 16px;
     height: 16px;
+  }
+
+  .zoom-slider span {
+    font-size: 10px;
   }
 }
 
