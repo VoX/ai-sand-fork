@@ -2,7 +2,7 @@
 
 ## Architecture
 
-The game uses a **chunked grid engine** with **component-driven archetypes**:
+The game uses a **chunked grid engine** with **data-driven archetypes** and **composable generic systems**:
 - Physics + rendering run in a **Web Worker** (`physics.worker.ts`) using OffscreenCanvas
 - The main thread (`App.tsx`) handles UI and sends input events via `postMessage`
 - The simulation engine is encapsulated in **`Simulation.ts`** — a headless, testable class that owns grid state, RNG, ChunkMap, and the physics step pipeline
@@ -11,10 +11,10 @@ The game uses a **chunked grid engine** with **component-driven archetypes**:
 - **Sleeping chunks** (no changes for 60 ticks) are skipped by physics — only active chunks are processed
 - **Dirty-rect rendering** — only chunks with changes are re-rendered to the pixel buffer
 - Systems iterate the grid in row order, skipping sleeping chunk columns within each row
-- Each particle type is defined as an **archetype** — a composition of reusable ECS components
-- Generic behaviors (gravity, liquid flow, buoyancy) are **data-driven** from archetype definitions
-- Complex/unique behaviors still use **handler tags** that dispatch to type-specific functions
-- A precomputed **`ARCHETYPE_FLAGS` bitmask array** enables fast flag-based dispatch per particle type
+- Each particle type is defined as an **archetype** — a data structure encoding all behavior parameters
+- **Nearly all behaviors are data-driven**: movement, reactions, spreading, dissolving, creature AI, growth, spawning, explosions, decay — all read from archetype data and processed by generic composable systems
+- Only 11 particles still use **named handler** dispatch for behaviors too complex to fully data-drive (firework, bubble, comet, lightning, spore, gun, volcano, star, black hole, seed, algae)
+- A precomputed **`ARCHETYPE_FLAGS` bitmask array** (26 flag bits) enables fast flag-based dispatch per particle type
 - Handler functions operate on the global grid directly — chunking is transparent to them
 
 ## Key Files
@@ -25,20 +25,20 @@ The game uses a **chunked grid engine** with **component-driven archetypes**:
 - `/src/sim/Simulation.ts` - **Headless simulation engine**: owns `grid`, `cols`, `rows`, `chunkMap`, `rand`, `simStep`, `initialSeed`. Contains `step()` (the physics pipeline), `save()`/`load()` (binary format v4), and `reset()`
 - `/src/sim/ChunkMap.ts` - Chunk subdivision (32×32), activity tracking, sleep/wake, dirty-rect management, checksum-based change detection, per-cell stamp grid for double-move prevention
 - `/src/sim/rng.ts` - Mulberry32 fast seedable PRNG with `getState()`/`setState()` for save/load (returns [0,1) like Math.random)
-- `/src/sim/constants.ts` - Particle type IDs (0–67), color tables (`COLORS_U32`, animated palettes), `Material` type, `MATERIAL_TO_ID`, world dimensions, explosion radius constants
-- `/src/sim/archetypes.ts` - `ArchetypeDef` interface, `ARCHETYPES[]` table (indexed by particle type ID), `ARCHETYPE_FLAGS` bitmask array for fast dispatch, 23 flag bit constants (`F_GRAVITY`, `F_BUOYANCY`, etc.)
+- `/src/sim/constants.ts` - Particle type IDs (0–68), color tables (`COLORS_U32`, animated palettes), `Material` type, `MATERIAL_TO_ID`, world dimensions, explosion radius constants
+- `/src/sim/archetypes.ts` - **Central behavior hub**: `ArchetypeDef` interface with 6 data sub-interfaces (`NeighborReaction`, `SpreadRule`, `DissolveRule`, `SpawnerDef`, `CreatureDef`, `GrowthDef`), `ARCHETYPES[]` table (indexed by particle type ID), `ARCHETYPE_FLAGS` bitmask array, 26 flag bit constants
 - `/src/sim/orchestration.ts` - Grid utilities (`queryCell`, `simSetCell`, `paintCircle`, `createIdx`), spawner type detection (`isSpawnerType`)
-- `/src/sim/systems/render.ts` - Dirty-chunk-only rendering: fills ImageData only for chunks marked `renderDirty`. Animated palettes for fire, plasma, lightning, blue fire
-- `/src/sim/systems/rising.ts` - Rising pass (top-to-bottom, chunk-aware): flag-based dispatch for projectiles and flying creatures (bird, bee, firefly); inline handlers for fire, blue fire, gas, plasma, lightning, comet, bubbles, firework, spore, cloud
-- `/src/sim/systems/falling.ts` - Falling pass (bottom-to-top, chunk-aware): flag-based dispatch via `HANDLER_MASK` for spawners, ground creatures, corrosive, infectious, growth; effects dispatch table; inline handlers for nitro, gunpowder, lit gunpowder, water, slime, snow; generic `applyGravity`/`applyLiquid` for data-driven particles
-- `/src/sim/systems/gravity.ts` - Generic gravity: fall into empty, density-sink through lighter liquids, diagonal slide — driven by archetype `gravity` and `density` values
+- `/src/sim/systems/generic.ts` - **12 composable generic systems**: `applyNeighborReaction`, `applySpread`, `applyDissolve`, `applySpawner`, `applyCreature`, `applyGrowth`, `applyVolatile`, `applyRandomWalk`, `checkContactExplosion`, `checkDetonation`, `applyFireRising`, `applyGasRising`
+- `/src/sim/systems/falling.ts` - Falling pass (bottom-to-top, chunk-aware): named handler dispatch + composable system pipeline for all falling-phase particles
+- `/src/sim/systems/rising.ts` - Rising pass (top-to-bottom, chunk-aware): named handler dispatch + composable system pipeline for rising/buoyant particles
+- `/src/sim/systems/handlers.ts` - 5 complex named handlers that can't be fully data-driven: `updateFirework`, `updateBubble`, `updateComet`, `updateLightning`, `updateSpore`
+- `/src/sim/systems/spawners.ts` - 4 complex spawner handlers: `updateGun`, `updateVolcano`, `updateStar`, `updateBlackHole`
+- `/src/sim/systems/reactions.ts` - 2 complex reaction handlers: `updateRust`, `updateVoid`
+- `/src/sim/systems/growing.ts` - 2 complex growth handlers: `updateSeed`, `updateAlgae`
+- `/src/sim/systems/gravity.ts` - Generic gravity: fall into empty, density-sink through lighter liquids, diagonal slide — driven by archetype `gravity`, `density`, and `diagSlide` values
 - `/src/sim/systems/liquid.ts` - Generic lateral liquid flow with hydrostatic pressure — driven by archetype `liquid` value
-- `/src/sim/systems/creatures.ts` - 10 creature handlers: bird, bee, bug, ant, alien, firefly, worm, fairy, fish, moth
-- `/src/sim/systems/spawners.ts` - 9 spawner handlers: tap, anthill, hive, nest, gun, volcano, star, black hole, vent
-- `/src/sim/systems/reactions.ts` - 7 reaction handlers: acid, lava, mold, mercury, void, rust, poison (mold and rust dispatched via `F_INFECTIOUS`; the rest via `F_CORROSIVE`)
-- `/src/sim/systems/growing.ts` - 3 growth handlers: plant, seed, algae
-- `/src/sim/systems/effects.ts` - 6 effect handlers: quark, crystal, ember, static, dust, glitter
 - `/src/sim/systems/projectiles.ts` - Bullet movement (rising/falling split by direction), bullet trail fading, mercury reflection
+- `/src/sim/systems/render.ts` - Dirty-chunk-only rendering: fills ImageData only for chunks marked `renderDirty`. Animated palettes for fire, plasma, lightning, blue fire
 - `/dist/` - Built output for deployment
 
 ## System Pipeline (per physics step)
@@ -55,7 +55,7 @@ After `sim.step()`, the worker calls `renderSystem()` separately:
 
 6. `renderSystem(typeGrid, cols, rows, data32, chunkMap)` — render only dirty chunks to the world buffer
 
-Each type-specific handler has the signature:
+Each named handler has the signature:
 ```typescript
 (g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number) => void
 ```
@@ -65,17 +65,40 @@ Note: `applyGravity` and `applyLiquid` have additional `stamp: Uint8Array` and `
 
 ### Dispatch strategy
 
-Both `fallingPhysicsSystem` and `risingPhysicsSystem` use `ARCHETYPE_FLAGS[particleType]` to decide what to do with each cell:
+Both `fallingPhysicsSystem` and `risingPhysicsSystem` use `ARCHETYPE_FLAGS[particleType]` to decide what to do with each cell. The pipeline is a series of composable stages — each particle may trigger multiple stages per tick:
 
-1. **Skip check** — the falling pass skips particles with `F_BUOYANCY` or `F_LIGHTNING`; the rising pass handles those instead
-2. **Handler-flag dispatch** — a `HANDLER_MASK` groups handler flags (`F_PROJECTILE | F_CREATURE | F_CORROSIVE | F_INFECTIOUS | F_GROWTH | F_SPAWNER`). If any bit matches, dispatch to the appropriate handler via dispatch tables or switch statements
-3. **Effects dispatch table** — particles with effect handlers (Quark, Crystal, Ember, Static, Dust, Glitter) are dispatched via `EFFECTS_DISPATCH[type]` lookup table
-4. **Inline complex** — particles with unique reaction+movement combos (Nitro, Gunpowder, Lit Gunpowder, Water, Slime, Snow) are handled inline in falling.ts
-5. **Generic data-driven movement** — remaining particles use `applyGravity()` then `applyLiquid()`, which read `gravity`, `density`, and `liquid` directly from the `ARCHETYPES` table
+#### Falling pass pipeline (bottom-to-top)
+1. **Skip check** — skip particles with `F_BUOYANCY | F_FIRELIKE | F_GASLIKE | F_PLASMALIKE` (handled in rising pass)
+2. **Named handler dispatch** — if `F_HANDLER`, look up `arch.handler` in `NAMED_HANDLERS` table (gun, volcano, star, blackHole, seed, algae, rust, void). Projectiles handled specially. Named handlers may also have data-driven behaviors that run after the handler
+3. **Detonation** — if `arch.detonationChance`, check for blast wave + fire core (`checkDetonation`)
+4. **Contact explosion** — if `F_EXPLOSIVE` with trigger=1, check for NITRO-style explosion (`checkContactExplosion`)
+5. **Volatile decay** — if `F_VOLATILE`, probabilistic decay/transform (`applyVolatile`)
+6. **Neighbor reactions** — if `F_NEIGHBOR_RX`, scan random neighbors and react on match (`applyNeighborReaction`)
+7. **Dissolve** — if `F_DISSOLVES`, corrode/dissolve nearby particles (`applyDissolve`)
+8. **Spread** — if `F_SPREADS`, spread/infect to nearby cells (`applySpread`)
+9. **Spawner** — if `F_SPAWNER` with `arch.spawns`, spawn particles (`applySpawner`)
+10. **Creature AI** — if `F_CREATURE` with `pass === 'falling'`, run full creature behavior (`applyCreature`)
+11. **Growth** — if `F_GROWTH`, grow into adjacent medium (`applyGrowth`)
+12. **Immobile check** — if `F_IMMOBILE`, stop here
+13. **Move skip** — if `arch.moveSkipChance`, probabilistic movement skip (slows particle)
+14. **Random walk** — if `F_RANDOM_WALK`, random 8-directional movement (`applyRandomWalk`)
+15. **Gravity** — if `F_GRAVITY`, fall/sink/slide (`applyGravity`)
+16. **Liquid flow** — if `F_LIQUID` and didn't fall, lateral flow (`applyLiquid`)
+
+#### Rising pass pipeline (top-to-bottom)
+1. **Filter** — only process particles with `F_BUOYANCY | F_FIRELIKE | F_GASLIKE | F_PLASMALIKE`, rising creatures (`creature.pass === 'rising'`), or rising projectiles
+2. **Rising projectiles** — upward/horizontal bullets (`updateBulletRising`)
+3. **Rising creatures** — data-driven creature AI for flyers (`applyCreature`)
+4. **Named handlers** — firework, bubble, comet, lightning, spore
+5. **Volatile/neighbor/dissolve/spread/spawner** — same composable systems as falling pass
+6. **Fire-like rising** — drift + chaotic + upward movement (`applyFireRising`)
+7. **Plasma-like rising** — same as fire-like (`applyFireRising`)
+8. **Gas-like rising** — density displacement + slow rise (`applyGasRising`)
+9. **Generic buoyancy** — simple upward/diagonal rise for remaining buoyant particles
 
 ## Particle System
 
-- Numeric IDs (0–67) defined in `constants.ts`
+- Numeric IDs (0–68) defined in `constants.ts`
 - Rising elements processed top-to-bottom in `rising.ts`
 - Falling elements processed bottom-to-top in `falling.ts` (starting at `rows - 2`)
 - Use `rand()` for probabilistic physics
@@ -94,10 +117,10 @@ The grid is divided into 32×32 chunks for spatial optimization:
 - If the checksum matches the previous tick, `sleepCounter` increments
 - After **60 ticks** of no change (`SLEEP_THRESHOLD`), the chunk is put to sleep (`active = 0`)
 - When a chunk changes, its 8 neighbors are also woken (conservative — handles cross-boundary writes)
-- Chunks containing spawner-type particles (detected via `isSpawnerType`) never sleep
+- Chunks containing spawner-type particles (detected via `isSpawnerType` using `F_SPAWNER` flag) never sleep
 
 ### Wake triggers
-- `wakeRadius(worldX, worldY, radius)` — called on user input (brush painting)
+- `wakeRadius(worldX, worldY, radius)` — called on user input (brush painting) and by spawner handlers
 - `wakeAll()` — called on grid reset and load
 - Neighbor wake — when any chunk's checksum changes, adjacent chunks are woken
 
@@ -145,25 +168,31 @@ Particles have `spawnRate` values in their archetypes controlling placement dens
 
 ## Component System (Archetypes)
 
-Each particle type is defined as an `ArchetypeDef` in `archetypes.ts`. Components fall into categories:
+Each particle type is defined as an `ArchetypeDef` in `archetypes.ts`. The system is designed so that most particles are **fully defined by their archetype data** with no custom handler code. Components fall into categories:
 
 ### Movement components (data-driven)
 - `gravity: number` — probability of falling down each tick (0–1). Applied by `applyGravity()`
 - `buoyancy: number` — probability of rising up each tick (0–1). Handled in rising pass
 - `liquid: number` — probability of lateral flow when vertically blocked (0–1). Applied by `applyLiquid()`
 - `density: number` — higher-density particles sink through lower-density liquids
-- `randomWalk: number` — probability of random 8-directional movement
+- `randomWalk: number` — probability of random 8-directional movement. Applied by `applyRandomWalk()`
+- `diagSlide: boolean` — allow diagonal sliding when falling blocked (default true, set false for DIRT)
+- `driftChance: number` — horizontal drift probability for fire/gas rising movement
+- `moveSkipChance: number` — chance to skip movement entirely (slows particle)
 
 ### Visual
 - `color: number` — ABGR uint32 static color (from `COLORS_U32`)
 - `palette?: number` — animated color palette (0=static, 1=fire, 2=plasma, 3=lightning, 4=blue_fire)
 
 ### Lifecycle
-- `volatile?: [chance, into]` — per-tick decay probability and type to transform into
+- `volatile?: [chance, into]` — per-tick decay probability and type to transform into. Applied by `applyVolatile()`
+- `decayProducts?: [chance, type, count][]` — multiple weighted decay products (checked before volatile fallback)
 - `meltOnHeat?: typeId` — transforms into this type near heat sources
 
-### Spawn
-- `spawnRate?: number` — probability per cell when brush-painting (default 0.45 if undefined)
+### Rising style tags
+- `firelike: true` — uses fire rising movement (drift + chaotic + spread). Applied by `applyFireRising()`
+- `gaslike: true` — uses gas rising movement (density displacement + slow rise). Applied by `applyGasRising()`
+- `plasmalike: true` — same as fire-like rising but with different spread behavior
 
 ### Reaction tags (zero-data boolean flags)
 - `flammable` — can be ignited by fire/plasma
@@ -172,27 +201,149 @@ Each particle type is defined as an `ArchetypeDef` in `archetypes.ts`. Component
 - `living` — is a living creature
 - `killsCreatures` — kills living creatures on contact
 
-### Parameterized reactions
-- `explosive?: [radius, trigger]` — trigger: 0=heat-adjacent, 1=solid-contact
+### Parameterized explosions
+- `explosive?: [radius, trigger]` — trigger: 0=heat-adjacent, 1=solid-contact. Applied by `checkContactExplosion()`
+- `blastRadius?: number` — outward push radius for detonation blast wave
+- `detonationChance?: number` — chance per tick to detonate (for fuse particles like LIT_GUNPOWDER). Applied by `checkDetonation()`
 
-### Handler tags (dispatch to type-specific functions)
-- `spawnerHandler` / `creatureHandler` / `growthHandler`
-- `corrosiveHandler` / `infectiousHandler` / `projectileHandler`
-- `lightningHandler` / `fireworkHandler` / `bubbleHandler` / `cometHandler`
+### Neighbor reactions (`neighborReaction?: NeighborReaction`)
+Scan random neighbors and react on trigger match. Applied by `applyNeighborReaction()`.
+```typescript
+interface NeighborReaction {
+  chance: number                                      // Chance per tick to scan
+  samples: number                                     // Number of random neighbors to check
+  triggers: Record<number, number | [number, number]> // neighborType → selfInto or [selfInto, neighborInto]
+}
+```
+Used by: gunpowder (ignites near heat), snow (melts near heat), water (extinguishes fire), ice (melts near heat)
+
+### Spreading (`spreadsTo?: SpreadRule`)
+Spread/infect to nearby cells. Applied by `applySpread()`.
+```typescript
+interface SpreadRule {
+  chance: number                   // Chance per tick
+  samples: number                  // Random samples to check
+  radius: number                   // Scan radius
+  targets: Record<number, number>  // targetType → transformInto
+  convertChance: number            // Per-target conversion chance
+}
+```
+Used by: fire (spreads to flammable), mold (spreads to organic), plasma (converts aggressively)
+
+### Dissolving (`dissolves?: DissolveRule`)
+Corrode/dissolve nearby particles. Applied by `applyDissolve()`.
+```typescript
+interface DissolveRule {
+  chance: number                            // Chance per tick
+  samples: number                           // Random samples
+  targets: Record<number, [number, number]> // targetType → [becomesType, chance]
+  selfConsumeChance: number                 // Chance self is consumed after dissolving
+  selfConsumeInto: number                   // What self becomes when consumed
+}
+```
+Used by: acid, lava, mercury, poison
+
+### Spawning (`spawns?: SpawnerDef`)
+Spawn particles from fixed positions. Applied by `applySpawner()`.
+```typescript
+interface SpawnerDef {
+  type: number                   // What to spawn
+  chance: number                 // Spawn chance per tick
+  offsets: [number, number][]    // List of [dx, dy] spawn positions
+  randomOffset: boolean          // Pick random offset vs first empty
+}
+```
+Used by: tap, anthill, hive, nest, vent, cloud
+
+### Creature AI (`creature?: CreatureDef`)
+Full data-driven creature behavior. Applied by `applyCreature()`.
+```typescript
+interface CreatureDef {
+  pass: 'rising' | 'falling'              // Which physics pass
+  idleChance: number                       // Skip movement chance
+  movement: 'ground' | 'flying' | 'swimming' | 'burrowing' | 'floating'
+  downBias?: number                        // Ground creature fall bias
+  canTraverse?: number[]                   // Types can move through
+  eats?: Record<number, number>            // targetType → leaveBehind
+  hazards?: Record<number, number>         // hazardType → deathResult
+  attractedTo?: number[]                   // Types to seek
+  trail?: [number, number]                 // [trailType, chance]
+  reproduce?: [number, number]             // [chance, nearType]
+}
+```
+Used by: bug, ant, bird, bee, firefly, alien, worm, fairy, fish, moth
+
+### Growth (`growth?: GrowthDef`)
+Plant/algae growth behavior. Applied by `applyGrowth()`.
+```typescript
+interface GrowthDef {
+  chance: number                   // Growth chance per tick
+  growMedium: number[]             // Types adjacent that enable growth
+  growInto: number                 // What to grow into
+  altGrowInto?: [number, number]   // [alternateType, chance]
+}
+```
+Used by: plant (generic growth), algae (also has named handler)
+
+### Named handler (`handler?: string`)
+For behaviors too complex to fully data-drive yet. Only 11 particles use this:
+- **Rising handlers** (in `handlers.ts`): firework, bubble, comet, lightning, spore
+- **Falling handlers** (in `spawners.ts`): gun, volcano, star, blackHole
+- **Falling handlers** (in `reactions.ts`): rust, void
+- **Falling handlers** (in `growing.ts`): seed, algae
+
+### Spawn
+- `spawnRate?: number` — probability per cell when brush-painting (default 0.45 if undefined)
+- `isSpawner?: true` — marks named handlers as spawners (prevents chunk sleeping)
 
 ### Archetype examples
 ```typescript
-// Simple data-driven: only needs gravity + density
+// Simple data-driven granular solid: gravity + density
 ARCHETYPES[SAND] = { gravity: 0.95, density: 5, color: COLORS_U32[SAND] }
 
 // Liquid: gravity + lateral flow + density
 ARCHETYPES[WATER] = { gravity: 0.95, liquid: 0.5, density: 2, color: COLORS_U32[WATER] }
 
-// Rising + volatile + heat source
-ARCHETYPES[FIRE] = { buoyancy: 0.5, volatile: [0.1, EMPTY], heatSource: true, color: COLORS_U32[FIRE], palette: 1 }
+// Fire: rising + volatile + spread to flammable — ALL data-driven, no handler
+ARCHETYPES[FIRE] = {
+  volatile: [0.08, EMPTY], heatSource: true, firelike: true,
+  driftChance: 0.2,
+  spreadsTo: { chance: 0.6, samples: 2, radius: 1, targets: { [PLANT]: FIRE, [FLUFF]: FIRE, ... }, convertChance: 0.4 },
+  color: COLORS_U32[FIRE], palette: 1,
+}
 
-// Handler-dispatched creature with spawn rate
-ARCHETYPES[BUG] = { living: true, spawnRate: 0.25, creatureHandler: true, color: COLORS_U32[BUG] }
+// Acid: gravity + liquid + dissolve — ALL data-driven, no handler
+ARCHETYPES[ACID] = {
+  gravity: 1.0, liquid: 0.4, density: 2,
+  dissolves: { chance: 0.3, samples: 2, targets: { [PLANT]: [EMPTY, 0.8], [STONE]: [SAND, 0.15], ... }, selfConsumeChance: 0.3, selfConsumeInto: EMPTY },
+  color: COLORS_U32[ACID],
+}
+
+// Bug: full creature AI — ALL data-driven via CreatureDef
+ARCHETYPES[BUG] = {
+  living: true, spawnRate: 0.25,
+  creature: {
+    pass: 'falling', idleChance: 0.3, movement: 'ground', downBias: 0.6,
+    canTraverse: [EMPTY], eats: { [PLANT]: EMPTY, [FLOWER]: EMPTY },
+    hazards: { [FIRE]: EMPTY, [LAVA]: EMPTY, [ACID]: EMPTY },
+    reproduce: [0.01, PLANT],
+  },
+  color: COLORS_U32[BUG],
+}
+
+// Data-driven spawner: no handler needed
+ARCHETYPES[TAP] = {
+  immobile: true,
+  spawns: { type: WATER, chance: 0.3, offsets: [[0, 1]], randomOffset: false },
+  color: COLORS_U32[TAP],
+}
+
+// Complex spawner: requires named handler for unique behavior
+ARCHETYPES[VOLCANO] = {
+  immobile: true, isSpawner: true,
+  handler: 'volcano',
+  color: COLORS_U32[VOLCANO],
+}
 ```
 
 ## Adding New Particles
@@ -203,68 +354,84 @@ ARCHETYPES[BUG] = { living: true, spawnRate: 0.25, creatureHandler: true, color:
 4. Add color to `COLORS_U32` array at the matching index (ABGR format)
 5. Add button color to `BUTTON_COLORS` in `App.tsx` (if paintable)
 6. Add to `categories` array in `App.tsx` for button display (if paintable)
-7. **Add archetype in `src/sim/archetypes.ts`**: define the `ArchetypeDef` with appropriate components:
-   - **Data-driven only** (e.g., new granular/liquid): set `gravity`, `liquid`, `density`, etc. — no handler needed, generic `applyGravity`/`applyLiquid` handles movement automatically
-   - **Handler-dispatched** (e.g., new creature/spawner): set the handler tag (`creatureHandler: true`, etc.) and write a type-specific handler function
-8. If using a handler tag, add the physics handler in the appropriate system file:
-   - Creatures: `src/sim/systems/creatures.ts`
-   - Spawners: `src/sim/systems/spawners.ts`
-   - Reactions (corrosive/infectious): `src/sim/systems/reactions.ts`
-   - Growing: `src/sim/systems/growing.ts`
-   - Effects: `src/sim/systems/effects.ts`
-   - Projectiles: `src/sim/systems/projectiles.ts`
-9. Wire the handler into the dispatch table in `falling.ts` or `rising.ts` (add to `SPAWNER_DISPATCH`, `CREATURE_DISPATCH`, `CORROSIVE_DISPATCH`, `INFECTIOUS_DISPATCH`, `GROWTH_DISPATCH`, or `EFFECTS_DISPATCH`)
-10. Add special `spawnRate` in the archetype if needed (default is 0.45)
-11. Add to fire spreading list if flammable
+7. **Add archetype in `src/sim/archetypes.ts`**: define the `ArchetypeDef` with appropriate data components. Most particles need **only archetype data** — no handler code:
+   - **Granular solid**: set `gravity`, `density`, optionally `diagSlide`
+   - **Liquid**: set `gravity`, `liquid`, `density`
+   - **Gas/rising**: set `buoyancy` or `gaslike`/`firelike`, optionally `volatile`, `driftChance`
+   - **Corrosive**: add `dissolves` with target map
+   - **Spreading**: add `spreadsTo` with target map
+   - **Reactive**: add `neighborReaction` with trigger map
+   - **Creature**: add `creature` with full behavior definition
+   - **Spawner**: add `spawns` with offsets and spawn type
+   - **Growth**: add `growth` with medium and growth type
+   - **Only if truly complex**: set `handler: 'name'` and add named handler function
+8. If using a named handler, add the handler function and wire it:
+   - Rising handlers: add to `handlers.ts`, register in `NAMED_RISING_HANDLERS` in `rising.ts`
+   - Falling handlers: add to appropriate file, register in `NAMED_HANDLERS` in `falling.ts`
+   - Add wake radius in `SPAWNER_WAKE_RADIUS` if it's a spawner handler
+9. Add special `spawnRate` in the archetype if needed (default is 0.45)
 
 ## Adding Internal Particles (like Bullets)
 
 1. Add constants for variants in `constants.ts`
 2. Add colors to `COLORS_U32` for each variant
-3. Add archetype in `archetypes.ts` (e.g., `{ projectileHandler: true, color: ... }`)
-4. Add physics handler in appropriate system file
-5. Wire handler into `rising.ts` or `falling.ts` dispatch
-6. Have parent particle spawn them (e.g., Gun spawns Bullets)
-7. Do NOT add to Material type, MATERIAL_TO_ID, BUTTON_COLORS, or categories array
+3. Add archetype in `archetypes.ts` with data-driven behavior or `handler: 'name'`
+4. If using named handler, add handler function and wire into dispatch table
+5. Have parent particle spawn them (e.g., Gun spawns Bullets)
+6. Do NOT add to Material type, MATERIAL_TO_ID, BUTTON_COLORS, or categories array
+
+## Generic Composable Systems (`src/sim/systems/generic.ts`)
+
+These 12 systems read behavior entirely from archetype data and require no per-type code:
+
+| System | Flag | Data source | Description |
+|--------|------|-------------|-------------|
+| `applyNeighborReaction` | `F_NEIGHBOR_RX` | `arch.neighborReaction` | Scan neighbors, react on trigger match |
+| `applySpread` | `F_SPREADS` | `arch.spreadsTo` | Spread/infect to nearby cells |
+| `applyDissolve` | `F_DISSOLVES` | `arch.dissolves` | Corrode/dissolve neighbors |
+| `applySpawner` | `F_SPAWNER` | `arch.spawns` | Spawn particles at offsets |
+| `applyCreature` | `F_CREATURE` | `arch.creature` | Full creature AI (movement, eating, hazards, reproduction) |
+| `applyGrowth` | `F_GROWTH` | `arch.growth` | Grow into adjacent medium |
+| `applyVolatile` | `F_VOLATILE` | `arch.volatile` + `arch.decayProducts` | Probabilistic decay/transform |
+| `applyRandomWalk` | `F_RANDOM_WALK` | `arch.randomWalk` | Random 8-directional movement |
+| `checkContactExplosion` | `F_EXPLOSIVE` | `arch.explosive` | NITRO-style contact explosion |
+| `checkDetonation` | — | `arch.detonationChance` + `arch.explosive` | Blast wave + fire core |
+| `applyFireRising` | `F_FIRELIKE` | `arch.driftChance` | Fire-like rising: drift, chaotic, upward |
+| `applyGasRising` | `F_GASLIKE` | `arch.driftChance`, `arch.moveSkipChance` | Gas-like: density displacement, slow rise |
 
 ## Common Patterns
 
 ### Data-Driven Particle (no handler needed)
-Simple particles that only need movement can be defined purely via archetype — no handler function required:
+Most particles are defined purely via archetype data — no handler function required:
 ```typescript
-// In archetypes.ts — this is ALL you need for a basic granular solid:
+// Basic granular solid:
 ARCHETYPES[NEW_SOLID] = { gravity: 0.8, density: 3, color: COLORS_U32[NEW_SOLID] }
 
-// Or a basic liquid:
+// Basic liquid:
 ARCHETYPES[NEW_LIQUID] = { gravity: 1.0, liquid: 0.5, density: 2, color: COLORS_U32[NEW_LIQUID] }
-```
-The `fallingPhysicsSystem` automatically calls `applyGravity()` and `applyLiquid()` for any particle with those flags.
 
-### Spawner Pattern (Tap, Hive, Anthill, Nest, Gun, Volcano, Star, Black Hole, Vent)
-```typescript
-// Archetype: immobile + spawnerHandler
-ARCHETYPES[TAP] = { immobile: true, spawnerHandler: true, color: COLORS_U32[TAP] }
+// Corrosive liquid:
+ARCHETYPES[NEW_ACID] = {
+  gravity: 1.0, liquid: 0.4, density: 2,
+  dissolves: { chance: 0.3, samples: 2, targets: { [PLANT]: [EMPTY, 0.8] }, selfConsumeChance: 0.2, selfConsumeInto: EMPTY },
+  color: COLORS_U32[NEW_ACID],
+}
 
-// Handler in spawners.ts:
-export function updateTap(g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number): void {
-  // Spawn child particle at rate
+// Creature with full AI:
+ARCHETYPES[NEW_CREATURE] = {
+  living: true,
+  creature: { pass: 'falling', idleChance: 0.2, movement: 'ground', canTraverse: [EMPTY], eats: { [PLANT]: EMPTY } },
+  color: COLORS_U32[NEW_CREATURE],
+}
+
+// Spawner:
+ARCHETYPES[NEW_SPAWNER] = {
+  immobile: true,
+  spawns: { type: WATER, chance: 0.1, offsets: [[0, 1]], randomOffset: false },
+  color: COLORS_U32[NEW_SPAWNER],
 }
 ```
-
-### Creature Pattern (Bug, Ant, Bird, Bee, Firefly, Alien, Worm, Fairy, Fish, Moth)
-```typescript
-// Archetype: living + creatureHandler + spawnRate
-ARCHETYPES[BUG] = { living: true, spawnRate: 0.25, creatureHandler: true, color: COLORS_U32[BUG] }
-
-// Handler in creatures.ts:
-export function updateBug(g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number): void {
-  // Check for death conditions (fire, predators)
-  // Movement logic
-  // Eating/interaction logic
-}
-```
-
-Note: Bird, Bee, and Firefly are handled in the **rising pass** (they fly), while the remaining 7 creatures are handled in the **falling pass**.
+The physics systems automatically process all data-driven components.
 
 ### Grid Operations
 
@@ -292,12 +459,12 @@ Normal particle placement only writes into EMPTY cells (non-empty cells are neve
 ## Destruction Hierarchy
 
 - Bullets interact per-type: pass through soft materials (plant, flower, glass, fluff, gas), kill creatures, penetrate solids (stone, dirt, sand) ~80% of the time, ignite explosives, get slowed/stopped by water, reflect off mercury
-- Gunpowder: heat-adjacent ignition, converts to Lit Gunpowder fuse state, then detonates with blast wave (radius 6) pushing particles outward + fire core
-- Nitro explosions (radius 12) destroy most things except Stone/Glass; convert Water to Stone (70%) or Empty (30%)
-- Fire destroys flammables only (plant, fluff, bug, gas, flower, hive, nest, dust, spore)
-- Acid dissolves organics and kills creatures on contact
-- Lava: heat source, corrosive handler for melting/igniting interactions
-- Void consumes nearby particles, slowly decays, destroyed by lightning
+- Gunpowder: heat-adjacent ignition via `neighborReaction`, converts to Lit Gunpowder, then `detonationChance` triggers blast wave (radius 6) pushing particles outward + fire core
+- Nitro: contact explosion via `explosive: [12, 1]` destroys most things except Stone/Glass; converts Water to Stone (70%) or Empty (30%)
+- Fire: `spreadsTo` targets flammable materials (plant, fluff, bug, gas, flower, hive, nest, dust, spore)
+- Acid: `dissolves` targets organics and creatures
+- Lava: `dissolves` for melting/igniting interactions
+- Void: named handler — consumes nearby particles, slowly decays, destroyed by lightning
 
 **After making changes**, always run the relevant checks to catch errors early:
 1. `npx tsc -b` — typecheck first (catches most issues quickly)

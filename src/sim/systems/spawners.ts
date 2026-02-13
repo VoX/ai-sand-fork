@@ -1,60 +1,11 @@
 import {
-  EMPTY, WATER, ANT, BEE, BIRD, LAVA, GAS, STONE, SNOW, EMBER,
+  EMPTY, WATER, LAVA, GAS, STONE, SNOW, EMBER,
   STATIC, GLITTER, PLANT, FLOWER, ALGAE, DIRT, MOLD,
   BULLET_N, BULLET_NE, BULLET_E, BULLET_SE, BULLET_S, BULLET_SW, BULLET_W, BULLET_NW,
-  TAP, VOLCANO, GUN, ANTHILL, HIVE, NEST, STAR, BLACK_HOLE, VENT,
+  BLACK_HOLE,
   BLACK_HOLE_PULL_RADIUS, BLACK_HOLE_SAMPLE_COUNT,
 } from '../constants'
-
-/** Per-spawner-type wake radius (grid cells). */
-export const SPAWNER_WAKE_RADIUS: Partial<Record<number, number>> = {
-  [TAP]: 2,
-  [ANTHILL]: 2,
-  [HIVE]: 2,
-  [NEST]: 2,
-  [GUN]: 2,
-  [VOLCANO]: 4,
-  [STAR]: 6,
-  [BLACK_HOLE]: 12,
-  [VENT]: 3,
-}
-
-export function updateTap(g: Uint8Array, x: number, y: number, _p: number, cols: number, rows: number, rand: () => number): void {
-  if (y < rows - 1 && g[(y+1)*cols+x] === EMPTY && rand() < 0.15) g[(y+1)*cols+x] = WATER
-}
-
-export function updateAnthill(g: Uint8Array, x: number, y: number, _p: number, cols: number, rows: number, rand: () => number): void {
-  if (rand() < 0.06) {
-    const dx = Math.floor(rand() * 3) - 1
-    const dy = Math.floor(rand() * 3) - 1
-    const nx = x + dx, ny = y + dy
-    if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[ny * cols + nx] === EMPTY) {
-      g[ny * cols + nx] = ANT
-    }
-  }
-}
-
-export function updateHive(g: Uint8Array, x: number, y: number, _p: number, cols: number, rows: number, rand: () => number): void {
-  if (rand() < 0.035) {
-    const dx = Math.floor(rand() * 3) - 1
-    const dy = Math.floor(rand() * 3) - 1
-    const nx = x + dx, ny = y + dy
-    if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[ny * cols + nx] === EMPTY) {
-      g[ny * cols + nx] = BEE
-    }
-  }
-}
-
-export function updateNest(g: Uint8Array, x: number, y: number, _p: number, cols: number, rows: number, rand: () => number): void {
-  if (rand() < 0.02) {
-    const dx = Math.floor(rand() * 3) - 1
-    const dy = -1
-    const nx = x + dx, ny = y + dy
-    if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[ny * cols + nx] === EMPTY) {
-      g[ny * cols + nx] = BIRD
-    }
-  }
-}
+import { ARCHETYPE_FLAGS, F_IMMOBILE } from '../archetypes'
 
 export function updateGun(g: Uint8Array, x: number, y: number, _p: number, cols: number, rows: number, rand: () => number): void {
   if (rand() < 0.08) {
@@ -74,7 +25,7 @@ export function updateGun(g: Uint8Array, x: number, y: number, _p: number, cols:
 }
 
 export function updateVolcano(g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number): void {
-  const idx = (x: number, y: number) => y * cols + x
+  const idx = (bx: number, by: number) => by * cols + bx
   for (let i = 0; i < 3; i++) {
     const vdx = Math.floor(rand() * 3) - 1, vdy = Math.floor(rand() * 3) - 1
     if (vdx === 0 && vdy === 0) continue
@@ -108,7 +59,7 @@ export function updateVolcano(g: Uint8Array, x: number, y: number, p: number, co
 }
 
 export function updateStar(g: Uint8Array, x: number, y: number, _p: number, cols: number, rows: number, rand: () => number): void {
-  const idx = (x: number, y: number) => y * cols + x
+  const idx = (bx: number, by: number) => by * cols + bx
   if (rand() < 0.12) {
     const angle = rand() * 6.28318
     const dist = rand() * 4 + 1
@@ -146,7 +97,7 @@ export function updateStar(g: Uint8Array, x: number, y: number, _p: number, cols
 }
 
 export function updateBlackHole(g: Uint8Array, x: number, y: number, _p: number, cols: number, rows: number, rand: () => number): void {
-  const idx = (x: number, y: number) => y * cols + x
+  const idx = (bx: number, by: number) => by * cols + bx
   if (rand() > 0.5) return
   const pullRadius = BLACK_HOLE_PULL_RADIUS
   for (let sample = 0; sample < BLACK_HOLE_SAMPLE_COUNT; sample++) {
@@ -158,7 +109,7 @@ export function updateBlackHole(g: Uint8Array, x: number, y: number, _p: number,
     const bnx = x + bdx, bny = y + bdy
     if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) continue
     const bi = idx(bnx, bny), bc = g[bi]
-    if (bc === EMPTY || bc === BLACK_HOLE || bc === VOLCANO || bc === GUN || bc === ANTHILL || bc === HIVE) continue
+    if (bc === EMPTY || bc === BLACK_HOLE || (ARCHETYPE_FLAGS[bc] & F_IMMOBILE)) continue
     const stepX = bdx > 0 ? -1 : (bdx < 0 ? 1 : 0)
     const stepY = bdy > 0 ? -1 : (bdy < 0 ? 1 : 0)
     const targetX = bnx + stepX, targetY = bny + stepY
@@ -186,22 +137,6 @@ export function updateBlackHole(g: Uint8Array, x: number, y: number, _p: number,
           g[idx(bendX, checkY)] = cc; g[ci] = EMPTY
         }
       }
-    }
-  }
-}
-
-export function updateVent(g: Uint8Array, x: number, y: number, _p: number, cols: number, _rows: number, rand: () => number): void {
-  // Emit gas upward
-  if (y > 0 && rand() < 0.2) {
-    const above = (y - 1) * cols + x
-    if (g[above] === EMPTY) g[above] = GAS
-  }
-  // Occasionally emit gas diagonally upward
-  if (rand() < 0.08) {
-    const dx = rand() < 0.5 ? -1 : 1
-    const nx = x + dx, ny = y - 1
-    if (nx >= 0 && nx < cols && ny >= 0 && g[ny * cols + nx] === EMPTY) {
-      g[ny * cols + nx] = GAS
     }
   }
 }

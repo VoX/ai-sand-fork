@@ -1,9 +1,9 @@
 import { ARCHETYPES, ARCHETYPE_FLAGS, F_IMMOBILE } from '../archetypes'
-import { EMPTY, DIRT } from '../constants'
+import { EMPTY } from '../constants'
 
 /**
  * Generic gravity: fall down, density-sink through lighter liquids, diagonal slide.
- * Used by purely data-driven particles (SAND, WATER, DIRT, FLUFF, HONEY).
+ * Driven by archetype `gravity`, `density`, and `diagSlide` values.
  * Returns true if the particle moved.
  */
 export function applyGravity(
@@ -43,8 +43,8 @@ export function applyGravity(
     }
   }
 
-  // 3. Diagonal slide (DIRT doesn't slide)
-  if (type !== DIRT) {
+  // 3. Diagonal slide (data-driven: defaults to true, set diagSlide=false to disable)
+  if (arch.diagSlide !== false) {
     const leftOk = x > 0 && g[below - 1] === EMPTY
     const rightOk = x < cols - 1 && g[below + 1] === EMPTY
     let dx = 0

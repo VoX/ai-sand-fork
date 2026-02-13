@@ -1,19 +1,8 @@
 import { EMPTY, WATER, PLANT, FLOWER, FIRE, PLASMA, LAVA, BUG, ANT, BIRD,
   SLIME, DIRT, SEED, STAR, GAS, ALGAE } from '../constants'
 
-export function updatePlant(g: Uint8Array, x: number, y: number, _p: number, cols: number, rows: number, rand: () => number): void {
-  const idx = (x: number, y: number) => y * cols + x
-  if (rand() < 0.92) return
-  const pdx = Math.floor(rand() * 3) - 1
-  const pdy = rand() < 0.7 ? -1 : Math.floor(rand() * 3) - 1
-  const pnx = x + pdx, pny = y + pdy
-  if (pnx >= 0 && pnx < cols && pny >= 0 && pny < rows && g[idx(pnx, pny)] === WATER) {
-    g[idx(pnx, pny)] = rand() < 0.1 ? FLOWER : PLANT
-  }
-}
-
 export function updateSeed(g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number): void {
-  const idx = (x: number, y: number) => y * cols + x
+  const idx = (bx: number, by: number) => by * cols + bx
   const belowCell = y < rows - 1 ? g[idx(x, y + 1)] : EMPTY
   const aboveIdx = y > 0 ? idx(x, y - 1) : -1
   const aboveCell = aboveIdx >= 0 ? g[aboveIdx] : EMPTY
@@ -72,7 +61,7 @@ export function updateSeed(g: Uint8Array, x: number, y: number, p: number, cols:
 }
 
 export function updateAlgae(g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number): void {
-  const idx = (x: number, y: number) => y * cols + x
+  const idx = (bx: number, by: number) => by * cols + bx
   let inWater = false
   if (y > 0 && g[idx(x, y - 1)] === WATER) inWater = true
   else if (y < rows - 1 && g[idx(x, y + 1)] === WATER) inWater = true
