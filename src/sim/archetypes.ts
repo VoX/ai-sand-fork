@@ -379,7 +379,7 @@ ARCHETYPES[MERCURY] = {
 
 ARCHETYPES[FIRE] = {
   buoyancy: 0.5, volatile: [0.03, EMPTY], heatSource: true, firelike: true,
-  decayProducts: [[0.125, SMOKE, 1], [0.075, EMBER, 1]],
+  decayProducts: [[0.075, EMBER, 1], [0.2, SMOKE, 1]],
   spreadsTo: {
     chance: 1.0, samples: 2, radius: 1,
     targets: {
@@ -397,16 +397,16 @@ ARCHETYPES[GAS] = {
   driftChance: 0.08,
   moveSkipChance: 0.3,
   neighborReaction: {
-    chance: 0.6, samples: 2,
+    chance: 1.0, samples: 4,
     triggers: { [FIRE]: FIRE, [BLUE_FIRE]: FIRE, [PLASMA]: FIRE, [LAVA]: FIRE, [EMBER]: FIRE },
   },
   color: COLORS_U32[GAS],
 }
 
 ARCHETYPES[SMOKE] = {
-  buoyancy: 1.0, volatile: [0.04, EMPTY], gaslike: true,
+  buoyancy: 1.0, volatile: [0.004, EMPTY], gaslike: true,
   driftChance: 0.08,
-  moveSkipChance: 0.3,
+  moveSkipChance: 0.1,
   color: COLORS_U32[SMOKE],
 }
 
