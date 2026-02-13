@@ -283,6 +283,33 @@ body,
   height: 18px;
 }
 
+.zoom-level {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: #1a1a1a;
+  border-radius: 8px;
+  color: #aaa;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: ew-resize;
+  user-select: none;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.zoom-level:hover {
+  color: #ccc;
+}
+
+.zoom-level svg {
+  width: 18px;
+  height: 18px;
+}
+
 .canvas-container {
   position: relative;
   width: 100%;
@@ -358,6 +385,16 @@ body,
   }
 
   .brush-size svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .zoom-level {
+    padding: 5px 8px;
+    font-size: 12px;
+  }
+
+  .zoom-level svg {
     width: 16px;
     height: 16px;
   }
