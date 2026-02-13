@@ -48,7 +48,6 @@ body,
 .material-dropdown {
   position: relative;
   flex-shrink: 0;
-  margin-right: 80px;
 }
 
 .material-dropdown-trigger {
@@ -67,6 +66,7 @@ body,
   transition: all 0.15s ease;
   -webkit-tap-highlight-color: transparent;
   user-select: none;
+  touch-action: none;
   box-shadow: 0 0 12px color-mix(in srgb, var(--material-color) 30%, transparent);
   white-space: nowrap;
 }
@@ -258,48 +258,17 @@ body,
     inset 0 0 20px rgba(248, 113, 113, 0.1);
 }
 
-.brush-size {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  background: #1a1a1a;
-  border-radius: 8px;
-  color: #aaa;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: ew-resize;
-  user-select: none;
-  touch-action: none;
-  -webkit-tap-highlight-color: transparent;
-  transition: color 0.15s ease;
-  flex-shrink: 0;
-}
-
-.brush-size:hover {
-  color: #ccc;
-}
-
-.brush-size.pan-mode {
-  color: #6cb4ee;
-  background: #1a2a3a;
-}
-
-.brush-size svg {
-  width: 18px;
-  height: 18px;
-}
-
 .zoom-slider {
   position: fixed;
   left: max(10px, env(safe-area-inset-left));
   top: 50%;
   transform: translateY(-50%);
+  width: 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 10px 6px;
+  padding: 10px 0;
   background: #1a1a1a;
   border-radius: 8px;
   color: #aaa;
@@ -327,6 +296,11 @@ body,
   writing-mode: horizontal-tb;
   white-space: nowrap;
   font-size: 11px;
+}
+
+.zoom-slider.pan-mode {
+  color: #6cb4ee;
+  background: #1a2a3a;
 }
 
 .canvas-container {
@@ -404,16 +378,6 @@ body,
   }
 
   .ctrl-btn svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .brush-size {
-    padding: 5px 8px;
-    font-size: 12px;
-  }
-
-  .brush-size svg {
     width: 16px;
     height: 16px;
   }

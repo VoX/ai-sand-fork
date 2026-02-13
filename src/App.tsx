@@ -81,7 +81,7 @@ function App() {
   const panModeRef = useRef(false)
 
   // Zoom drag state (zoom indicator — vertical)
-  const zoomDragRef = useRef<{ startY: number; startZoom: number } | null>(null)
+  const zoomDragRef = useRef<{ startY: number; startZoom: number; moved: boolean } | null>(null)
   const [zoomDisplay, setZoomDisplay] = useState(DEFAULT_ZOOM)
 
   // Multi-touch state
@@ -545,49 +545,41 @@ function App() {
           </button>
           <input ref={fileInputRef} type="file" accept=".sand" onChange={handleFileLoad} style={{ display: 'none' }} aria-label="Load world file" />
         </div>
-        <div
-          className={`brush-size ${panMode ? 'pan-mode' : ''}`}
-          onWheel={(e) => {
-            if (panMode) return
-            e.preventDefault()
-            e.stopPropagation()
-            setBrushSize(prev => e.deltaY > 0 ? Math.max(1, prev - 1) : Math.min(30, prev + 1))
-          }}
-          onPointerDown={(e) => {
-            (e.target as HTMLElement).setPointerCapture(e.pointerId)
-            brushDragRef.current = { startX: e.clientX, startSize: brushSizeRef.current, moved: false }
-          }}
-          onPointerMove={(e) => {
-            const drag = brushDragRef.current
-            if (!drag) return
-            const dx = e.clientX - drag.startX
-            if (Math.abs(dx) > 4) drag.moved = true
-            if (!drag.moved || panMode) return
-            const steps = Math.round(dx / 8)
-            setBrushSize(Math.max(1, Math.min(30, drag.startSize + steps)))
-          }}
-          onPointerUp={(e) => {
-            (e.target as HTMLElement).releasePointerCapture(e.pointerId)
-            const drag = brushDragRef.current
-            if (drag && !drag.moved) {
-              setPanMode(prev => !prev)
-            }
-            brushDragRef.current = null
-          }}
-        >
-          {panMode
-            ? <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 9h4V6h3l-5-5-5 5h3v3zm-1 1H6V7l-5 5 5 5v-3h3v-4zm14 2l-5-5v3h-3v4h3v3l5-5zm-9 3h-4v3H7l5 5 5-5h-3v-3z" /></svg>
-            : <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r={Math.max(3, brushSize / 30 * 10)} /></svg>
-          }
-          <span>{panMode ? 'pan' : brushSize}</span>
-        </div>
         <div className="material-dropdown" ref={dropdownRef}>
           <button
             className="material-dropdown-trigger"
-            onClick={() => setDropdownOpen(!dropdownOpen)}
             style={{ '--material-color': BUTTON_COLORS[tool] } as React.CSSProperties}
+            onPointerDown={(e) => {
+              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+              brushDragRef.current = { startX: e.clientX, startSize: brushSizeRef.current, moved: false }
+            }}
+            onPointerMove={(e) => {
+              const drag = brushDragRef.current
+              if (!drag) return
+              const dx = e.clientX - drag.startX
+              if (Math.abs(dx) > 4) drag.moved = true
+              if (!drag.moved) return
+              const steps = Math.round(dx / 8)
+              setBrushSize(Math.max(1, Math.min(30, drag.startSize + steps)))
+            }}
+            onPointerUp={(e) => {
+              (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId)
+              const drag = brushDragRef.current
+              if (drag && !drag.moved) {
+                setDropdownOpen(prev => !prev)
+              }
+              brushDragRef.current = null
+            }}
+            onWheel={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setBrushSize(prev => e.deltaY > 0 ? Math.max(1, prev - 1) : Math.min(30, prev + 1))
+            }}
           >
-            <span className="material-dot" style={{ background: BUTTON_COLORS[tool] }} />
+            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" style={{ flexShrink: 0 }}>
+              <circle cx="12" cy="12" r={Math.max(3, brushSize / 30 * 10)} fill={BUTTON_COLORS[tool]} />
+            </svg>
+            <span style={{ opacity: 0.5, fontSize: '0.85em' }}>{brushSize}</span>
             <span>{tool}</span>
           </button>
         </div>
@@ -616,7 +608,7 @@ function App() {
         )}
       </div>
       <div
-        className="zoom-slider"
+        className={`zoom-slider ${panMode ? 'pan-mode' : ''}`}
         onWheel={(e) => {
           e.preventDefault()
           e.stopPropagation()
@@ -637,12 +629,14 @@ function App() {
         }}
         onPointerDown={(e) => {
           (e.target as HTMLElement).setPointerCapture(e.pointerId)
-          zoomDragRef.current = { startY: e.clientY, startZoom: zoomRef.current }
+          zoomDragRef.current = { startY: e.clientY, startZoom: zoomRef.current, moved: false }
         }}
         onPointerMove={(e) => {
           const drag = zoomDragRef.current
           if (!drag) return
           const dy = -(e.clientY - drag.startY)
+          if (Math.abs(dy) > 4) drag.moved = true
+          if (!drag.moved) return
           const canvas = canvasRef.current
           if (!canvas) return
           const rect = canvas.getBoundingClientRect()
@@ -659,6 +653,10 @@ function App() {
         }}
         onPointerUp={(e) => {
           (e.target as HTMLElement).releasePointerCapture(e.pointerId)
+          const drag = zoomDragRef.current
+          if (drag && !drag.moved) {
+            setPanMode(prev => !prev)
+          }
           zoomDragRef.current = null
         }}
       >
