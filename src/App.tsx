@@ -578,8 +578,8 @@ function App() {
         </div>
       </div>
       {dropdownOpen && (
-        <div className="material-modal-overlay" onClick={() => setDropdownOpen(false)}>
-          <div className="material-modal" onClick={(e) => e.stopPropagation()} ref={menuRef} onScroll={(e) => { dropdownScrollRef.current = e.currentTarget.scrollTop }}>
+        <div className="material-modal-overlay" onPointerDown={() => setDropdownOpen(false)}>
+          <div className="material-modal" onPointerDown={(e) => e.stopPropagation()} ref={menuRef} onScroll={(e) => { dropdownScrollRef.current = e.currentTarget.scrollTop }}>
             {categories.map((cat) => (
               <div key={cat.label} className="material-category">
                 <div className="material-category-label">{cat.label}</div>
