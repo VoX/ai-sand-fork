@@ -48,7 +48,6 @@ function App() {
   const [brushSize, setBrushSize] = useState(3)
   const [isPaused, setIsPaused] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
-  const [resetArmed, setResetArmed] = useState(false)
   const [fps, setFps] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [gridDims, setGridDims] = useState({ cols: 0, rows: 0 })
@@ -288,17 +287,6 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const reset = useCallback(() => {
-    if (!resetArmed) {
-      setResetArmed(true)
-      return
-    }
-    setResetArmed(false)
-    if (workerRef.current) {
-      workerRef.current.postMessage({ type: 'reset' })
-    }
-  }, [resetArmed])
-
   const save = useCallback(() => {
     const worker = workerRef.current
     if (!worker) return
@@ -352,7 +340,6 @@ function App() {
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault()
     setDropdownOpen(false)
-    setResetArmed(false)
     setSettingsOpen(false)
 
     // Right-click → pan
@@ -506,21 +493,13 @@ function App() {
               : <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zm8 0h4v16h-4z" /></svg>
             }
           </button>
-          <button className={`ctrl-btn reset ${resetArmed ? 'armed' : ''}`} onClick={reset} aria-label="Reset simulation">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" /></svg>
-          </button>
-          <button className="ctrl-btn save" onClick={save} aria-label="Save world">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
-          </button>
-          <button className="ctrl-btn load" onClick={load} aria-label="Load world">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
-          </button>
           <button className="ctrl-btn settings" onClick={() => setSettingsOpen(!settingsOpen)} aria-label="Map settings">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.6 3.6 0 0112 15.6z" /></svg>
           </button>
           <input ref={fileInputRef} type="file" accept=".sand" onChange={handleFileLoad} style={{ display: 'none' }} aria-label="Load world file" />
         </div>
-        <div className="material-dropdown" ref={dropdownRef}>
+      </div>
+      <div className="material-dropdown" ref={dropdownRef}>
           <button
             className="material-dropdown-trigger"
             style={{ '--material-color': BUTTON_COLORS[tool] } as React.CSSProperties}
@@ -557,31 +536,30 @@ function App() {
             <span style={{ opacity: 0.5, fontSize: '0.85em' }}>{brushSize}</span>
             <span>{tool}</span>
           </button>
-        </div>
-        {dropdownOpen && (
-          <div className="material-modal-overlay" onClick={() => setDropdownOpen(false)}>
-            <div className="material-modal" onClick={(e) => e.stopPropagation()} ref={menuRef} onScroll={(e) => { dropdownScrollRef.current = e.currentTarget.scrollTop }}>
-              {categories.map((cat) => (
-                <div key={cat.label} className="material-category">
-                  <div className="material-category-label">{cat.label}</div>
-                  <div className="material-category-items">
-                    {cat.items.map((m) => (
-                      <button
-                        key={m}
-                        className={`material-dropdown-item ${tool === m ? 'active' : ''}`}
-                        onClick={() => { if (m !== 'erase') lastMaterialRef.current = m as Material; setTool(m); setDropdownOpen(false) }}
-                      >
-                        <span className="material-dot" style={{ background: BUTTON_COLORS[m] }} />
-                        <span>{m}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
+      {dropdownOpen && (
+        <div className="material-modal-overlay" onClick={() => setDropdownOpen(false)}>
+          <div className="material-modal" onClick={(e) => e.stopPropagation()} ref={menuRef} onScroll={(e) => { dropdownScrollRef.current = e.currentTarget.scrollTop }}>
+            {categories.map((cat) => (
+              <div key={cat.label} className="material-category">
+                <div className="material-category-label">{cat.label}</div>
+                <div className="material-category-items">
+                  {cat.items.map((m) => (
+                    <button
+                      key={m}
+                      className={`material-dropdown-item ${tool === m ? 'active' : ''}`}
+                      onClick={() => { if (m !== 'erase') lastMaterialRef.current = m as Material; setTool(m); setDropdownOpen(false) }}
+                    >
+                      <span className="material-dot" style={{ background: BUTTON_COLORS[m] }} />
+                      <span>{m}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div
         className={`zoom-slider ${panMode ? 'pan-mode' : ''}`}
         onWheel={(e) => {
@@ -642,9 +620,11 @@ function App() {
         )}
         <span>{zoomDisplay >= 1 ? zoomDisplay.toFixed(1) : zoomDisplay.toFixed(2)}x</span>
       </div>
-      {settingsOpen && (
-        <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
-          <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+      {
+    settingsOpen && (
+      <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
+        <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="settings-section">
             <div className="settings-title">Map Size</div>
             <div className="settings-subtitle">
               Current: {gridDims.cols} x {gridDims.rows}
@@ -670,9 +650,25 @@ function App() {
             </div>
             <div className="settings-warn">Changing size resets the simulation</div>
           </div>
+          <div className="settings-divider" />
+          <div className="settings-section">
+            <div className="settings-title">World</div>
+            <div className="settings-options">
+              <button className="settings-option" onClick={() => { save(); setSettingsOpen(false) }}>
+                <span className="settings-option-label">Save World</span>
+                <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" className="settings-option-icon"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
+              </button>
+              <button className="settings-option" onClick={() => { load(); setSettingsOpen(false) }}>
+                <span className="settings-option-label">Load World</span>
+                <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" className="settings-option-icon"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
+              </button>
+            </div>
+          </div>
         </div>
-      )}
-    </div>
+      </div>
+    )
+  }
+    </div >
   )
 }
 
