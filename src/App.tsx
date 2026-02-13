@@ -77,10 +77,6 @@ function App() {
   const [panMode, setPanMode] = useState(false)
   const panModeRef = useRef(false)
 
-  // Zoom drag state (zoom indicator — vertical)
-  const zoomDragRef = useRef<{ startY: number; startZoom: number; moved: boolean } | null>(null)
-  const [zoomDisplay, setZoomDisplay] = useState(DEFAULT_ZOOM)
-
   // Multi-pointer drawing state: each active touch/pointer gets its own brush
   const drawPointersRef = useRef(new Map<number, { clientX: number; clientY: number; lastCell: { x: number; y: number } | null }>())
   const panPointerIdRef = useRef<number | null>(null)
@@ -106,7 +102,6 @@ function App() {
 
   const sendCamera = useCallback(() => {
     clampCamera()
-    setZoomDisplay(zoomRef.current)
     workerRef.current?.postMessage({
       type: 'camera',
       data: { camX: camXRef.current, camY: camYRef.current, zoom: zoomRef.current }
@@ -208,7 +203,6 @@ function App() {
         camXRef.current = e.data.data.camX
         camYRef.current = e.data.data.camY
         zoomRef.current = e.data.data.zoom
-        setZoomDisplay(e.data.data.zoom)
       }
     }
 
@@ -336,6 +330,34 @@ function App() {
     })
     setSettingsOpen(false)
   }, [])
+
+  const zoomStep = useCallback((direction: 1 | -1) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const cx = rect.width / 2
+    const old = zoomRef.current
+    const min = minZoomRef.current
+    const logMin = Math.log(min)
+    const logMax = Math.log(MAX_ZOOM)
+    const logRange = logMax - logMin
+    const logStep = logRange * 0.25
+    // Work in log-space so each step feels perceptually equal
+    const logOld = Math.log(old)
+    const pct = (logOld - logMin) / logRange
+    const snapped = direction > 0
+      ? Math.exp(logMin + Math.ceil(pct * 4 + 0.001) * logStep)
+      : Math.exp(logMin + Math.floor(pct * 4 - 0.001) * logStep)
+    const nz = Math.max(min, Math.min(MAX_ZOOM, snapped))
+    // Horizontal: keep center fixed
+    const wx = camXRef.current + cx / old
+    camXRef.current = wx - cx / nz
+    // Vertical: keep bottom edge fixed
+    const bottomY = camYRef.current + rect.height / old
+    camYRef.current = bottomY - rect.height / nz
+    zoomRef.current = nz
+    sendCamera()
+  }, [sendCamera])
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault()
@@ -486,18 +508,27 @@ function App() {
         <div className="fps-counter">{fps} fps</div>
       </div>
       <div className="controls">
-        <div className="action-btns">
-          <button className={`ctrl-btn playpause ${isPaused ? 'paused' : 'playing'}`} onClick={() => setIsPaused(!isPaused)} aria-label={isPaused ? 'Play simulation' : 'Pause simulation'}>
-            {isPaused
-              ? <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-              : <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zm8 0h4v16h-4z" /></svg>
-            }
-          </button>
-          <button className="ctrl-btn settings" onClick={() => setSettingsOpen(!settingsOpen)} aria-label="Map settings">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.6 3.6 0 0112 15.6z" /></svg>
-          </button>
-          <input ref={fileInputRef} type="file" accept=".sand" onChange={handleFileLoad} style={{ display: 'none' }} aria-label="Load world file" />
-        </div>
+        <input ref={fileInputRef} type="file" accept=".sand" onChange={handleFileLoad} style={{ display: 'none' }} aria-label="Load world file" />
+      </div>
+      <div className="view-controls">
+        <button className="ctrl-btn settings" onClick={() => setSettingsOpen(!settingsOpen)} aria-label="Map settings">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.6 3.6 0 0112 15.6z" /></svg>
+        </button>
+        <button className={`ctrl-btn playpause ${isPaused ? 'paused' : 'playing'}`} onClick={() => setIsPaused(!isPaused)} aria-label={isPaused ? 'Play simulation' : 'Pause simulation'}>
+          {isPaused
+            ? <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+            : <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zm8 0h4v16h-4z" /></svg>
+          }
+        </button>
+        <button className="ctrl-btn zoom" onClick={() => zoomStep(1)} aria-label="Zoom in">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
+        </button>
+        <button className="ctrl-btn zoom" onClick={() => zoomStep(-1)} aria-label="Zoom out">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13H5v-2h14v2z" /></svg>
+        </button>
+        <button className={`ctrl-btn pan-toggle ${panMode ? 'active' : ''}`} onClick={() => setPanMode(prev => !prev)} aria-label="Toggle pan mode">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M23 5.5V20c0 2.2-1.8 4-4 4h-7.3c-1.08 0-2.1-.43-2.85-1.19L1 14.83s1.26-1.23 1.3-1.25c.22-.19.49-.29.79-.29.22 0 .42.06.6.16.04.01 4.31 2.46 4.31 2.46V4c0-.83.67-1.5 1.5-1.5S11 3.17 11 4v7h1V1.5c0-.83.67-1.5 1.5-1.5S15 .67 15 1.5V11h1V2.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5V11h1V5.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5z" /></svg>
+        </button>
       </div>
       <div className="material-dropdown" ref={dropdownRef}>
           <button
@@ -560,66 +591,6 @@ function App() {
           </div>
         </div>
       )}
-      <div
-        className={`zoom-slider ${panMode ? 'pan-mode' : ''}`}
-        onWheel={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          const canvas = canvasRef.current
-          if (!canvas) return
-          const rect = canvas.getBoundingClientRect()
-          const centerPx = rect.width / 2
-          const centerPy = rect.height / 2
-          const oldZoom = zoomRef.current
-          const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
-          const newZoom = Math.max(minZoomRef.current, Math.min(MAX_ZOOM, oldZoom * factor))
-          const worldX = camXRef.current + centerPx / oldZoom
-          const worldY = camYRef.current + centerPy / oldZoom
-          camXRef.current = worldX - centerPx / newZoom
-          camYRef.current = worldY - centerPy / newZoom
-          zoomRef.current = newZoom
-          sendCamera()
-        }}
-        onPointerDown={(e) => {
-          (e.target as HTMLElement).setPointerCapture(e.pointerId)
-          zoomDragRef.current = { startY: e.clientY, startZoom: zoomRef.current, moved: false }
-        }}
-        onPointerMove={(e) => {
-          const drag = zoomDragRef.current
-          if (!drag) return
-          const dy = -(e.clientY - drag.startY)
-          if (Math.abs(dy) > 4) drag.moved = true
-          if (!drag.moved) return
-          const canvas = canvasRef.current
-          if (!canvas) return
-          const rect = canvas.getBoundingClientRect()
-          const centerPx = rect.width / 2
-          const centerPy = rect.height / 2
-          const oldZoom = zoomRef.current
-          const newZoom = Math.max(minZoomRef.current, Math.min(MAX_ZOOM, drag.startZoom * Math.pow(1.04, dy / 4)))
-          const worldX = camXRef.current + centerPx / oldZoom
-          const worldY = camYRef.current + centerPy / oldZoom
-          camXRef.current = worldX - centerPx / newZoom
-          camYRef.current = worldY - centerPy / newZoom
-          zoomRef.current = newZoom
-          sendCamera()
-        }}
-        onPointerUp={(e) => {
-          (e.target as HTMLElement).releasePointerCapture(e.pointerId)
-          const drag = zoomDragRef.current
-          if (drag && !drag.moved) {
-            setPanMode(prev => !prev)
-          }
-          zoomDragRef.current = null
-        }}
-      >
-        {panMode ? (
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M23 5.5V20c0 2.2-1.8 4-4 4h-7.3c-1.08 0-2.1-.43-2.85-1.19L1 14.83s1.26-1.23 1.3-1.25c.22-.19.49-.29.79-.29.22 0 .42.06.6.16.04.01 4.31 2.46 4.31 2.46V4c0-.83.67-1.5 1.5-1.5S11 3.17 11 4v7h1V1.5c0-.83.67-1.5 1.5-1.5S15 .67 15 1.5V11h1V2.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5V11h1V5.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5z" /></svg>
-        ) : (
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" /><path d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z" /></svg>
-        )}
-        <span>{zoomDisplay >= 1 ? zoomDisplay.toFixed(1) : zoomDisplay.toFixed(2)}x</span>
-      </div>
       {
     settingsOpen && (
       <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
