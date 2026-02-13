@@ -1,4 +1,5 @@
 .controls,
-.fps-counter {
+.fps-counter,
+.zoom-slider {
   display: none !important;
 }

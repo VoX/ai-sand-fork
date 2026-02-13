@@ -74,10 +74,14 @@ function App() {
   const panStartRef = useRef({ x: 0, y: 0, camX: 0, camY: 0 })
 
   // Brush-size drag state
-  const brushDragRef = useRef<{ startX: number; startSize: number } | null>(null)
+  const brushDragRef = useRef<{ startX: number; startSize: number; moved: boolean } | null>(null)
 
-  // Zoom drag state (zoom indicator)
-  const zoomDragRef = useRef<{ startX: number; startZoom: number } | null>(null)
+  // Pan mode (single-finger pan instead of draw)
+  const [panMode, setPanMode] = useState(false)
+  const panModeRef = useRef(false)
+
+  // Zoom drag state (zoom indicator — vertical)
+  const zoomDragRef = useRef<{ startY: number; startZoom: number } | null>(null)
   const [zoomDisplay, setZoomDisplay] = useState(DEFAULT_ZOOM)
 
   // Multi-touch state
@@ -89,6 +93,7 @@ function App() {
   // Keep refs in sync with state
   useEffect(() => { toolRef.current = tool }, [tool])
   useEffect(() => { brushSizeRef.current = brushSize }, [brushSize])
+  useEffect(() => { panModeRef.current = panMode }, [panMode])
 
   const clampCamera = useCallback(() => {
     const canvas = canvasRef.current
@@ -381,7 +386,15 @@ function App() {
       return
     }
 
-    // Left-click → draw
+    // Left-click → draw or pan (if panMode)
+    if (panModeRef.current) {
+      isPanningRef.current = true
+      panStartRef.current = {
+        x: e.clientX, y: e.clientY,
+        camX: camXRef.current, camY: camYRef.current
+      }
+      return
+    }
     setIsDrawing(true)
     pointerPosRef.current = { x: e.clientX, y: e.clientY }
     sendInput(e.clientX, e.clientY)
@@ -533,82 +546,40 @@ function App() {
           <input ref={fileInputRef} type="file" accept=".sand" onChange={handleFileLoad} style={{ display: 'none' }} aria-label="Load world file" />
         </div>
         <div
-          className="brush-size"
+          className={`brush-size ${panMode ? 'pan-mode' : ''}`}
           onWheel={(e) => {
+            if (panMode) return
             e.preventDefault()
             e.stopPropagation()
             setBrushSize(prev => e.deltaY > 0 ? Math.max(1, prev - 1) : Math.min(30, prev + 1))
           }}
           onPointerDown={(e) => {
             (e.target as HTMLElement).setPointerCapture(e.pointerId)
-            brushDragRef.current = { startX: e.clientX, startSize: brushSizeRef.current }
+            brushDragRef.current = { startX: e.clientX, startSize: brushSizeRef.current, moved: false }
           }}
           onPointerMove={(e) => {
             const drag = brushDragRef.current
             if (!drag) return
             const dx = e.clientX - drag.startX
+            if (Math.abs(dx) > 4) drag.moved = true
+            if (!drag.moved || panMode) return
             const steps = Math.round(dx / 8)
             setBrushSize(Math.max(1, Math.min(30, drag.startSize + steps)))
           }}
           onPointerUp={(e) => {
             (e.target as HTMLElement).releasePointerCapture(e.pointerId)
+            const drag = brushDragRef.current
+            if (drag && !drag.moved) {
+              setPanMode(prev => !prev)
+            }
             brushDragRef.current = null
           }}
         >
-          <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r={Math.max(3, brushSize / 30 * 10)} /></svg>
-          <span>{brushSize}</span>
-        </div>
-        <div
-          className="zoom-level"
-          onWheel={(e) => {
-            e.preventDefault()
-            e.stopPropagation()
-            const canvas = canvasRef.current
-            if (!canvas) return
-            const rect = canvas.getBoundingClientRect()
-            const centerPx = rect.width / 2
-            const centerPy = rect.height / 2
-            const oldZoom = zoomRef.current
-            const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
-            const newZoom = Math.max(minZoomRef.current, Math.min(MAX_ZOOM, oldZoom * factor))
-            const worldX = camXRef.current + centerPx / oldZoom
-            const worldY = camYRef.current + centerPy / oldZoom
-            camXRef.current = worldX - centerPx / newZoom
-            camYRef.current = worldY - centerPy / newZoom
-            zoomRef.current = newZoom
-            sendCamera()
-          }}
-          onPointerDown={(e) => {
-            (e.target as HTMLElement).setPointerCapture(e.pointerId)
-            zoomDragRef.current = { startX: e.clientX, startZoom: zoomRef.current }
-          }}
-          onPointerMove={(e) => {
-            const drag = zoomDragRef.current
-            if (!drag) return
-            const dx = e.clientX - drag.startX
-            // Logarithmic zoom: each 5px = 1.05x multiplier
-            const canvas = canvasRef.current
-            if (!canvas) return
-            const rect = canvas.getBoundingClientRect()
-            const centerPx = rect.width / 2
-            const centerPy = rect.height / 2
-            const oldZoom = zoomRef.current
-            const newZoom = Math.max(minZoomRef.current, Math.min(MAX_ZOOM, drag.startZoom * Math.pow(1.04, dx / 4)))
-            // Zoom anchored on screen center
-            const worldX = camXRef.current + centerPx / oldZoom
-            const worldY = camYRef.current + centerPy / oldZoom
-            camXRef.current = worldX - centerPx / newZoom
-            camYRef.current = worldY - centerPy / newZoom
-            zoomRef.current = newZoom
-            sendCamera()
-          }}
-          onPointerUp={(e) => {
-            (e.target as HTMLElement).releasePointerCapture(e.pointerId)
-            zoomDragRef.current = null
-          }}
-        >
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" /><path d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z" /></svg>
-          <span>{zoomDisplay >= 1 ? zoomDisplay.toFixed(1) : zoomDisplay.toFixed(2)}x</span>
+          {panMode
+            ? <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 9h4V6h3l-5-5-5 5h3v3zm-1 1H6V7l-5 5 5 5v-3h3v-4zm14 2l-5-5v3h-3v4h3v3l5-5zm-9 3h-4v3H7l5 5 5-5h-3v-3z" /></svg>
+            : <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r={Math.max(3, brushSize / 30 * 10)} /></svg>
+          }
+          <span>{panMode ? 'pan' : brushSize}</span>
         </div>
         <div className="material-dropdown" ref={dropdownRef}>
           <button
@@ -643,6 +614,56 @@ function App() {
             </div>
           </div>
         )}
+      </div>
+      <div
+        className="zoom-slider"
+        onWheel={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          const canvas = canvasRef.current
+          if (!canvas) return
+          const rect = canvas.getBoundingClientRect()
+          const centerPx = rect.width / 2
+          const centerPy = rect.height / 2
+          const oldZoom = zoomRef.current
+          const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
+          const newZoom = Math.max(minZoomRef.current, Math.min(MAX_ZOOM, oldZoom * factor))
+          const worldX = camXRef.current + centerPx / oldZoom
+          const worldY = camYRef.current + centerPy / oldZoom
+          camXRef.current = worldX - centerPx / newZoom
+          camYRef.current = worldY - centerPy / newZoom
+          zoomRef.current = newZoom
+          sendCamera()
+        }}
+        onPointerDown={(e) => {
+          (e.target as HTMLElement).setPointerCapture(e.pointerId)
+          zoomDragRef.current = { startY: e.clientY, startZoom: zoomRef.current }
+        }}
+        onPointerMove={(e) => {
+          const drag = zoomDragRef.current
+          if (!drag) return
+          const dy = -(e.clientY - drag.startY)
+          const canvas = canvasRef.current
+          if (!canvas) return
+          const rect = canvas.getBoundingClientRect()
+          const centerPx = rect.width / 2
+          const centerPy = rect.height / 2
+          const oldZoom = zoomRef.current
+          const newZoom = Math.max(minZoomRef.current, Math.min(MAX_ZOOM, drag.startZoom * Math.pow(1.04, dy / 4)))
+          const worldX = camXRef.current + centerPx / oldZoom
+          const worldY = camYRef.current + centerPy / oldZoom
+          camXRef.current = worldX - centerPx / newZoom
+          camYRef.current = worldY - centerPy / newZoom
+          zoomRef.current = newZoom
+          sendCamera()
+        }}
+        onPointerUp={(e) => {
+          (e.target as HTMLElement).releasePointerCapture(e.pointerId)
+          zoomDragRef.current = null
+        }}
+      >
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" /><path d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z" /></svg>
+        <span>{zoomDisplay >= 1 ? zoomDisplay.toFixed(1) : zoomDisplay.toFixed(2)}x</span>
       </div>
       {settingsOpen && (
         <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
