@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'preact/hooks'
 import './App.css'
 import { DEFAULT_ZOOM, MAX_ZOOM } from './sim/constants'
 
@@ -311,8 +311,9 @@ function App() {
     fileInputRef.current?.click()
   }, [])
 
-  const handleFileLoad = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
+  const handleFileLoad = useCallback((e: Event) => {
+    const target = e.target as HTMLInputElement
+    const file = target.files?.[0]
     if (!file || !workerRef.current) return
     const reader = new FileReader()
     reader.onload = () => {
@@ -320,7 +321,7 @@ function App() {
       workerRef.current?.postMessage({ type: 'load', data: { buffer } }, [buffer])
     }
     reader.readAsArrayBuffer(file)
-    e.target.value = ''
+    target.value = ''
   }, [])
 
   const selectMapSize = useCallback((size: MapSize) => {
@@ -359,7 +360,7 @@ function App() {
     sendCamera()
   }, [sendCamera])
 
-  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+  const handlePointerDown = useCallback((e: PointerEvent) => {
     e.preventDefault()
 
     // Middle-click → toggle particle selector
@@ -404,7 +405,7 @@ function App() {
     sendInputForPointer(e.pointerId, e.clientX, e.clientY)
   }, [sendInputForPointer])
 
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+  const handlePointerMove = useCallback((e: PointerEvent) => {
     // Pan — only the pointer that initiated panning
     if (isPanningRef.current && e.pointerId === panPointerIdRef.current) {
       const dx = (e.clientX - panStartRef.current.x) / zoomRef.current
@@ -424,7 +425,7 @@ function App() {
     }
   }, [sendInputForPointer, sendCamera])
 
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+  const handlePointerUp = useCallback((e: PointerEvent) => {
     // End panning if this is the pan pointer
     if (isPanningRef.current && e.pointerId === panPointerIdRef.current) {
       isPanningRef.current = false
@@ -439,7 +440,7 @@ function App() {
     }
   }, [])
 
-  const handlePointerEnter = useCallback((e: React.PointerEvent) => {
+  const handlePointerEnter = useCallback((e: PointerEvent) => {
     // Pointer re-entering canvas while button held — start drawing if not panning
     if (e.buttons > 0 && !isPanningRef.current && !panModeRef.current && !drawPointersRef.current.has(e.pointerId)) {
       drawPointersRef.current.set(e.pointerId, {
@@ -451,7 +452,7 @@ function App() {
     }
   }, [])
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
+  const handleWheel = useCallback((e: WheelEvent) => {
     e.preventDefault()
 
     // Right-click held + scroll → brush size
@@ -540,7 +541,7 @@ function App() {
         <div className="material-dropdown" ref={dropdownRef}>
           <button
             className="material-dropdown-trigger"
-            style={{ '--material-color': BUTTON_COLORS[tool] } as React.CSSProperties}
+            style={{ '--material-color': BUTTON_COLORS[tool] } as any}
             onPointerDown={(e) => {
               e.preventDefault();
               (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
