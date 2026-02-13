@@ -549,7 +549,7 @@ function App() {
               const drag = brushDragRef.current
               if (!drag) return
               const dx = e.clientX - drag.startX
-              if (Math.abs(dx) > 4) drag.moved = true
+              if (Math.abs(dx) > 10) drag.moved = true
               if (!drag.moved) return
               const steps = Math.round(dx / 8)
               setBrushSize(Math.max(1, Math.min(30, drag.startSize + steps)))
