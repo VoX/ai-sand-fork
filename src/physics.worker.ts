@@ -22,6 +22,8 @@ let sim: Simulation | null = null
 let isPaused = false
 let pauseAtStep: number | null = null
 let debugChunks = false
+let cursorCellX = -1
+let cursorCellY = -1
 let pendingInputs: Array<{ x: number; y: number; prevX: number; prevY: number; tool: Material; brushSize: number }> = []
 
 // Camera state
@@ -69,10 +71,7 @@ function addParticles(cellX: number, cellY: number, tool: Material, brushSize: n
         const nx = cellX + dx, ny = cellY + dy
         if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
           const idx = ny * cols + nx
-          const spawnRate = ARCHETYPES[matId]?.spawnRate ?? 0.45
-          if (rand() < spawnRate) {
-            grid[idx] = matId
-          }
+          grid[idx] = matId
         }
       }
     }
@@ -105,7 +104,7 @@ function render() {
 
   // Debug overlay: red rectangles on sleeping/inactive chunks
   if (debugChunks) {
-    displayCtx.strokeStyle = 'rgba(255, 0, 0, 0.6)'
+    displayCtx.strokeStyle = 'rgba(255, 0, 0, 0.12)'
     displayCtx.lineWidth = 2
     for (let chy = 0; chy < sim.chunkMap.chunkRows; chy++) {
       for (let chx = 0; chx < sim.chunkMap.chunkCols; chx++) {
@@ -184,6 +183,15 @@ function gameLoop(timestamp: number) {
     fpsLastReport = timestamp
   }
 
+  // Send particle type under cursor when debug is active
+  if (debugChunks && sim && cursorCellX >= 0 && cursorCellY >= 0 &&
+      cursorCellX < sim.cols && cursorCellY < sim.rows) {
+    ;(self as unknown as Worker).postMessage({
+      type: 'cursorParticle',
+      data: sim.grid[cursorCellY * sim.cols + cursorCellX]
+    })
+  }
+
   requestAnimationFrame(gameLoop)
 }
 
@@ -255,6 +263,18 @@ self.onmessage = (e: MessageEvent) => {
 
     case 'toggleDebugChunks':
       debugChunks = !debugChunks
+      break
+
+    case 'cursorPos':
+      cursorCellX = data.x
+      cursorCellY = data.y
+      break
+
+    case 'step':
+      if (sim) {
+        isPaused = true
+        sim.step()
+      }
       break
 
     case 'reset':

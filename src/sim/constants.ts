@@ -16,8 +16,9 @@ export const WORM = 62, FAIRY = 63
 export const FISH = 64, MOTH = 65, VENT = 66
 export const LIT_GUNPOWDER = 67
 export const SMOKE = 68
+export const WAX = 69, BURNING_WAX = 70, MOLTEN_WAX = 71
 
-export type Material = 'empty' | 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent'
+export type Material = 'empty' | 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent' | 'wax'
 
 export const MATERIAL_TO_ID: Record<Material, number> = {
   empty: EMPTY, sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
@@ -32,6 +33,7 @@ export const MATERIAL_TO_ID: Record<Material, number> = {
   worm: WORM, fairy: FAIRY,
   fish: FISH, moth: MOTH,
   vent: VENT,
+  wax: WAX,
 }
 
 export const CELL_SIZE = 4
@@ -68,6 +70,9 @@ export const COLORS_U32 = new Uint32Array([
   0xFF607860,
   0xFF2060FF, // LIT_GUNPOWDER: bright orange-red
   0xFFA0A0A0, // SMOKE: whitish grey
+  0xFFB0D5E8, // WAX: warm cream
+  0xFF0088FF, // BURNING_WAX: fire palette base
+  0xFF4090C8, // MOLTEN_WAX: amber gold
 ])
 
 export const FIRE_COLORS = new Uint32Array(32)

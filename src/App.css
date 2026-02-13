@@ -250,6 +250,23 @@ body,
   background: #1a2a3a;
 }
 
+.debug-controls {
+  display: flex;
+  gap: 6px;
+  margin-left: 4px;
+  padding-left: 10px;
+  border-left: 1px solid #333;
+}
+
+.ctrl-btn.debug-step {
+  color: #f59e0b;
+}
+
+.ctrl-btn.debug-step:hover {
+  background: #2a2210;
+  color: #fbbf24;
+}
+
 .view-controls {
   position: absolute;
   top: 0;
@@ -289,6 +306,16 @@ body,
   font: 12px/1 monospace;
   color: rgba(255, 255, 255, 0.5);
   pointer-events: none;
+}
+
+.cursor-particle-label {
+  position: absolute;
+  top: 22px;
+  right: 8px;
+  font: 12px/1 monospace;
+  color: rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+  text-transform: capitalize;
 }
 
 /* Mobile adjustments */

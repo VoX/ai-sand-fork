@@ -1,4 +1,4 @@
-import { ARCHETYPES, ARCHETYPE_FLAGS, F_IMMOBILE } from '../archetypes'
+import { ARCHETYPES, ARCHETYPE_FLAGS, F_IMMOBILE, F_GRAVITY } from '../archetypes'
 import { EMPTY } from '../constants'
 
 /**
@@ -45,6 +45,8 @@ export function applyGravity(
 
   // 3. Diagonal slide (data-driven: defaults to true, set diagSlide=false to disable)
   if (arch.diagSlide !== false) {
+
+
     const leftOk = x > 0 && g[below - 1] === EMPTY
     const rightOk = x < cols - 1 && g[below + 1] === EMPTY
     let dx = 0

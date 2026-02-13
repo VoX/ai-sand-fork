@@ -7,7 +7,7 @@ import {
 } from '../archetypes'
 import { EMPTY } from '../constants'
 import { applyGravity } from './gravity'
-import { applyLiquid } from './liquid'
+import { applyLiquid, applyLiquidMix } from './liquid'
 import {
   applyNeighborReaction, applySpread, applyDissolve, applySpawner,
   applyCreature, applyGrowth, applyVolatile, applyRandomWalk,
@@ -162,7 +162,9 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
         moved = applyGravity(g, x, y, p, cols, rows, c, rand, stampGrid, tickParity)
       }
       if (!moved && (flags & F_LIQUID)) {
-        applyLiquid(g, x, y, p, cols, c, rand, stampGrid, tickParity)
+        if (!applyLiquid(g, x, y, p, cols, c, rand, stampGrid, tickParity)) {
+          applyLiquidMix(g, x, y, p, cols, rows, c, rand, stampGrid, tickParity)
+        }
       }
       } // xi (cells within chunk)
     } // cc (chunk columns)

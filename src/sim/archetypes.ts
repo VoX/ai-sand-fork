@@ -7,7 +7,8 @@ import {
   BULLET_TRAIL, CLOUD, ACID, LAVA, SNOW, VOLCANO,
   MOLD, MERCURY, VOID, SEED, RUST, SPORE, ALGAE, POISON, DUST, FIREWORK,
   BUBBLE, GLITTER, STAR, COMET, BLUE_FIRE, BLACK_HOLE, FIREFLY,
-  WORM, FAIRY, FISH, MOTH, VENT, LIT_GUNPOWDER, SMOKE, COLORS_U32,
+  WORM, FAIRY, FISH, MOTH, VENT, LIT_GUNPOWDER, SMOKE,
+  WAX, BURNING_WAX, MOLTEN_WAX, COLORS_U32,
 } from './constants'
 
 // ---------------------------------------------------------------------------
@@ -200,7 +201,7 @@ export const F_PLASMALIKE    = 1 << 25
 // ---------------------------------------------------------------------------
 // Heat source type set — used by meltOnHeat and other heat reactions
 // ---------------------------------------------------------------------------
-const HEAT_TYPES = [FIRE, PLASMA, EMBER, LAVA, BLUE_FIRE, LIT_GUNPOWDER]
+const HEAT_TYPES = [FIRE, PLASMA, EMBER, LAVA, BLUE_FIRE, LIT_GUNPOWDER, BURNING_WAX]
 export const HEAT_SET = new Set(HEAT_TYPES)
 
 // ---------------------------------------------------------------------------
@@ -212,12 +213,12 @@ ARCHETYPES[EMPTY] = null
 
 // ── Granular solids ──
 
-ARCHETYPES[SAND] = { gravity: 0.95, density: 5, color: COLORS_U32[SAND] }
-ARCHETYPES[DIRT] = { gravity: 0.95, density: 4, diagSlide: false, color: COLORS_U32[DIRT] }
+ARCHETYPES[SAND] = { gravity: 1.0, density: 5, color: COLORS_U32[SAND] }
+ARCHETYPES[DIRT] = { gravity: 1.0, density: 4, diagSlide: false, color: COLORS_U32[DIRT] }
 ARCHETYPES[FLUFF] = { gravity: 0.3, flammable: true, color: COLORS_U32[FLUFF] }
 
 ARCHETYPES[GUNPOWDER] = {
-  gravity: 0.95, density: 4, diagSlide: true,
+  gravity: 1.0, density: 4, diagSlide: true,
   flammable: true,
   neighborReaction: {
     chance: 1.0, samples: 2,
@@ -231,7 +232,7 @@ ARCHETYPES[GUNPOWDER] = {
 }
 
 ARCHETYPES[LIT_GUNPOWDER] = {
-  gravity: 0.95, density: 4, diagSlide: true, heatSource: true,
+  gravity: 1.0, density: 4, diagSlide: true, heatSource: true,
   explosive: [6, 0], blastRadius: 12, detonationChance: 0.08,
   color: COLORS_U32[LIT_GUNPOWDER],
 }
@@ -278,11 +279,11 @@ ARCHETYPES[GLITTER] = {
 // ── Liquids ──
 
 ARCHETYPES[WATER] = {
-  gravity: 0.95, liquid: 0.5, density: 2,
+  gravity: 1.0, liquid: 0.5, density: 2,
   // Water extinguishes adjacent fire
   neighborReaction: {
     chance: 0.3, samples: 8,
-    triggers: { [FIRE]: [WATER, EMPTY] },
+    triggers: { [FIRE]: [WATER, EMPTY], [BURNING_WAX]: [WATER, WAX] },
   },
   color: COLORS_U32[WATER],
 }
@@ -290,7 +291,7 @@ ARCHETYPES[WATER] = {
 ARCHETYPES[HONEY] = { gravity: 0.15, liquid: 0.3, density: 3, color: COLORS_U32[HONEY] }
 
 ARCHETYPES[NITRO] = {
-  gravity: 0.95, liquid: 0.5, density: 3,
+  gravity: 1.0, liquid: 0.5, density: 3,
   explosive: [12, 1],
   color: COLORS_U32[NITRO],
 }
@@ -326,7 +327,7 @@ ARCHETYPES[POISON] = {
 }
 
 ARCHETYPES[ACID] = {
-  gravity: 0.95, liquid: 0.5, density: 3, killsCreatures: true,
+  gravity: 1.0, liquid: 0.5, density: 3, killsCreatures: true,
   dissolves: {
     chance: 1.0, samples: 3,
     targets: {
@@ -353,6 +354,7 @@ ARCHETYPES[LAVA] = {
       [PLANT]: [FIRE, 0.7], [FLUFF]: [FIRE, 0.7], [GAS]: [FIRE, 0.7],
       [FLOWER]: [FIRE, 0.7], [HIVE]: [FIRE, 0.7], [NEST]: [FIRE, 0.7],
       [GUNPOWDER]: [LIT_GUNPOWDER, 0.7],
+      [WAX]: [MOLTEN_WAX, 0.5], [BURNING_WAX]: [MOLTEN_WAX, 0.7],
       [BUG]: [FIRE, 0.8], [ANT]: [FIRE, 0.8], [BIRD]: [FIRE, 0.8], [BEE]: [FIRE, 0.8],
     },
     selfConsumeChance: 0.15,
@@ -385,6 +387,7 @@ ARCHETYPES[FIRE] = {
     targets: {
       [PLANT]: FIRE, [FLUFF]: FIRE, [GAS]: FIRE, [FLOWER]: FIRE,
       [HIVE]: FIRE, [NEST]: FIRE, [DUST]: FIRE, [SPORE]: FIRE,
+      [WAX]: BURNING_WAX,
     },
     convertChance: 0.5,
   },
@@ -429,6 +432,7 @@ ARCHETYPES[BLUE_FIRE] = {
     chance: 1.0, samples: 3, radius: 3,
     targets: {
       [PLANT]: FIRE, [FLUFF]: FIRE, [GAS]: FIRE, [FLOWER]: FIRE,
+      [WAX]: BURNING_WAX,
     },
     convertChance: 0.4,
   },
@@ -494,6 +498,7 @@ ARCHETYPES[EMBER] = {
     chance: 1.0, samples: 2, radius: 1,
     targets: {
       [PLANT]: FIRE, [FLUFF]: FIRE, [GAS]: FIRE, [FLOWER]: FIRE,
+      [WAX]: BURNING_WAX,
     },
     convertChance: 0.4,
   },
@@ -689,7 +694,7 @@ ARCHETYPES[FISH] = {
   living: true, spawnRate: 0.15,
   creature: {
     pass: 'falling', idleChance: 0.4,
-    movement: 'swimming',
+    movement: 'swimming', downBias: 0,
     canTraverse: [WATER],
     eats: { [BUG]: WATER, [ALGAE]: WATER, [WORM]: WATER },
   },
@@ -779,11 +784,45 @@ ARCHETYPES[BULLET_W] = { handler: 'projectile', color: COLORS_U32[BULLET_W] }
 ARCHETYPES[BULLET_NW] = { handler: 'projectile', color: COLORS_U32[BULLET_NW] }
 ARCHETYPES[BULLET_TRAIL] = { volatile: [0.3, EMPTY], color: COLORS_U32[BULLET_TRAIL] }
 
+// ── Wax ──
+
+ARCHETYPES[WAX] = {
+  immobile: true, flammable: true,
+  neighborReaction: {
+    chance: 0.5, samples: 2,
+    triggers: {
+      [FIRE]: BURNING_WAX, [PLASMA]: BURNING_WAX,
+      [EMBER]: BURNING_WAX, [LAVA]: BURNING_WAX,
+      [BLUE_FIRE]: BURNING_WAX,
+    },
+  },
+  color: COLORS_U32[WAX],
+}
+
+ARCHETYPES[BURNING_WAX] = {
+  immobile: true, heatSource: true,
+  volatile: [0.015, SMOKE],
+  decayProducts: [[0.3, MOLTEN_WAX, 1]],
+  spreadsTo: {
+    chance: 0.5, samples: 2, radius: 1,
+    targets: { [WAX]: BURNING_WAX },
+    convertChance: 0.04,
+  },
+  color: COLORS_U32[BURNING_WAX], palette: 1,
+}
+
+ARCHETYPES[MOLTEN_WAX] = {
+  gravity: 0.4, liquid: 0.3, density: 3,
+  volatile: [0.008, WAX],
+  moveSkipChance: 0.5,
+  color: COLORS_U32[MOLTEN_WAX],
+}
+
 // ---------------------------------------------------------------------------
 // ARCHETYPE_FLAGS  -- precomputed bitmask array for fast dispatch
 // ---------------------------------------------------------------------------
 
-const MAX_TYPE = 69
+const MAX_TYPE = 72
 export const ARCHETYPE_FLAGS = new Uint32Array(MAX_TYPE)
 for (let i = 0; i < MAX_TYPE; i++) {
   const a = ARCHETYPES[i]

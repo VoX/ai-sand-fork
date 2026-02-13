@@ -1,8 +1,8 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
-import { DEFAULT_ZOOM, MAX_ZOOM } from './sim/constants'
+import { DEFAULT_ZOOM, MAX_ZOOM, MATERIAL_TO_ID } from './sim/constants'
 
-type Material = 'empty' | 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent'
+type Material = 'empty' | 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent' | 'wax'
 type Tool = Material
 
 const BUTTON_COLORS: Record<Tool, string> = {
@@ -21,7 +21,20 @@ const BUTTON_COLORS: Record<Tool, string> = {
   worm: '#c09080', fairy: '#ff88ff',
   fish: '#ffa500', moth: '#d2b48c',
   vent: '#607860',
+  wax: '#e8d5b0',
 }
+
+// Reverse lookup: particle type ID → display name
+const ID_TO_NAME: string[] = []
+for (const [name, id] of Object.entries(MATERIAL_TO_ID)) {
+  ID_TO_NAME[id] = name
+}
+ID_TO_NAME[67] = 'lit gunpowder'
+ID_TO_NAME[68] = 'smoke'
+ID_TO_NAME[70] = 'burning wax'
+ID_TO_NAME[71] = 'molten wax'
+for (let i = 31; i <= 38; i++) ID_TO_NAME[i] = 'bullet'
+ID_TO_NAME[39] = 'bullet trail'
 
 interface MapSize { label: string; cols: number; rows: number }
 
@@ -75,7 +88,10 @@ function App() {
 
   // Pan mode (single-finger pan instead of draw)
   const [panMode, setPanMode] = useState(false)
+  const [debugMode, setDebugMode] = useState(false)
+  const [cursorParticle, setCursorParticle] = useState('')
   const panModeRef = useRef(false)
+  const debugModeRef = useRef(false)
 
   // Multi-pointer drawing state: each active touch/pointer gets its own brush
   const drawPointersRef = useRef(new Map<number, { clientX: number; clientY: number; lastCell: { x: number; y: number } | null }>())
@@ -85,6 +101,7 @@ function App() {
   useEffect(() => { toolRef.current = tool }, [tool])
   useEffect(() => { brushSizeRef.current = brushSize }, [brushSize])
   useEffect(() => { panModeRef.current = panMode }, [panMode])
+  useEffect(() => { debugModeRef.current = debugMode }, [debugMode])
 
   const clampCamera = useCallback(() => {
     const canvas = canvasRef.current
@@ -204,6 +221,9 @@ function App() {
         camYRef.current = e.data.data.camY
         zoomRef.current = e.data.data.zoom
       }
+      if (e.data.type === 'cursorParticle') {
+        setCursorParticle(ID_TO_NAME[e.data.data] ?? `type ${e.data.data}`)
+      }
     }
 
     // Transfer canvas control to worker
@@ -275,7 +295,10 @@ function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === ']' || e.key === '=') setBrushSize(prev => Math.min(30, prev + 1))
       if (e.key === '[' || e.key === '-') setBrushSize(prev => Math.max(1, prev - 1))
-      if (e.key === 'p' || e.key === 'P') workerRef.current?.postMessage({ type: 'toggleDebugChunks' })
+      if (e.key === 'p' || e.key === 'P') {
+        workerRef.current?.postMessage({ type: 'toggleDebugChunks' })
+        setDebugMode(prev => !prev)
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
@@ -405,6 +428,14 @@ function App() {
   }, [sendInputForPointer])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    // Send cursor position to worker for debug particle label
+    if (debugModeRef.current && workerRef.current) {
+      const pos = getCellPos(e.clientX, e.clientY)
+      if (pos) {
+        workerRef.current.postMessage({ type: 'cursorPos', data: { x: pos.x, y: pos.y } })
+      }
+    }
+
     // Pan — only the pointer that initiated panning
     if (isPanningRef.current && e.pointerId === panPointerIdRef.current) {
       const dx = (e.clientX - panStartRef.current.x) / zoomRef.current
@@ -422,7 +453,7 @@ function App() {
       ptr.clientY = e.clientY
       sendInputForPointer(e.pointerId, e.clientX, e.clientY)
     }
-  }, [sendInputForPointer, sendCamera])
+  }, [sendInputForPointer, sendCamera, getCellPos])
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     // End panning if this is the pan pointer
@@ -491,7 +522,7 @@ function App() {
   const categories: Array<{ label: string; items: Tool[] }> = [
     { label: 'basic', items: ['empty', 'sand', 'water', 'dirt', 'stone', 'glass', 'snow', 'dust', 'fluff'] },
     { label: 'fluid', items: ['slime', 'acid', 'lava', 'mercury', 'honey', 'poison', 'gas', 'bubble'] },
-    { label: 'energy', items: ['fire', 'ember', 'plasma', 'lightning', 'static', 'nitro', 'gunpowder', 'firework', 'quark', 'comet'] },
+    { label: 'energy', items: ['fire', 'ember', 'plasma', 'lightning', 'static', 'nitro', 'gunpowder', 'firework', 'quark', 'comet', 'wax'] },
     { label: 'nature', items: ['plant', 'seed', 'flower', 'algae', 'mold', 'spore', 'rust', 'crystal', 'void', 'glitter'] },
     { label: 'spawner', items: ['tap', 'anthill', 'hive', 'nest', 'gun', 'volcano', 'vent', 'cloud', 'star', 'blackhole'] },
     { label: 'critter', items: ['bug', 'ant', 'bird', 'bee', 'firefly', 'worm', 'fish', 'moth', 'alien', 'fairy'] },
@@ -514,6 +545,9 @@ function App() {
           style={{ touchAction: 'none' }}
         />
         <div className="fps-counter">{fps} fps</div>
+        {debugMode && cursorParticle && (
+          <div className="cursor-particle-label">{cursorParticle}</div>
+        )}
       </div>
       <div className="controls">
         <input ref={fileInputRef} type="file" accept=".sand" onChange={handleFileLoad} style={{ display: 'none' }} aria-label="Load world file" />
@@ -576,6 +610,20 @@ function App() {
             <span>{tool}</span>
           </button>
         </div>
+        {debugMode && (
+          <div className="debug-controls">
+            <button
+              className="ctrl-btn debug-step"
+              onClick={() => {
+                setIsPaused(true)
+                workerRef.current?.postMessage({ type: 'step' })
+              }}
+              aria-label="Step simulation forward one tick"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z" /></svg>
+            </button>
+          </div>
+        )}
       </div>
       {dropdownOpen && (
         <div className="material-modal-overlay" onPointerDown={() => setDropdownOpen(false)}>

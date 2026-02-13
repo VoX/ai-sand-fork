@@ -63,3 +63,41 @@ export function applyLiquid(
 
   return false
 }
+
+/**
+ * Liquid diffusion: tiny chance for a liquid particle to swap with a
+ * neighboring liquid of a different type. Creates organic mixing at
+ * liquid–liquid boundaries. The chance scales with the particle's
+ * `liquid` value so viscous fluids mix less.
+ */
+export function applyLiquidMix(
+  g: Uint8Array, x: number, y: number, p: number,
+  cols: number, rows: number, type: number, rand: () => number,
+  stamp: Uint8Array, tp: number
+): boolean {
+  const arch = ARCHETYPES[type]!
+
+  // Tiny chance proportional to fluidity
+  if (rand() > arch.liquid! * 0.03) return false
+
+  // Pick a random neighbor (8-directional)
+  const dx = Math.floor(rand() * 3) - 1
+  const dy = Math.floor(rand() * 3) - 1
+  if (dx === 0 && dy === 0) return false
+
+  const nx = x + dx, ny = y + dy
+  if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) return false
+
+  const ni = ny * cols + nx
+  const neighborType = g[ni]
+  if (neighborType === type) return false  // same type — swap is invisible
+
+  const neighborArch = ARCHETYPES[neighborType]
+  if (!neighborArch || neighborArch.liquid === undefined) return false
+
+  // Swap the two liquid particles
+  g[p] = neighborType
+  g[ni] = type
+  stamp[ni] = tp
+  return true
+}
