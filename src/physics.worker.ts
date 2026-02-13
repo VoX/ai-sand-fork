@@ -2,7 +2,7 @@
 // Runs physics simulation and rendering off the main thread
 // Uses two-canvas pipeline: world buffer (1px/cell) → GPU-scaled display canvas
 
-import { MATERIAL_TO_ID, type Material, EMPTY, STONE, TAP, GUN, BLACK_HOLE,
+import { MATERIAL_TO_ID, type Material, STONE, TAP, GUN, BLACK_HOLE,
   DEFAULT_ZOOM, BG_COLOR } from './sim/constants'
 import { ARCHETYPES } from './sim/archetypes'
 import { renderSystem } from './sim/systems/render'
@@ -22,7 +22,7 @@ let sim: Simulation | null = null
 let isPaused = false
 let pauseAtStep: number | null = null
 let debugChunks = false
-let pendingInputs: Array<{ x: number; y: number; prevX: number; prevY: number; tool: Material | 'erase'; brushSize: number }> = []
+let pendingInputs: Array<{ x: number; y: number; prevX: number; prevY: number; tool: Material; brushSize: number }> = []
 
 // Camera state
 let camX = 0    // top-left world cell (float)
@@ -47,10 +47,10 @@ function initGrid(displayWidth: number, displayHeight: number, cols?: number, ro
   camY = 0
 }
 
-function addParticles(cellX: number, cellY: number, tool: Material | 'erase', brushSize: number) {
+function addParticles(cellX: number, cellY: number, tool: Material, brushSize: number) {
   if (!sim) return
   const { grid, cols, rows, rand, chunkMap } = sim
-  const matId = tool === 'erase' ? EMPTY : MATERIAL_TO_ID[tool as Material]
+  const matId = MATERIAL_TO_ID[tool]
 
   if (matId === GUN) {
     if (cellX >= 0 && cellX < cols && cellY >= 0 && cellY < rows) {
@@ -70,7 +70,7 @@ function addParticles(cellX: number, cellY: number, tool: Material | 'erase', br
         if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
           const idx = ny * cols + nx
           const spawnRate = ARCHETYPES[matId]?.spawnRate ?? 0.45
-          if ((tool === 'erase' || (rand() < spawnRate && grid[idx] === EMPTY))) {
+          if (rand() < spawnRate) {
             grid[idx] = matId
           }
         }
