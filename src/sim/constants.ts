@@ -15,6 +15,7 @@ export const BLACK_HOLE = 60, FIREFLY = 61
 export const WORM = 62, FAIRY = 63
 export const FISH = 64, MOTH = 65, VENT = 66
 export const LIT_GUNPOWDER = 67
+export const SMOKE = 68
 
 export type Material = 'empty' | 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent'
 
@@ -66,6 +67,7 @@ export const COLORS_U32 = new Uint32Array([
   0xFF00A5FF, 0xFF8CB4D2,
   0xFF607860,
   0xFF2060FF, // LIT_GUNPOWDER: bright orange-red
+  0xFFA0A0A0, // SMOKE: whitish grey
 ])
 
 export const FIRE_COLORS = new Uint32Array(32)

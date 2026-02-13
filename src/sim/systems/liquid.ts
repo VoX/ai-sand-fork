@@ -20,13 +20,13 @@ export function applyLiquid(
 
   // Hydrostatic pressure: count non-empty cells directly above
   let pressure = 0
-  for (let sy = y - 1; sy >= 0 && pressure < 30; sy--) {
+  for (let sy = y - 1; sy >= 0 && pressure < 8; sy--) {
     if (g[sy * cols + x] === EMPTY) break
     pressure++
   }
 
-  // Spread range scales with pressure: base 5 + pressure
-  const spreadRange = 5 + pressure
+  // Spread range scales with pressure
+  const spreadRange = 3 + pressure
 
   const dx = rand() < 0.5 ? -1 : 1
 

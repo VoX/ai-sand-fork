@@ -3,7 +3,7 @@ import {
   F_PROJECTILE, F_CREATURE, F_INFECTIOUS, F_FLAMMABLE, F_IMMOBILE,
 } from '../archetypes'
 import {
-  EMPTY, FIRE, BLUE_FIRE, GAS, SPORE, CLOUD, FIREWORK, BUBBLE, COMET, PLASMA, LIGHTNING,
+  EMPTY, FIRE, BLUE_FIRE, GAS, SMOKE, SPORE, CLOUD, FIREWORK, BUBBLE, COMET, PLASMA, LIGHTNING,
   BULLET_N, BULLET_NW, BULLET_S, BULLET_SE, BULLET_SW, BULLET_TRAIL,
   PLANT, FLUFF, BUG, FLOWER, EMBER, SAND, GLASS,
   WATER, ACID, HONEY, POISON, MOLD, ALGAE, DIRT, STONE, STATIC, NITRO, GLITTER,
@@ -23,7 +23,7 @@ function updateFireRising(
 ): void {
   const idx = (bx: number, by: number) => by * cols + bx
   if (y === 0) { g[p] = EMPTY; return }
-  if (rand() < 0.03) { g[p] = rand() < 0.25 ? GAS : rand() < 0.15 ? EMBER : EMPTY; return }
+  if (rand() < 0.03) { const r = rand(); g[p] = r < 0.125 ? SMOKE : r < 0.2 ? EMBER : EMPTY; return }
   for (let fi = 0; fi < 3; fi++) {
     const dx = Math.floor(rand() * 7) - 3, dy = Math.floor(rand() * 7) - 3
     if (dx === 0 && dy === 0) continue
@@ -31,6 +31,28 @@ function updateFireRising(
     if (nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
       const ni = idx(nx, ny), nc = g[ni]
       if (nc !== EMPTY && (ARCHETYPE_FLAGS[nc] & F_FLAMMABLE) && rand() < 0.4) g[ni] = FIRE
+    }
+  }
+  // Horizontal drift
+  if (rand() < 0.06) {
+    const hdx = rand() < 0.5 ? -1 : 1
+    if (x + hdx >= 0 && x + hdx < cols && g[idx(x + hdx, y)] === EMPTY) {
+      const d = idx(x + hdx, y); g[d] = c; g[p] = EMPTY; stampGrid[d] = tickParity; return
+    }
+  }
+  // Chaotic movement when near other fire
+  let nearbyFire = 0
+  if (x > 0 && g[idx(x - 1, y)] === FIRE) nearbyFire++
+  if (x + 1 < cols && g[idx(x + 1, y)] === FIRE) nearbyFire++
+  if (y > 0 && g[idx(x, y - 1)] === FIRE) nearbyFire++
+  if (y + 1 < rows && g[idx(x, y + 1)] === FIRE) nearbyFire++
+  if (nearbyFire >= 1 && rand() < 0.15) {
+    const rdx = Math.floor(rand() * 3) - 1, rdy = Math.floor(rand() * 3) - 1
+    if (rdx !== 0 || rdy !== 0) {
+      const nx = x + rdx, ny = y + rdy
+      if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[idx(nx, ny)] === EMPTY) {
+        const d = idx(nx, ny); g[d] = c; g[p] = EMPTY; stampGrid[d] = tickParity; return
+      }
     }
   }
   const up = idx(x, y - 1)
@@ -51,7 +73,7 @@ function canGasDisplace(c: number): boolean {
 }
 
 function updateGasRising(
-  g: Uint8Array, x: number, y: number, p: number,
+  g: Uint8Array, x: number, y: number, p: number, c: number,
   cols: number, _rows: number, rand: () => number,
   stampGrid: Uint8Array, tickParity: number
 ): void {
@@ -61,26 +83,26 @@ function updateGasRising(
   if (rand() < 0.08) {
     const hdx = rand() < 0.5 ? -1 : 1
     if (x + hdx >= 0 && x + hdx < cols && g[idx(x + hdx, y)] === EMPTY) {
-      const d = idx(x + hdx, y); g[d] = GAS; g[p] = EMPTY; stampGrid[d] = tickParity; return
+      const d = idx(x + hdx, y); g[d] = c; g[p] = EMPTY; stampGrid[d] = tickParity; return
     }
   }
   // Slow the rise: skip upward movement 30% of the time
   if (rand() < 0.3) return
   const up = idx(x, y - 1)
   const upCell = y > 0 ? g[up] : -1
-  if (upCell === EMPTY) { g[up] = GAS; g[p] = EMPTY; stampGrid[up] = tickParity }
-  else if (canGasDisplace(upCell)) { g[up] = GAS; g[p] = upCell; stampGrid[up] = tickParity }
+  if (upCell === EMPTY) { g[up] = c; g[p] = EMPTY; stampGrid[up] = tickParity }
+  else if (canGasDisplace(upCell)) { g[up] = c; g[p] = upCell; stampGrid[up] = tickParity }
   else {
     const dx = rand() < 0.5 ? -1 : 1
     const diagX = x + dx
     if (y > 0 && diagX >= 0 && diagX < cols) {
       const dc = g[idx(diagX, y - 1)]
       if (canGasDisplace(dc)) {
-        const d = idx(diagX, y - 1); g[d] = GAS; g[p] = dc; stampGrid[d] = tickParity; return
+        const d = idx(diagX, y - 1); g[d] = c; g[p] = dc; stampGrid[d] = tickParity; return
       }
     }
     if (diagX >= 0 && diagX < cols && g[idx(diagX, y)] === EMPTY) {
-      const d = idx(diagX, y); g[d] = GAS; g[p] = EMPTY; stampGrid[d] = tickParity
+      const d = idx(diagX, y); g[d] = c; g[p] = EMPTY; stampGrid[d] = tickParity
     }
   }
 }
@@ -148,7 +170,12 @@ function updateCloudRising(
   stampGrid: Uint8Array, tickParity: number
 ): void {
   const idx = (bx: number, by: number) => by * cols + bx
-  if (y < rows - 1 && g[idx(x, y + 1)] === EMPTY && rand() < 0.04) g[idx(x, y + 1)] = WATER
+  // Spawn water in one of the 3 cells below (diagonal or directly under)
+  if (y < rows - 1 && rand() < 0.013) {
+    const sdx = Math.floor(rand() * 3) - 1
+    const snx = x + sdx
+    if (snx >= 0 && snx < cols && g[idx(snx, y + 1)] === EMPTY) g[idx(snx, y + 1)] = WATER
+  }
   if (rand() < 0.3) {
     const dx = rand() < 0.5 ? -1 : 1
     const dy = rand() < 0.3 ? -1 : rand() < 0.5 ? 1 : 0
@@ -393,8 +420,8 @@ export function risingPhysicsSystem(g: Uint8Array, cols: number, rows: number, c
       // ── FIRE / BLUE_FIRE ──
       if (c === FIRE || c === BLUE_FIRE) { updateFireRising(g, x, y, p, c, cols, rows, rand, stampGrid, tickParity); continue }
 
-      // ── GAS ──
-      if (c === GAS) { updateGasRising(g, x, y, p, cols, rows, rand, stampGrid, tickParity); continue }
+      // ── GAS / SMOKE ──
+      if (c === GAS || c === SMOKE) { updateGasRising(g, x, y, p, c, cols, rows, rand, stampGrid, tickParity); continue }
 
       // ── PLASMA ──
       if (c === PLASMA) { updatePlasmaRising(g, x, y, p, cols, rows, rand, stampGrid, tickParity); continue }
