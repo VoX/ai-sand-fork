@@ -361,6 +361,14 @@ function App() {
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault()
+
+    // Middle-click → toggle particle selector
+    if (e.button === 1) {
+      setDropdownOpen(prev => !prev)
+      setSettingsOpen(false)
+      return
+    }
+
     setDropdownOpen(false)
     setSettingsOpen(false)
 
