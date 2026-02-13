@@ -63,22 +63,6 @@ test.describe('Particle Interactions', () => {
     expect(screenshot1.equals(screenshot2)).toBeTruthy()
   })
 
-  test('reset clears canvas', async ({ page }) => {
-    const canvas = page.locator('canvas')
-    const box = await canvas.boundingBox()
-
-    // Draw something
-    if (box) {
-      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
-    }
-
-    // Click reset (needs double-click: first arms, second confirms)
-    const resetBtn = page.locator('.ctrl-btn.reset')
-    await resetBtn.click()
-    await resetBtn.click()
-
-    await expect(canvas).toBeVisible()
-  })
 })
 
 test.describe('Save / Load', () => {
@@ -86,10 +70,13 @@ test.describe('Save / Load', () => {
     await page.goto('/')
     await page.waitForSelector('canvas')
 
-    // Trigger save and capture the download
+    // Open settings modal and trigger save
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      page.locator('.ctrl-btn.save').click(),
+      (async () => {
+        await page.locator('.ctrl-btn.settings').click()
+        await page.locator('.settings-option', { hasText: 'Save World' }).click()
+      })(),
     ])
 
     expect(download.suggestedFilename()).toMatch(/\.sand$/)

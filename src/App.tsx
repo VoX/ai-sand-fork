@@ -48,7 +48,6 @@ function App() {
   const [brushSize, setBrushSize] = useState(3)
   const [isPaused, setIsPaused] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
-  const [resetArmed, setResetArmed] = useState(false)
   const [fps, setFps] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [gridDims, setGridDims] = useState({ cols: 0, rows: 0 })
@@ -57,11 +56,9 @@ function App() {
   const menuRef = useRef<HTMLDivElement>(null)
   const lastMaterialRef = useRef<Material>('sand')
   const dimensionsRef = useRef({ cols: 0, rows: 0 })
-  const pointerPosRef = useRef<{ x: number; y: number } | null>(null)
   const toolRef = useRef<Tool>('sand')
   const brushSizeRef = useRef(3)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const lastDrawCellRef = useRef<{ x: number; y: number } | null>(null)
 
   // Camera state (main thread mirror for coordinate transform)
   const camXRef = useRef(0)
@@ -80,15 +77,9 @@ function App() {
   const [panMode, setPanMode] = useState(false)
   const panModeRef = useRef(false)
 
-  // Zoom drag state (zoom indicator — vertical)
-  const zoomDragRef = useRef<{ startY: number; startZoom: number; moved: boolean } | null>(null)
-  const [zoomDisplay, setZoomDisplay] = useState(DEFAULT_ZOOM)
-
-  // Multi-touch state
-  const activePtrsRef = useRef(new Map<number, { x: number; y: number }>())
-  const isMultiPanRef = useRef(false)
-  const multiPanMidRef = useRef({ x: 0, y: 0 })
-  const multiPanCamRef = useRef({ camX: 0, camY: 0 })
+  // Multi-pointer drawing state: each active touch/pointer gets its own brush
+  const drawPointersRef = useRef(new Map<number, { clientX: number; clientY: number; lastCell: { x: number; y: number } | null }>())
+  const panPointerIdRef = useRef<number | null>(null)
 
   // Keep refs in sync with state
   useEffect(() => { toolRef.current = tool }, [tool])
@@ -111,7 +102,6 @@ function App() {
 
   const sendCamera = useCallback(() => {
     clampCamera()
-    setZoomDisplay(zoomRef.current)
     workerRef.current?.postMessage({
       type: 'camera',
       data: { camX: camXRef.current, camY: camYRef.current, zoom: zoomRef.current }
@@ -136,10 +126,11 @@ function App() {
     return null
   }, [])
 
-  const sendInput = useCallback((clientX: number, clientY: number) => {
+  const sendInputForPointer = useCallback((pointerId: number, clientX: number, clientY: number) => {
     const pos = getCellPos(clientX, clientY)
     if (!pos || !workerRef.current) return
-    const prev = lastDrawCellRef.current
+    const ptr = drawPointersRef.current.get(pointerId)
+    const prev = ptr?.lastCell
     workerRef.current.postMessage({
       type: 'input',
       data: {
@@ -151,7 +142,7 @@ function App() {
         brushSize: brushSizeRef.current
       }
     })
-    lastDrawCellRef.current = pos
+    if (ptr) ptr.lastCell = pos
   }, [getCellPos])
 
 
@@ -212,7 +203,6 @@ function App() {
         camXRef.current = e.data.data.camX
         camYRef.current = e.data.data.camY
         zoomRef.current = e.data.data.zoom
-        setZoomDisplay(e.data.data.zoom)
       }
     }
 
@@ -269,15 +259,16 @@ function App() {
     }
   }, [isPaused])
 
-  // Continuous drawing interval
+  // Continuous drawing interval — sends input for all active draw pointers
   useEffect(() => {
     if (!isDrawing) return
     const interval = setInterval(() => {
-      const pos = pointerPosRef.current
-      if (pos) sendInput(pos.x, pos.y)
+      for (const [id, ptr] of drawPointersRef.current) {
+        sendInputForPointer(id, ptr.clientX, ptr.clientY)
+      }
     }, 50)
     return () => clearInterval(interval)
-  }, [isDrawing, sendInput])
+  }, [isDrawing, sendInputForPointer])
 
   // Keyboard shortcuts for brush size + debug overlay
   useEffect(() => {
@@ -289,17 +280,6 @@ function App() {
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
-
-  const reset = useCallback(() => {
-    if (!resetArmed) {
-      setResetArmed(true)
-      return
-    }
-    setResetArmed(false)
-    if (workerRef.current) {
-      workerRef.current.postMessage({ type: 'reset' })
-    }
-  }, [resetArmed])
 
   const save = useCallback(() => {
     const worker = workerRef.current
@@ -351,34 +331,43 @@ function App() {
     setSettingsOpen(false)
   }, [])
 
+  const zoomStep = useCallback((direction: 1 | -1) => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const rect = canvas.getBoundingClientRect()
+    const cx = rect.width / 2
+    const old = zoomRef.current
+    const min = minZoomRef.current
+    const logMin = Math.log(min)
+    const logMax = Math.log(MAX_ZOOM)
+    const logRange = logMax - logMin
+    const logStep = logRange * 0.25
+    // Work in log-space so each step feels perceptually equal
+    const logOld = Math.log(old)
+    const pct = (logOld - logMin) / logRange
+    const snapped = direction > 0
+      ? Math.exp(logMin + Math.ceil(pct * 4 + 0.001) * logStep)
+      : Math.exp(logMin + Math.floor(pct * 4 - 0.001) * logStep)
+    const nz = Math.max(min, Math.min(MAX_ZOOM, snapped))
+    // Horizontal: keep center fixed
+    const wx = camXRef.current + cx / old
+    camXRef.current = wx - cx / nz
+    // Vertical: keep bottom edge fixed
+    const bottomY = camYRef.current + rect.height / old
+    camYRef.current = bottomY - rect.height / nz
+    zoomRef.current = nz
+    sendCamera()
+  }, [sendCamera])
+
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault()
     setDropdownOpen(false)
-    setResetArmed(false)
     setSettingsOpen(false)
-
-    const ptrs = activePtrsRef.current
-    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY })
-
-    // Two fingers → pan (cancel any drawing)
-    if (ptrs.size === 2) {
-      setIsDrawing(false)
-      pointerPosRef.current = null
-      isPanningRef.current = false
-      isMultiPanRef.current = true
-
-      const [a, b] = [...ptrs.values()]
-      multiPanMidRef.current = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
-      multiPanCamRef.current = { camX: camXRef.current, camY: camYRef.current }
-      return
-    }
-
-    // If already multi-touch panning (3rd finger?), ignore
-    if (isMultiPanRef.current) return
 
     // Right-click → pan
     if (e.button === 2) {
       isPanningRef.current = true
+      panPointerIdRef.current = e.pointerId
       panStartRef.current = {
         x: e.clientX, y: e.clientY,
         camX: camXRef.current, camY: camYRef.current
@@ -386,40 +375,30 @@ function App() {
       return
     }
 
-    // Left-click → draw or pan (if panMode)
+    // Pan mode → pan (single-finger pan instead of draw)
     if (panModeRef.current) {
       isPanningRef.current = true
+      panPointerIdRef.current = e.pointerId
       panStartRef.current = {
         x: e.clientX, y: e.clientY,
         camX: camXRef.current, camY: camYRef.current
       }
       return
     }
+
+    // Every touch/pointer acts as a separate brush
+    drawPointersRef.current.set(e.pointerId, {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      lastCell: null
+    })
     setIsDrawing(true)
-    pointerPosRef.current = { x: e.clientX, y: e.clientY }
-    sendInput(e.clientX, e.clientY)
-  }, [sendInput])
+    sendInputForPointer(e.pointerId, e.clientX, e.clientY)
+  }, [sendInputForPointer])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    const ptrs = activePtrsRef.current
-    if (ptrs.has(e.pointerId)) {
-      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    }
-
-    // Multi-touch pan
-    if (isMultiPanRef.current && ptrs.size >= 2) {
-      const [a, b] = [...ptrs.values()]
-      const curMidX = (a.x + b.x) / 2
-      const curMidY = (a.y + b.y) / 2
-      const z = zoomRef.current
-      camXRef.current = multiPanCamRef.current.camX - (curMidX - multiPanMidRef.current.x) / z
-      camYRef.current = multiPanCamRef.current.camY - (curMidY - multiPanMidRef.current.y) / z
-      sendCamera()
-      return
-    }
-
-    // Pan
-    if (isPanningRef.current) {
+    // Pan — only the pointer that initiated panning
+    if (isPanningRef.current && e.pointerId === panPointerIdRef.current) {
       const dx = (e.clientX - panStartRef.current.x) / zoomRef.current
       const dy = (e.clientY - panStartRef.current.y) / zoomRef.current
       camXRef.current = panStartRef.current.camX - dx
@@ -428,34 +407,39 @@ function App() {
       return
     }
 
-    // Draw
-    pointerPosRef.current = { x: e.clientX, y: e.clientY }
-    if (isDrawing) sendInput(e.clientX, e.clientY)
-  }, [isDrawing, sendInput, sendCamera])
+    // Draw — update the specific pointer and send input
+    const ptr = drawPointersRef.current.get(e.pointerId)
+    if (ptr) {
+      ptr.clientX = e.clientX
+      ptr.clientY = e.clientY
+      sendInputForPointer(e.pointerId, e.clientX, e.clientY)
+    }
+  }, [sendInputForPointer, sendCamera])
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
-    activePtrsRef.current.delete(e.pointerId)
-
-    if (isMultiPanRef.current) {
-      if (activePtrsRef.current.size < 2) {
-        isMultiPanRef.current = false
-      }
-      return
-    }
-
-    if (isPanningRef.current) {
+    // End panning if this is the pan pointer
+    if (isPanningRef.current && e.pointerId === panPointerIdRef.current) {
       isPanningRef.current = false
+      panPointerIdRef.current = null
       return
     }
-    setIsDrawing(false)
-    pointerPosRef.current = null
-    lastDrawCellRef.current = null
+
+    // Remove draw pointer
+    drawPointersRef.current.delete(e.pointerId)
+    if (drawPointersRef.current.size === 0) {
+      setIsDrawing(false)
+    }
   }, [])
 
   const handlePointerEnter = useCallback((e: React.PointerEvent) => {
-    if (e.buttons > 0 && activePtrsRef.current.has(e.pointerId) && !isPanningRef.current && !panModeRef.current && !isMultiPanRef.current) {
+    // Pointer re-entering canvas while button held — start drawing if not panning
+    if (e.buttons > 0 && !isPanningRef.current && !panModeRef.current && !drawPointersRef.current.has(e.pointerId)) {
+      drawPointersRef.current.set(e.pointerId, {
+        clientX: e.clientX,
+        clientY: e.clientY,
+        lastCell: null
+      })
       setIsDrawing(true)
-      pointerPosRef.current = { x: e.clientX, y: e.clientY }
     }
   }, [])
 
@@ -524,28 +508,29 @@ function App() {
         <div className="fps-counter">{fps} fps</div>
       </div>
       <div className="controls">
-        <div className="action-btns">
-          <button className={`ctrl-btn playpause ${isPaused ? 'paused' : 'playing'}`} onClick={() => setIsPaused(!isPaused)} aria-label={isPaused ? 'Play simulation' : 'Pause simulation'}>
-            {isPaused
-              ? <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
-              : <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zm8 0h4v16h-4z" /></svg>
-            }
-          </button>
-          <button className={`ctrl-btn reset ${resetArmed ? 'armed' : ''}`} onClick={reset} aria-label="Reset simulation">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" /></svg>
-          </button>
-          <button className="ctrl-btn save" onClick={save} aria-label="Save world">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
-          </button>
-          <button className="ctrl-btn load" onClick={load} aria-label="Load world">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
-          </button>
-          <button className="ctrl-btn settings" onClick={() => setSettingsOpen(!settingsOpen)} aria-label="Map settings">
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.6 3.6 0 0112 15.6z" /></svg>
-          </button>
-          <input ref={fileInputRef} type="file" accept=".sand" onChange={handleFileLoad} style={{ display: 'none' }} aria-label="Load world file" />
-        </div>
-        <div className="material-dropdown" ref={dropdownRef}>
+        <input ref={fileInputRef} type="file" accept=".sand" onChange={handleFileLoad} style={{ display: 'none' }} aria-label="Load world file" />
+      </div>
+      <div className="view-controls">
+        <button className="ctrl-btn settings" onClick={() => setSettingsOpen(!settingsOpen)} aria-label="Map settings">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.6 3.6 0 0112 15.6z" /></svg>
+        </button>
+        <button className={`ctrl-btn playpause ${isPaused ? 'paused' : 'playing'}`} onClick={() => setIsPaused(!isPaused)} aria-label={isPaused ? 'Play simulation' : 'Pause simulation'}>
+          {isPaused
+            ? <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>
+            : <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4h4v16H6zm8 0h4v16h-4z" /></svg>
+          }
+        </button>
+        <button className="ctrl-btn zoom" onClick={() => zoomStep(1)} aria-label="Zoom in">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>
+        </button>
+        <button className="ctrl-btn zoom" onClick={() => zoomStep(-1)} aria-label="Zoom out">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 13H5v-2h14v2z" /></svg>
+        </button>
+        <button className={`ctrl-btn pan-toggle ${panMode ? 'active' : ''}`} onClick={() => setPanMode(prev => !prev)} aria-label="Toggle pan mode">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M23 5.5V20c0 2.2-1.8 4-4 4h-7.3c-1.08 0-2.1-.43-2.85-1.19L1 14.83s1.26-1.23 1.3-1.25c.22-.19.49-.29.79-.29.22 0 .42.06.6.16.04.01 4.31 2.46 4.31 2.46V4c0-.83.67-1.5 1.5-1.5S11 3.17 11 4v7h1V1.5c0-.83.67-1.5 1.5-1.5S15 .67 15 1.5V11h1V2.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5V11h1V5.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5z" /></svg>
+        </button>
+      </div>
+      <div className="material-dropdown" ref={dropdownRef}>
           <button
             className="material-dropdown-trigger"
             style={{ '--material-color': BUTTON_COLORS[tool] } as React.CSSProperties}
@@ -582,94 +567,35 @@ function App() {
             <span style={{ opacity: 0.5, fontSize: '0.85em' }}>{brushSize}</span>
             <span>{tool}</span>
           </button>
-        </div>
-        {dropdownOpen && (
-          <div className="material-modal-overlay" onClick={() => setDropdownOpen(false)}>
-            <div className="material-modal" onClick={(e) => e.stopPropagation()} ref={menuRef} onScroll={(e) => { dropdownScrollRef.current = e.currentTarget.scrollTop }}>
-              {categories.map((cat) => (
-                <div key={cat.label} className="material-category">
-                  <div className="material-category-label">{cat.label}</div>
-                  <div className="material-category-items">
-                    {cat.items.map((m) => (
-                      <button
-                        key={m}
-                        className={`material-dropdown-item ${tool === m ? 'active' : ''}`}
-                        onClick={() => { if (m !== 'erase') lastMaterialRef.current = m as Material; setTool(m); setDropdownOpen(false) }}
-                      >
-                        <span className="material-dot" style={{ background: BUTTON_COLORS[m] }} />
-                        <span>{m}</span>
-                      </button>
-                    ))}
-                  </div>
+      </div>
+      {dropdownOpen && (
+        <div className="material-modal-overlay" onClick={() => setDropdownOpen(false)}>
+          <div className="material-modal" onClick={(e) => e.stopPropagation()} ref={menuRef} onScroll={(e) => { dropdownScrollRef.current = e.currentTarget.scrollTop }}>
+            {categories.map((cat) => (
+              <div key={cat.label} className="material-category">
+                <div className="material-category-label">{cat.label}</div>
+                <div className="material-category-items">
+                  {cat.items.map((m) => (
+                    <button
+                      key={m}
+                      className={`material-dropdown-item ${tool === m ? 'active' : ''}`}
+                      onClick={() => { if (m !== 'erase') lastMaterialRef.current = m as Material; setTool(m); setDropdownOpen(false) }}
+                    >
+                      <span className="material-dot" style={{ background: BUTTON_COLORS[m] }} />
+                      <span>{m}</span>
+                    </button>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-        )}
-      </div>
-      <div
-        className={`zoom-slider ${panMode ? 'pan-mode' : ''}`}
-        onWheel={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          const canvas = canvasRef.current
-          if (!canvas) return
-          const rect = canvas.getBoundingClientRect()
-          const centerPx = rect.width / 2
-          const centerPy = rect.height / 2
-          const oldZoom = zoomRef.current
-          const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15
-          const newZoom = Math.max(minZoomRef.current, Math.min(MAX_ZOOM, oldZoom * factor))
-          const worldX = camXRef.current + centerPx / oldZoom
-          const worldY = camYRef.current + centerPy / oldZoom
-          camXRef.current = worldX - centerPx / newZoom
-          camYRef.current = worldY - centerPy / newZoom
-          zoomRef.current = newZoom
-          sendCamera()
-        }}
-        onPointerDown={(e) => {
-          (e.target as HTMLElement).setPointerCapture(e.pointerId)
-          zoomDragRef.current = { startY: e.clientY, startZoom: zoomRef.current, moved: false }
-        }}
-        onPointerMove={(e) => {
-          const drag = zoomDragRef.current
-          if (!drag) return
-          const dy = -(e.clientY - drag.startY)
-          if (Math.abs(dy) > 4) drag.moved = true
-          if (!drag.moved) return
-          const canvas = canvasRef.current
-          if (!canvas) return
-          const rect = canvas.getBoundingClientRect()
-          const centerPx = rect.width / 2
-          const centerPy = rect.height / 2
-          const oldZoom = zoomRef.current
-          const newZoom = Math.max(minZoomRef.current, Math.min(MAX_ZOOM, drag.startZoom * Math.pow(1.04, dy / 4)))
-          const worldX = camXRef.current + centerPx / oldZoom
-          const worldY = camYRef.current + centerPy / oldZoom
-          camXRef.current = worldX - centerPx / newZoom
-          camYRef.current = worldY - centerPy / newZoom
-          zoomRef.current = newZoom
-          sendCamera()
-        }}
-        onPointerUp={(e) => {
-          (e.target as HTMLElement).releasePointerCapture(e.pointerId)
-          const drag = zoomDragRef.current
-          if (drag && !drag.moved) {
-            setPanMode(prev => !prev)
-          }
-          zoomDragRef.current = null
-        }}
-      >
-        {panMode ? (
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M23 5.5V20c0 2.2-1.8 4-4 4h-7.3c-1.08 0-2.1-.43-2.85-1.19L1 14.83s1.26-1.23 1.3-1.25c.22-.19.49-.29.79-.29.22 0 .42.06.6.16.04.01 4.31 2.46 4.31 2.46V4c0-.83.67-1.5 1.5-1.5S11 3.17 11 4v7h1V1.5c0-.83.67-1.5 1.5-1.5S15 .67 15 1.5V11h1V2.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5V11h1V5.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5z" /></svg>
-        ) : (
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" /><path d="M12 10h-2v2H9v-2H7V9h2V7h1v2h2v1z" /></svg>
-        )}
-        <span>{zoomDisplay >= 1 ? zoomDisplay.toFixed(1) : zoomDisplay.toFixed(2)}x</span>
-      </div>
-      {settingsOpen && (
-        <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
-          <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+        </div>
+      )}
+      {
+    settingsOpen && (
+      <div className="settings-overlay" onClick={() => setSettingsOpen(false)}>
+        <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="settings-section">
             <div className="settings-title">Map Size</div>
             <div className="settings-subtitle">
               Current: {gridDims.cols} x {gridDims.rows}
@@ -695,9 +621,25 @@ function App() {
             </div>
             <div className="settings-warn">Changing size resets the simulation</div>
           </div>
+          <div className="settings-divider" />
+          <div className="settings-section">
+            <div className="settings-title">World</div>
+            <div className="settings-options">
+              <button className="settings-option" onClick={() => { save(); setSettingsOpen(false) }}>
+                <span className="settings-option-label">Save World</span>
+                <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" className="settings-option-icon"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" /></svg>
+              </button>
+              <button className="settings-option" onClick={() => { load(); setSettingsOpen(false) }}>
+                <span className="settings-option-label">Load World</span>
+                <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" className="settings-option-icon"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
+              </button>
+            </div>
+          </div>
         </div>
-      )}
-    </div>
+      </div>
+    )
+  }
+    </div >
   )
 }
 

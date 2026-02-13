@@ -29,14 +29,14 @@ test.describe('Control Buttons', () => {
   })
 
   test('control buttons have SVG icons', async ({ page }) => {
+    const settings = page.locator('.ctrl-btn.settings svg')
     const playpause = page.locator('.ctrl-btn.playpause svg')
-    const reset = page.locator('.ctrl-btn.reset svg')
-    const save = page.locator('.ctrl-btn.save svg')
-    const load = page.locator('.ctrl-btn.load svg')
+    const zoomIn = page.locator('.ctrl-btn.zoom svg').first()
+    const panToggle = page.locator('.ctrl-btn.pan-toggle svg')
 
+    await expect(settings).toBeVisible()
     await expect(playpause).toBeVisible()
-    await expect(reset).toBeVisible()
-    await expect(save).toBeVisible()
-    await expect(load).toBeVisible()
+    await expect(zoomIn).toBeVisible()
+    await expect(panToggle).toBeVisible()
   })
 })

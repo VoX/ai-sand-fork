@@ -1,5 +1,6 @@
 .controls,
-.fps-counter,
-.zoom-slider {
+.view-controls,
+.material-dropdown,
+.fps-counter {
   display: none !important;
 }
