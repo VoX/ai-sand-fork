@@ -2,7 +2,7 @@
 
 A falling sand physics simulation game built with React + TypeScript + Vite.
 
-**Play at:** [wheats.app](https://wheats.app)
+**Play at:** [wheats.app](https://sand.bitvox.me/)
 
 ## Deployment
 
