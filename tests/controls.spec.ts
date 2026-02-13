@@ -21,7 +21,8 @@ test.describe('Control Buttons', () => {
 
   test('material dropdown opens and shows items', async ({ page }) => {
     const trigger = page.locator('.material-dropdown-trigger')
-    await trigger.click()
+    const box = await trigger.boundingBox()
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2)
     const sandBtn = page.locator('.material-dropdown-item', { hasText: 'sand' })
     await expect(sandBtn).toBeVisible()
     await sandBtn.click()

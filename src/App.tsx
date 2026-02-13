@@ -2,11 +2,11 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 import { DEFAULT_ZOOM, MAX_ZOOM } from './sim/constants'
 
-type Material = 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent'
-type Tool = Material | 'erase'
+type Material = 'empty' | 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent'
+type Tool = Material
 
 const BUTTON_COLORS: Record<Tool, string> = {
-  erase: '#f87171',
+  empty: '#f87171',
   sand: '#e6c86e', water: '#4a90d9', dirt: '#8b5a2b', stone: '#666666',
   plant: '#228b22', fire: '#ff6600', gas: '#a8b844', fluff: '#f5e6d3',
   bug: '#ff69b4', plasma: '#c8a2c8', nitro: '#39ff14', glass: '#a8d8ea',
@@ -489,7 +489,7 @@ function App() {
   }, [dropdownOpen])
 
   const categories: Array<{ label: string; items: Tool[] }> = [
-    { label: 'basic', items: ['erase', 'sand', 'water', 'dirt', 'stone', 'glass', 'snow', 'dust', 'fluff'] },
+    { label: 'basic', items: ['empty', 'sand', 'water', 'dirt', 'stone', 'glass', 'snow', 'dust', 'fluff'] },
     { label: 'fluid', items: ['slime', 'acid', 'lava', 'mercury', 'honey', 'poison', 'gas', 'bubble'] },
     { label: 'energy', items: ['fire', 'ember', 'plasma', 'lightning', 'static', 'nitro', 'gunpowder', 'firework', 'quark', 'comet'] },
     { label: 'nature', items: ['plant', 'seed', 'flower', 'algae', 'mold', 'spore', 'rust', 'crystal', 'void', 'glitter'] },
@@ -542,8 +542,8 @@ function App() {
             className="material-dropdown-trigger"
             style={{ '--material-color': BUTTON_COLORS[tool] } as React.CSSProperties}
             onPointerDown={(e) => {
-              e.preventDefault()
-                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+              e.preventDefault();
+              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
               brushDragRef.current = { startX: e.clientX, startSize: brushSizeRef.current, moved: false }
             }}
             onPointerMove={(e) => {
@@ -588,7 +588,7 @@ function App() {
                     <button
                       key={m}
                       className={`material-dropdown-item ${tool === m ? 'active' : ''}`}
-                      onClick={() => { if (m !== 'erase') lastMaterialRef.current = m as Material; setTool(m); setDropdownOpen(false) }}
+                      onClick={() => { if (m !== 'empty') lastMaterialRef.current = m as Material; setTool(m); setDropdownOpen(false) }}
                     >
                       <span className="material-dot" style={{ background: BUTTON_COLORS[m] }} />
                       <span>{m}</span>

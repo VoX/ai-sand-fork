@@ -37,7 +37,8 @@ test.describe('Particle Interactions', () => {
 
   test('selecting materials via dropdown works', async ({ page }) => {
     const trigger = page.locator('.material-dropdown-trigger')
-    await trigger.click()
+    const box = await trigger.boundingBox()
+    await page.mouse.click(box!.x + box!.width / 2, box!.y + box!.height / 2)
 
     const waterBtn = page.locator('.material-dropdown-item', { hasText: 'water' })
     await expect(waterBtn).toBeVisible()
