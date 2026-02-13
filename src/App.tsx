@@ -57,11 +57,9 @@ function App() {
   const menuRef = useRef<HTMLDivElement>(null)
   const lastMaterialRef = useRef<Material>('sand')
   const dimensionsRef = useRef({ cols: 0, rows: 0 })
-  const pointerPosRef = useRef<{ x: number; y: number } | null>(null)
   const toolRef = useRef<Tool>('sand')
   const brushSizeRef = useRef(3)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const lastDrawCellRef = useRef<{ x: number; y: number } | null>(null)
 
   // Camera state (main thread mirror for coordinate transform)
   const camXRef = useRef(0)
@@ -84,11 +82,9 @@ function App() {
   const zoomDragRef = useRef<{ startY: number; startZoom: number; moved: boolean } | null>(null)
   const [zoomDisplay, setZoomDisplay] = useState(DEFAULT_ZOOM)
 
-  // Multi-touch state
-  const activePtrsRef = useRef(new Map<number, { x: number; y: number }>())
-  const isMultiPanRef = useRef(false)
-  const multiPanMidRef = useRef({ x: 0, y: 0 })
-  const multiPanCamRef = useRef({ camX: 0, camY: 0 })
+  // Multi-pointer drawing state: each active touch/pointer gets its own brush
+  const drawPointersRef = useRef(new Map<number, { clientX: number; clientY: number; lastCell: { x: number; y: number } | null }>())
+  const panPointerIdRef = useRef<number | null>(null)
 
   // Keep refs in sync with state
   useEffect(() => { toolRef.current = tool }, [tool])
@@ -136,10 +132,11 @@ function App() {
     return null
   }, [])
 
-  const sendInput = useCallback((clientX: number, clientY: number) => {
+  const sendInputForPointer = useCallback((pointerId: number, clientX: number, clientY: number) => {
     const pos = getCellPos(clientX, clientY)
     if (!pos || !workerRef.current) return
-    const prev = lastDrawCellRef.current
+    const ptr = drawPointersRef.current.get(pointerId)
+    const prev = ptr?.lastCell
     workerRef.current.postMessage({
       type: 'input',
       data: {
@@ -151,7 +148,7 @@ function App() {
         brushSize: brushSizeRef.current
       }
     })
-    lastDrawCellRef.current = pos
+    if (ptr) ptr.lastCell = pos
   }, [getCellPos])
 
 
@@ -269,15 +266,16 @@ function App() {
     }
   }, [isPaused])
 
-  // Continuous drawing interval
+  // Continuous drawing interval — sends input for all active draw pointers
   useEffect(() => {
     if (!isDrawing) return
     const interval = setInterval(() => {
-      const pos = pointerPosRef.current
-      if (pos) sendInput(pos.x, pos.y)
+      for (const [id, ptr] of drawPointersRef.current) {
+        sendInputForPointer(id, ptr.clientX, ptr.clientY)
+      }
     }, 50)
     return () => clearInterval(interval)
-  }, [isDrawing, sendInput])
+  }, [isDrawing, sendInputForPointer])
 
   // Keyboard shortcuts for brush size + debug overlay
   useEffect(() => {
@@ -357,28 +355,10 @@ function App() {
     setResetArmed(false)
     setSettingsOpen(false)
 
-    const ptrs = activePtrsRef.current
-    ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY })
-
-    // Two fingers → pan (cancel any drawing)
-    if (ptrs.size === 2) {
-      setIsDrawing(false)
-      pointerPosRef.current = null
-      isPanningRef.current = false
-      isMultiPanRef.current = true
-
-      const [a, b] = [...ptrs.values()]
-      multiPanMidRef.current = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
-      multiPanCamRef.current = { camX: camXRef.current, camY: camYRef.current }
-      return
-    }
-
-    // If already multi-touch panning (3rd finger?), ignore
-    if (isMultiPanRef.current) return
-
     // Right-click → pan
     if (e.button === 2) {
       isPanningRef.current = true
+      panPointerIdRef.current = e.pointerId
       panStartRef.current = {
         x: e.clientX, y: e.clientY,
         camX: camXRef.current, camY: camYRef.current
@@ -386,40 +366,30 @@ function App() {
       return
     }
 
-    // Left-click → draw or pan (if panMode)
+    // Pan mode → pan (single-finger pan instead of draw)
     if (panModeRef.current) {
       isPanningRef.current = true
+      panPointerIdRef.current = e.pointerId
       panStartRef.current = {
         x: e.clientX, y: e.clientY,
         camX: camXRef.current, camY: camYRef.current
       }
       return
     }
+
+    // Every touch/pointer acts as a separate brush
+    drawPointersRef.current.set(e.pointerId, {
+      clientX: e.clientX,
+      clientY: e.clientY,
+      lastCell: null
+    })
     setIsDrawing(true)
-    pointerPosRef.current = { x: e.clientX, y: e.clientY }
-    sendInput(e.clientX, e.clientY)
-  }, [sendInput])
+    sendInputForPointer(e.pointerId, e.clientX, e.clientY)
+  }, [sendInputForPointer])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    const ptrs = activePtrsRef.current
-    if (ptrs.has(e.pointerId)) {
-      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    }
-
-    // Multi-touch pan
-    if (isMultiPanRef.current && ptrs.size >= 2) {
-      const [a, b] = [...ptrs.values()]
-      const curMidX = (a.x + b.x) / 2
-      const curMidY = (a.y + b.y) / 2
-      const z = zoomRef.current
-      camXRef.current = multiPanCamRef.current.camX - (curMidX - multiPanMidRef.current.x) / z
-      camYRef.current = multiPanCamRef.current.camY - (curMidY - multiPanMidRef.current.y) / z
-      sendCamera()
-      return
-    }
-
-    // Pan
-    if (isPanningRef.current) {
+    // Pan — only the pointer that initiated panning
+    if (isPanningRef.current && e.pointerId === panPointerIdRef.current) {
       const dx = (e.clientX - panStartRef.current.x) / zoomRef.current
       const dy = (e.clientY - panStartRef.current.y) / zoomRef.current
       camXRef.current = panStartRef.current.camX - dx
@@ -428,34 +398,39 @@ function App() {
       return
     }
 
-    // Draw
-    pointerPosRef.current = { x: e.clientX, y: e.clientY }
-    if (isDrawing) sendInput(e.clientX, e.clientY)
-  }, [isDrawing, sendInput, sendCamera])
+    // Draw — update the specific pointer and send input
+    const ptr = drawPointersRef.current.get(e.pointerId)
+    if (ptr) {
+      ptr.clientX = e.clientX
+      ptr.clientY = e.clientY
+      sendInputForPointer(e.pointerId, e.clientX, e.clientY)
+    }
+  }, [sendInputForPointer, sendCamera])
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
-    activePtrsRef.current.delete(e.pointerId)
-
-    if (isMultiPanRef.current) {
-      if (activePtrsRef.current.size < 2) {
-        isMultiPanRef.current = false
-      }
-      return
-    }
-
-    if (isPanningRef.current) {
+    // End panning if this is the pan pointer
+    if (isPanningRef.current && e.pointerId === panPointerIdRef.current) {
       isPanningRef.current = false
+      panPointerIdRef.current = null
       return
     }
-    setIsDrawing(false)
-    pointerPosRef.current = null
-    lastDrawCellRef.current = null
+
+    // Remove draw pointer
+    drawPointersRef.current.delete(e.pointerId)
+    if (drawPointersRef.current.size === 0) {
+      setIsDrawing(false)
+    }
   }, [])
 
   const handlePointerEnter = useCallback((e: React.PointerEvent) => {
-    if (e.buttons > 0 && activePtrsRef.current.has(e.pointerId) && !isPanningRef.current && !panModeRef.current && !isMultiPanRef.current) {
+    // Pointer re-entering canvas while button held — start drawing if not panning
+    if (e.buttons > 0 && !isPanningRef.current && !panModeRef.current && !drawPointersRef.current.has(e.pointerId)) {
+      drawPointersRef.current.set(e.pointerId, {
+        clientX: e.clientX,
+        clientY: e.clientY,
+        lastCell: null
+      })
       setIsDrawing(true)
-      pointerPosRef.current = { x: e.clientX, y: e.clientY }
     }
   }, [])
 
