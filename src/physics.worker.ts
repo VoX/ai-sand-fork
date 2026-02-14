@@ -4,7 +4,6 @@
 
 import { MATERIAL_TO_ID, type Material, STONE, TAP, GUN, BLACK_HOLE,
   DEFAULT_ZOOM, BG_COLOR } from './sim/constants'
-import { ARCHETYPES } from './sim/archetypes'
 import { renderSystem } from './sim/systems/render'
 import { CHUNK_SIZE } from './sim/ChunkMap'
 import { createRNG } from './sim/rng'
@@ -51,7 +50,7 @@ function initGrid(displayWidth: number, displayHeight: number, cols?: number, ro
 
 function addParticles(cellX: number, cellY: number, tool: Material, brushSize: number) {
   if (!sim) return
-  const { grid, cols, rows, rand, chunkMap } = sim
+  const { grid, cols, rows, chunkMap } = sim
   const matId = MATERIAL_TO_ID[tool]
 
   if (matId === GUN) {

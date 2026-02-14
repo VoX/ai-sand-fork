@@ -1,5 +1,5 @@
-import { ARCHETYPES, ARCHETYPE_FLAGS, F_IMMOBILE, F_GRAVITY } from '../archetypes'
-import { EMPTY } from '../constants'
+import { ARCHETYPES, ARCHETYPE_FLAGS, F_IMMOBILE } from '../archetypes'
+import { EMPTY, DENSITY_SWAP_RATE } from '../constants'
 
 /**
  * Generic gravity: fall down, density-sink through lighter liquids, diagonal slide.
@@ -30,12 +30,14 @@ export function applyGravity(
     return true
   }
 
-  // 2. Density sinking: swap with any lighter mobile particle below
+  // 2. Density sinking: swap chance scales with density difference so heavy-vs-light
+  //    pairs separate faster than nearly-equal ones, while preventing instant teleportation.
   if (arch.density !== undefined) {
     const belowArch = ARCHETYPES[belowType]
     if (belowArch && belowArch.density !== undefined &&
       arch.density > belowArch.density &&
-      !(ARCHETYPE_FLAGS[belowType] & F_IMMOBILE)) {
+      !(ARCHETYPE_FLAGS[belowType] & F_IMMOBILE) &&
+      rand() < (arch.density - belowArch.density) * DENSITY_SWAP_RATE) {
       g[below] = type
       g[p] = belowType
       stamp[below] = tp

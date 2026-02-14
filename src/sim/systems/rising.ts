@@ -1,13 +1,13 @@
 import {
   ARCHETYPES, ARCHETYPE_FLAGS,
-  F_BUOYANCY, F_HANDLER, F_CREATURE, F_VOLATILE, F_SPREADS,
-  F_NEIGHBOR_RX, F_DISSOLVES, F_SPAWNER, F_FIRELIKE, F_GASLIKE, F_PLASMALIKE,
+  F_BUOYANCY, F_HANDLER, F_CREATURE, F_REACTIONS,
+  F_FIRELIKE, F_GASLIKE, F_PLASMALIKE,
 } from '../archetypes'
 import { EMPTY, BULLET_N, BULLET_NW } from '../constants'
 import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../ChunkMap'
 import {
-  applyVolatile, applySpread, applyNeighborReaction, applyDissolve,
-  applySpawner, applyCreature, applyFireRising, applyGasRising,
+  applyReactions,
+  applyCreature, applyFireRising, applyGasRising,
 } from './generic'
 import { updateBulletRising } from './projectiles'
 
@@ -77,31 +77,9 @@ export function risingPhysicsSystem(g: Uint8Array, cols: number, rows: number, c
         }
       }
 
-      // ── Volatile decay ──
-      if ((flags & F_VOLATILE) && arch.volatile) {
-        if (applyVolatile(g, p, rand, arch)) continue
-      }
-
-      // ── Neighbor reactions ──
-      if (flags & F_NEIGHBOR_RX) {
-        if (applyNeighborReaction(g, x, y, p, cols, rows, c, rand)) {
-          if (g[p] !== c) continue
-        }
-      }
-
-      // ── Dissolve ──
-      if (flags & F_DISSOLVES) {
-        if (applyDissolve(g, x, y, p, cols, rows, c, rand)) continue
-      }
-
-      // ── Spread (fire spreading to flammable) ──
-      if (flags & F_SPREADS) {
-        applySpread(g, x, y, p, cols, rows, rand, arch)
-      }
-
-      // ── Data-driven spawner (cloud spawning rain) ──
-      if ((flags & F_SPAWNER) && arch.spawns) {
-        applySpawner(g, x, y, p, cols, rows, rand, arch)
+      // ── Reactions (neighbor reactions, dissolve, spread, spawn — unified) ──
+      if (flags & F_REACTIONS) {
+        if (applyReactions(g, x, y, p, cols, rows, c, rand, arch)) continue
       }
 
       // ── Fire-like rising movement (fire, blue fire) ──

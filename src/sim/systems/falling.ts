@@ -1,16 +1,16 @@
 import {
   ARCHETYPES, ARCHETYPE_FLAGS,
   F_BUOYANCY, F_GRAVITY, F_LIQUID, F_IMMOBILE, F_HANDLER,
-  F_CREATURE, F_SPAWNER, F_GROWTH, F_NEIGHBOR_RX, F_DISSOLVES,
-  F_SPREADS, F_VOLATILE, F_RANDOM_WALK, F_EXPLOSIVE, F_FIRELIKE,
+  F_CREATURE, F_SPAWNER, F_REACTIONS,
+  F_RANDOM_WALK, F_EXPLOSIVE, F_FIRELIKE,
   F_GASLIKE, F_PLASMALIKE,
 } from '../archetypes'
 import { EMPTY } from '../constants'
 import { applyGravity } from './gravity'
 import { applyLiquid, applyLiquidMix } from './liquid'
 import {
-  applyNeighborReaction, applySpread, applyDissolve, applySpawner,
-  applyCreature, applyGrowth, applyVolatile, applyRandomWalk,
+  applyReactions,
+  applyCreature, applyRandomWalk,
   checkContactExplosion, checkDetonation,
 } from './generic'
 import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../ChunkMap'
@@ -19,7 +19,6 @@ import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../ChunkMap'
 type ParticleHandler = (g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number) => void
 
 import { updateGun, updateVolcano, updateStar, updateBlackHole } from './spawners'
-import { updateSeed, updateAlgae } from './growing'
 import { updateRust, updateVoid } from './reactions'
 import { updateBulletFalling, updateBulletTrail } from './projectiles'
 
@@ -28,8 +27,6 @@ const NAMED_HANDLERS: Record<string, ParticleHandler> = {
   volcano: updateVolcano,
   star: updateStar,
   blackHole: updateBlackHole,
-  seed: updateSeed,
-  algae: updateAlgae,
   rust: updateRust,
   void: updateVoid,
 }
@@ -91,9 +88,12 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
           if (wakeR) chunkMap.wakeRadius(x, y, wakeR)
         }
 
+        // If handler moved/transformed the particle, skip further processing
+        if (g[p] !== c) continue
+
         // Named handlers with additional data-driven behaviors
-        // (e.g., algae has both handler AND growth — handler runs first, then growth below)
-        if (!arch.growth && !arch.neighborReaction && !arch.dissolves && !arch.spreadsTo) continue
+        // (e.g., seed has both handler AND reactions — handler runs first, then reactions below)
+        if (!arch.reactions) continue
       }
 
       // ── Detonation check (fuse particles like LIT_GUNPOWDER) ──
@@ -106,31 +106,13 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
         if (checkContactExplosion(g, x, y, p, cols, rows, c, rand, arch)) continue
       }
 
-      // ── Volatile decay ──
-      if ((flags & F_VOLATILE) && arch.volatile) {
-        if (applyVolatile(g, p, rand, arch)) continue
+      // ── Reactions (neighbor reactions, dissolve, spread, spawn — unified) ──
+      if (flags & F_REACTIONS) {
+        if (applyReactions(g, x, y, p, cols, rows, c, rand, arch)) continue
       }
 
-      // ── Neighbor reactions (gunpowder ignition, water extinguishing fire, snow melting, etc.) ──
-      if (flags & F_NEIGHBOR_RX) {
-        if (applyNeighborReaction(g, x, y, p, cols, rows, c, rand)) {
-          if (g[p] !== c) continue  // Self was transformed
-        }
-      }
-
-      // ── Dissolve (acid, lava, mercury, poison corrosion) ──
-      if (flags & F_DISSOLVES) {
-        if (applyDissolve(g, x, y, p, cols, rows, c, rand)) continue
-      }
-
-      // ── Spread (mold spreading to nearby cells) ──
-      if (flags & F_SPREADS) {
-        applySpread(g, x, y, p, cols, rows, rand, arch)
-      }
-
-      // ── Spawner (tap, anthill, hive, nest, vent — data-driven) ──
-      if ((flags & F_SPAWNER) && arch.spawns) {
-        applySpawner(g, x, y, p, cols, rows, rand, arch)
+      // ── Wake radius for spawner-type particles (tap, anthill, hive, nest, vent) ──
+      if (flags & F_SPAWNER) {
         chunkMap.wakeRadius(x, y, 2)
       }
 
@@ -138,11 +120,6 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
       if ((flags & F_CREATURE) && arch.creature && arch.creature.pass === 'falling') {
         applyCreature(g, x, y, p, c, cols, rows, rand)
         continue
-      }
-
-      // ── Growth (plant, algae) ──
-      if ((flags & F_GROWTH) && arch.growth) {
-        applyGrowth(g, x, y, p, cols, rows, rand, arch)
       }
 
       // ── Immobile particles stop here ──

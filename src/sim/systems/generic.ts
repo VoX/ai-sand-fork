@@ -1,148 +1,75 @@
-import { ARCHETYPES, ARCHETYPE_FLAGS, F_IMMOBILE } from '../archetypes'
-import type { ArchetypeDef } from '../archetypes'
+import { ARCHETYPES, ARCHETYPE_FLAGS, F_IMMOBILE, radiusOffsets } from '../archetypes'
+import type { ArchetypeDef, ReactionEffect } from '../archetypes'
 import { EMPTY, FIRE, WATER } from '../constants'
 
+// Default offset pool when rule.offsets is not specified (radius-1 neighbors)
+const DEFAULT_OFFSETS = radiusOffsets(1)
+
 // ---------------------------------------------------------------------------
-// Neighbor Reaction System — scan random neighbors, react on match
+// Unified Reaction System — neighbor reactions, spreading, dissolving, spawning
 // ---------------------------------------------------------------------------
 
 /**
- * Scan random neighbors for trigger types and apply reactions.
- * Returns true if the particle was transformed (caller should stop processing).
+ * Process all reaction rules for a particle. Returns true if self was
+ * transformed to a different type (caller should stop pipeline).
  */
-export function applyNeighborReaction(
+export function applyReactions(
   g: Uint8Array, x: number, y: number, p: number,
-  cols: number, rows: number, type: number, rand: () => number
-): boolean {
-  const arch = ARCHETYPES[type]!
-  const rx = arch.neighborReaction!
-  if (rand() > rx.chance) return false
-
-  for (let i = 0; i < rx.samples; i++) {
-    const dx = Math.floor(rand() * 3) - 1
-    const dy = Math.floor(rand() * 3) - 1
-    if (dx === 0 && dy === 0) continue
-    const nx = x + dx, ny = y + dy
-    if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue
-    const ni = ny * cols + nx
-    const nc = g[ni]
-    const action = rx.triggers[nc]
-    if (action !== undefined) {
-      if (typeof action === 'number') {
-        // Transform self into action type
-        g[p] = action
-      } else {
-        // [selfInto, neighborInto]
-        g[p] = action[0]
-        g[ni] = action[1]
-      }
-      return true
-    }
-  }
-  return false
-}
-
-// ---------------------------------------------------------------------------
-// Spread System — spread to nearby cells (fire, mold, spore, etc.)
-// ---------------------------------------------------------------------------
-
-/**
- * Attempt to spread/infect nearby cells according to archetype spreadsTo rule.
- * Does NOT transform self — only transforms targets.
- */
-export function applySpread(
-  g: Uint8Array, x: number, y: number, _p: number,
-  cols: number, rows: number, rand: () => number,
+  cols: number, rows: number, type: number, rand: () => number,
   arch: ArchetypeDef
-): void {
-  const rule = arch.spreadsTo!
-  if (rand() > rule.chance) return
-
-  for (let i = 0; i < rule.samples; i++) {
-    const dx = Math.floor(rand() * (rule.radius * 2 + 1)) - rule.radius
-    const dy = Math.floor(rand() * (rule.radius * 2 + 1)) - rule.radius
-    if (dx === 0 && dy === 0) continue
-    const nx = x + dx, ny = y + dy
-    if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue
-    const ni = ny * cols + nx
-    const nc = g[ni]
-    const result = rule.targets[nc]
-    if (result !== undefined && rand() < rule.convertChance) {
-      g[ni] = result
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Dissolve System — corrode/dissolve nearby particles
-// ---------------------------------------------------------------------------
-
-/**
- * Attempt to dissolve nearby particles according to archetype dissolves rule.
- * Returns true if self was consumed.
- */
-export function applyDissolve(
-  g: Uint8Array, x: number, y: number, p: number,
-  cols: number, rows: number, type: number, rand: () => number
 ): boolean {
-  const arch = ARCHETYPES[type]!
-  const rule = arch.dissolves!
-  if (rand() > rule.chance) return false
+  const rules = arch.reactions!
+  for (let ri = 0; ri < rules.length; ri++) {
+    const rule = rules[ri]
+    if (rand() > rule.chance) continue
+    const offsets = rule.offsets ?? DEFAULT_OFFSETS
+    const limit = rule.limit ?? Infinity
+    let hits = 0
 
-  for (let i = 0; i < rule.samples; i++) {
-    const dx = Math.floor(rand() * 3) - 1
-    const dy = Math.floor(rand() * 3) - 1
-    if (dx === 0 && dy === 0) continue
-    const nx = x + dx, ny = y + dy
-    if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue
-    const ni = ny * cols + nx
-    const nc = g[ni]
-    const target = rule.targets[nc]
-    if (target !== undefined) {
-      const [into, chance] = target
-      if (rand() < chance) {
-        g[ni] = into
-        if (rule.selfConsumeChance > 0 && rand() < rule.selfConsumeChance) {
-          g[p] = rule.selfConsumeInto
-          return true
-        }
-        return false
-      }
-    }
-  }
-  return false
-}
-
-// ---------------------------------------------------------------------------
-// Generic Spawner System — spawn particles based on archetype data
-// ---------------------------------------------------------------------------
-
-export function applySpawner(
-  g: Uint8Array, x: number, y: number, _p: number,
-  cols: number, rows: number, rand: () => number,
-  arch: ArchetypeDef
-): void {
-  const spawns = arch.spawns!
-  if (rand() > spawns.chance) return
-
-  if (spawns.randomOffset) {
-    // Pick a random offset from the list
-    const idx = Math.floor(rand() * spawns.offsets.length)
-    const [dx, dy] = spawns.offsets[idx]
-    const nx = x + dx, ny = y + dy
-    if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[ny * cols + nx] === EMPTY) {
-      g[ny * cols + nx] = spawns.type
-    }
-  } else {
-    // Try first empty offset
-    for (const [dx, dy] of spawns.offsets) {
+    for (let i = 0; i < rule.samples; i++) {
+      const oi = Math.floor(rand() * offsets.length)
+      const [dx, dy] = offsets[oi]
       const nx = x + dx, ny = y + dy
-      if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[ny * cols + nx] === EMPTY) {
-        g[ny * cols + nx] = spawns.type
+      if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue
+      const ni = ny * cols + nx
+      const nc = g[ni]
+      const effect: ReactionEffect | undefined = rule.targets[nc]
+      if (effect === undefined) continue
+
+      // Normalize the variable-length tuple
+      let selfInto: number, neighborInto: number, nChance: number, sChance: number
+      if (typeof effect === 'number') {
+        selfInto = effect; neighborInto = -1; nChance = 1; sChance = 1
+      } else if (effect.length === 2) {
+        selfInto = effect[0]; neighborInto = effect[1]; nChance = 1; sChance = 1
+      } else if (effect.length === 3) {
+        selfInto = effect[0]; neighborInto = effect[1]; nChance = effect[2]; sChance = 1
+      } else {
+        selfInto = effect[0]; neighborInto = effect[1]; nChance = effect[2]; sChance = effect[3]
+      }
+
+      if (selfInto !== -1) {
+        // Reaction-like: stop after first match (one reaction per tick)
+        if (neighborInto !== -1 && rand() < nChance) {
+          g[ni] = neighborInto
+        }
+        if (rand() < sChance) {
+          g[p] = selfInto
+          return selfInto !== type  // true only if type actually changed
+        }
+        // sChance failed — still stop this rule's loop (one reaction per tick)
         break
       }
+
+      // Spread-like (selfInto === -1): only change neighbor, continue sampling
+      if (neighborInto !== -1 && rand() < nChance) {
+        g[ni] = neighborInto
+        hits++
+        if (hits >= limit) break
+      }
     }
   }
+  return false
 }
 
 // ---------------------------------------------------------------------------
@@ -294,63 +221,6 @@ export function applyCreature(
       return
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// Generic Growth System — data-driven plant/algae growth
-// ---------------------------------------------------------------------------
-
-export function applyGrowth(
-  g: Uint8Array, x: number, y: number, _p: number,
-  cols: number, rows: number, rand: () => number,
-  arch: ArchetypeDef
-): void {
-  const growth = arch.growth!
-  if (rand() > growth.chance) return
-
-  const dx = Math.floor(rand() * 3) - 1
-  const dy = rand() < 0.7 ? -1 : Math.floor(rand() * 3) - 1
-  const nx = x + dx, ny = y + dy
-  if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) return
-  const ni = ny * cols + nx
-  const nc = g[ni]
-
-  if (growth.growMedium.includes(nc)) {
-    if (growth.altGrowInto && rand() < growth.altGrowInto[1]) {
-      g[ni] = growth.altGrowInto[0]
-    } else {
-      g[ni] = growth.growInto
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Volatile Decay System — probabilistic transformation/death
-// ---------------------------------------------------------------------------
-
-/**
- * Apply volatile decay. Returns true if the particle decayed.
- */
-export function applyVolatile(
-  g: Uint8Array, p: number, rand: () => number,
-  arch: ArchetypeDef
-): boolean {
-  const v = arch.volatile!
-  if (rand() < v[0]) {
-    // Check for multi-product decay
-    if (arch.decayProducts) {
-      const r = rand()
-      for (const [chance, product] of arch.decayProducts) {
-        if (r < chance) {
-          g[p] = product
-          return true
-        }
-      }
-    }
-    g[p] = v[1]
-    return true
-  }
-  return false
 }
 
 // ---------------------------------------------------------------------------
