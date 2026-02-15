@@ -8,7 +8,8 @@ import {
   MOLD, MERCURY, VOID, SEED, RUST, SPORE, ALGAE, POISON, DUST, FIREWORK,
   GLITTER, STAR, COMET, BLUE_FIRE, BLACK_HOLE, FIREFLY,
   WORM, FAIRY, FISH, MOTH, VENT, LIT_GUNPOWDER, SMOKE,
-  WAX, BURNING_WAX, MOLTEN_WAX, DRY_ROOT, WET_ROOT, GROWING_PLANT, WET_DIRT, WET_RUST, COLORS_U32,
+  WAX, BURNING_WAX, MOLTEN_WAX, DRY_ROOT, WET_ROOT, GROWING_PLANT, WET_DIRT, WET_RUST,
+  CHAOTIC_FIRE, COLORS_U32,
 } from './constants'
 
 // ---------------------------------------------------------------------------
@@ -22,20 +23,24 @@ import {
 /** Discriminated union for reaction effects. Extensible via new 'kind' variants. */
 export type Effect =
   | { kind: 'transform'; selfInto?: number; neighborInto?: number; selfChance?: number; neighborChance?: number }
-  | { kind: 'spawn'; at: 'self' | 'neighbor' | 'offset'; into: number; chance?: number; offset?: [number, number] }
-  | { kind: 'swap' }
+  | { kind: 'swap'; chance?: number }
+  | { kind: 'densitySwap' }
   | { kind: 'noop' }
+  | { kind: 'stop' }
 
 /** Determines which neighbor cells a rule considers. */
 export type Sampler =
   | { kind: 'radius'; r: number; yBias?: number; samples?: number }
   | { kind: 'offsets'; offsets: [number, number][]; samples?: number }
+  | { kind: 'orderedOffsets'; groups: [number, number][][] }
   | { kind: 'self' }
 
+/** Prop comparison value: a fixed number, or { selfProp } to read from the self archetype at compile time. */
+export type PropValue = number | { selfProp: string }
+
 /** Boolean predicate language for matching neighbor cells.
- *  "Static" predicates (any, idIn, hasTag, propEqual/propGreater/propLess, not/and/or of statics)
- *  compile into O(1) lookup tables at load time — no runtime cost.
- *  "Dynamic" predicates (stateGE) require per-cell evaluation at runtime. */
+ *  All predicates are "static" — they depend only on material identity (id/tags/props)
+ *  and compile into O(1) lookup tables at load time with zero runtime cost. */
 export type TargetPredicate =
   | { kind: 'any' }
   | { kind: 'idIn'; ids: number[] }
@@ -43,10 +48,9 @@ export type TargetPredicate =
   | { kind: 'not'; p: TargetPredicate }
   | { kind: 'and'; ps: TargetPredicate[] }
   | { kind: 'or'; ps: TargetPredicate[] }
-  | { kind: 'propEqual'; prop: 'density'; value: number }
-  | { kind: 'propGreater'; prop: 'density'; value: number }
-  | { kind: 'propLess'; prop: 'density'; value: number }
-  | { kind: 'stateGE'; key: string; value: number }
+  | { kind: 'propEqual'; prop: string; value: PropValue }
+  | { kind: 'propGreater'; prop: string; value: PropValue }
+  | { kind: 'propLess'; prop: string; value: PropValue }
 
 /** A matcher pairs a predicate with an outcome index. First-match-wins ordering. */
 export interface Matcher {
@@ -56,8 +60,8 @@ export interface Matcher {
 
 /** A flexible reaction rule using the Sampler + Matcher + Effect model. */
 export interface Rule {
-  /** Chance per tick to attempt this rule (0-1). */
-  chance: number
+  /** Chance per tick to attempt this rule (0-1), or { byProp: key } to read from self archetype. */
+  chance: number | { byProp: keyof ArchetypeDef }
   /** Max successful reactions before stopping. */
   limit?: number
   /** Where to look for neighbor cells. */
@@ -70,6 +74,8 @@ export interface Rule {
   commit?: 'immediate' | 'endOfPass' | 'endOfTick'
   /** Which physics pass this rule fires in. Default: "either" (both passes). */
   pass?: 'rising' | 'falling' | 'either'
+  /** Stamp destination after swap to prevent double-move. Used by gravity rules. */
+  stamp?: true
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +141,6 @@ export interface ArchetypeDef {
   liquid?: number            // Lateral flow probability when blocked (0-1)
   density?: number           // For sinking through lighter particles
   randomWalk?: number        // Random 8-directional movement chance
-  diagSlide?: boolean        // Allow diagonal sliding when falling blocked (default true except DIRT)
   driftChance?: number       // Horizontal drift probability while rising/falling
   moveSkipChance?: number    // Chance to skip movement entirely (slows particle)
 
@@ -158,11 +163,6 @@ export interface ArchetypeDef {
   // ── Creature ──
   creature?: CreatureDef
 
-  // ── Fire-specific ──
-  firelike?: true             // Uses fire rising movement (drift + chaotic + spread to flammable)
-  gaslike?: true              // Uses gas rising movement (displacement + slow rise)
-  plasmalike?: true           // Like fire but converts materials aggressively
-
   // ── Special handler (for truly unique complex behaviors) ──
   handler?: string            // Named handler for behaviors that can't be data-driven yet
   isSpawner?: true            // Mark as spawner (prevents chunk sleeping, used by orchestration)
@@ -172,19 +172,162 @@ export interface ArchetypeDef {
 // Archetype flag bits (for ARCHETYPE_FLAGS bitmask)
 // ---------------------------------------------------------------------------
 
-export const F_GRAVITY = 1 << 0
-export const F_BUOYANCY = 1 << 1
-export const F_LIQUID = 1 << 2
-export const F_RANDOM_WALK = 1 << 3
+export const F_RISING = 1 << 1
 export const F_IMMOBILE = 1 << 5
 export const F_EXPLOSIVE = 1 << 6
 export const F_SPAWNER = 1 << 7
 export const F_CREATURE = 1 << 8
 export const F_HANDLER = 1 << 9
-export const F_FIRELIKE = 1 << 10
-export const F_GASLIKE = 1 << 11
 export const F_REACTIONS = 1 << 12
-export const F_PLASMALIKE = 1 << 13
+
+// ---------------------------------------------------------------------------
+// Shared gravity rules — referenced by all gravity-having archetypes
+// ---------------------------------------------------------------------------
+
+/** Fall into empty below or density-sink through lighter particles. */
+export const GRAVITY_DOWN_RULE: Rule = {
+  chance: { byProp: 'gravity' },
+  sampler: { kind: 'offsets', offsets: [[0, 1]] },
+  matchers: [
+    { when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 },
+    { when: { kind: 'propLess', prop: 'density', value: { selfProp: 'density' } }, outcomeId: 1 },
+  ],
+  outcomes: [
+    { kind: 'swap' },
+    { kind: 'densitySwap' },
+  ],
+  pass: 'falling',
+  stamp: true,
+}
+
+/** Diagonal slide into empty when blocked below. */
+export const GRAVITY_DIAG_RULE: Rule = {
+  chance: { byProp: 'gravity' },
+  sampler: { kind: 'offsets', offsets: [[-1, 1], [1, 1]], samples: 2 },
+  matchers: [
+    { when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 },
+  ],
+  outcomes: [
+    { kind: 'swap' },
+  ],
+  pass: 'falling',
+  stamp: true,
+}
+
+// ---------------------------------------------------------------------------
+// Shared rising rules — referenced by all rising/buoyant archetypes
+// ---------------------------------------------------------------------------
+
+/** Horizontal drift into empty (chance driven by driftChance property). */
+export const RISING_DRIFT_RULE: Rule = {
+  chance: { byProp: 'driftChance' },
+  sampler: { kind: 'offsets', offsets: [[-1, 0], [1, 0]], samples: 1 },
+  matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+  outcomes: [{ kind: 'swap' }],
+  pass: 'rising', stamp: true,
+}
+
+/** Rise into empty above (chance driven by buoyancy property). */
+export const RISING_UP_RULE: Rule = {
+  chance: { byProp: 'buoyancy' },
+  sampler: { kind: 'offsets', offsets: [[0, -1]] },
+  matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+  outcomes: [{ kind: 'swap' }],
+  pass: 'rising', stamp: true,
+}
+
+/** Diagonal rise into empty above (chance driven by buoyancy property). */
+export const RISING_DIAG_RULE: Rule = {
+  chance: { byProp: 'buoyancy' },
+  sampler: { kind: 'offsets', offsets: [[-1, -1], [1, -1]], samples: 1 },
+  matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+  outcomes: [{ kind: 'swap' }],
+  pass: 'rising', stamp: true,
+}
+
+/** Gas rise: swap with empty or displace particles that have density > 0. */
+export const GAS_RISE_RULE: Rule = {
+  chance: { byProp: 'buoyancy' },
+  sampler: { kind: 'offsets', offsets: [[0, -1]] },
+  matchers: [
+    { when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 },
+    { when: { kind: 'propGreater', prop: 'density', value: 0 }, outcomeId: 0 },
+  ],
+  outcomes: [{ kind: 'swap' }],
+  pass: 'rising', stamp: true,
+}
+
+/** Gas diagonal rise: swap with empty or displace particles with density. */
+export const GAS_RISE_DIAG_RULE: Rule = {
+  chance: { byProp: 'buoyancy' },
+  sampler: { kind: 'offsets', offsets: [[-1, -1], [1, -1]], samples: 1 },
+  matchers: [
+    { when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 },
+    { when: { kind: 'propGreater', prop: 'density', value: 0 }, outcomeId: 0 },
+  ],
+  outcomes: [{ kind: 'swap' }],
+  pass: 'rising', stamp: true,
+}
+
+/** Gas lateral movement into empty. */
+export const GAS_LATERAL_RULE: Rule = {
+  chance: { byProp: 'buoyancy' },
+  sampler: { kind: 'offsets', offsets: [[-1, 0], [1, 0]], samples: 1 },
+  matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+  outcomes: [{ kind: 'swap' }],
+  pass: 'rising', stamp: true,
+}
+
+// ---------------------------------------------------------------------------
+// Shared liquid rules — referenced by all liquid-having archetypes
+// ---------------------------------------------------------------------------
+
+/** Lateral flow into empty when gravity didn't move the particle. */
+export const LIQUID_LATERAL_RULE: Rule = {
+  chance: { byProp: 'liquid' },
+  sampler: { kind: 'offsets', offsets: [[-1, 0], [1, 0]], samples: 1 },
+  matchers: [
+    { when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 },
+  ],
+  outcomes: [{ kind: 'swap' }],
+  pass: 'falling',
+  stamp: true,
+}
+
+/** Liquid diffusion: tiny chance to swap with a neighboring liquid particle. */
+export const LIQUID_MIX_RULE: Rule = {
+  chance: { byProp: 'liquid' },
+  sampler: { kind: 'radius', r: 1, samples: 1 },
+  matchers: [
+    { when: { kind: 'propGreater', prop: 'liquid', value: 0 }, outcomeId: 0 },
+  ],
+  outcomes: [{ kind: 'swap', chance: 0.03 }],
+  pass: 'falling',
+  stamp: true,
+}
+
+// ---------------------------------------------------------------------------
+// Shared random walk rule
+// ---------------------------------------------------------------------------
+
+/** Random 8-directional movement into empty. */
+export const RANDOM_WALK_RULE: Rule = {
+  chance: { byProp: 'randomWalk' },
+  sampler: { kind: 'radius', r: 1, samples: 1 },
+  matchers: [
+    { when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 },
+  ],
+  outcomes: [{ kind: 'swap' }],
+  stamp: true,
+}
+
+/** Stop processing further rules for this particle (probabilistic movement skip). */
+export const MOVE_SKIP_RULE: Rule = {
+  chance: { byProp: 'moveSkipChance' },
+  sampler: { kind: 'self' },
+  matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+  outcomes: [{ kind: 'stop' }],
+}
 
 // ---------------------------------------------------------------------------
 // ARCHETYPES table  (indexed by particle type ID)
@@ -195,10 +338,10 @@ ARCHETYPES[EMPTY] = null
 
 // ── Granular solids ──
 
-ARCHETYPES[SAND] = { gravity: 1.0, density: 5, color: COLORS_U32[SAND] }
+ARCHETYPES[SAND] = { gravity: 1.0, density: 5, rules: [GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE], color: COLORS_U32[SAND] }
 
 ARCHETYPES[DIRT] = {
-  gravity: 1.0, density: 4, diagSlide: false,
+  gravity: 1.0, density: 4,
   rules: [
     {
       chance: 0.25, sampler: { kind: 'radius', r: 3, samples: 6 },
@@ -210,47 +353,50 @@ ARCHETYPES[DIRT] = {
       matchers: [{ when: { kind: 'idIn', ids: [WET_DIRT] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', selfInto: WET_DIRT, neighborInto: DIRT }],
     },
+    GRAVITY_DOWN_RULE,
   ],
   color: COLORS_U32[DIRT],
 }
 
 ARCHETYPES[WET_DIRT] = {
-  gravity: 1.0, density: 4, diagSlide: false,
+  gravity: 1.0, density: 4,
   rules: [
     {
       chance: 0.0001, sampler: { kind: 'self' },
       matchers: [{ when: { kind: 'idIn', ids: [WET_DIRT] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', selfInto: DIRT }]
     },
+    GRAVITY_DOWN_RULE,
   ],
   color: COLORS_U32[WET_DIRT],
 }
 
-ARCHETYPES[FLUFF] = { gravity: 0.3, color: COLORS_U32[FLUFF] }
+ARCHETYPES[FLUFF] = { gravity: 0.3, rules: [GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE], color: COLORS_U32[FLUFF] }
 
 ARCHETYPES[GUNPOWDER] = {
-  gravity: 1.0, density: 4, diagSlide: true,
+  gravity: 1.0, density: 4,
   rules: [{
     chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
     matchers: [{ when: { kind: 'idIn', ids: [FIRE, PLASMA, EMBER, LAVA, LIT_GUNPOWDER] }, outcomeId: 0 }],
     outcomes: [{ kind: 'transform', selfInto: LIT_GUNPOWDER }],
-  }],
+  }, GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE],
   color: COLORS_U32[GUNPOWDER],
 }
 
 ARCHETYPES[LIT_GUNPOWDER] = {
-  gravity: 1.0, density: 4, diagSlide: true,
+  gravity: 1.0, density: 4,
   explosive: [6, 0], blastRadius: 12, detonationChance: 0.08,
+  rules: [GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE],
   color: COLORS_U32[LIT_GUNPOWDER],
 }
 
 ARCHETYPES[SNOW] = {
-  gravity: 0.25, diagSlide: true,
+  gravity: 0.25,
   rules: [{
     chance: 0.4, sampler: { kind: 'radius', r: 1, samples: 8 },
     matchers: [{ when: { kind: 'idIn', ids: [FIRE, PLASMA, EMBER, LAVA] }, outcomeId: 0 }],
     outcomes: [{ kind: 'transform', selfInto: WATER }],
-  }],
+  }, GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE],
   color: COLORS_U32[SNOW],
 }
 
@@ -267,6 +413,7 @@ ARCHETYPES[RUST] = {
       matchers: [{ when: { kind: 'idIn', ids: [WATER] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', selfInto: WET_RUST }]
     },
+    GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE,
   ],
   color: COLORS_U32[RUST],
 }
@@ -289,6 +436,7 @@ ARCHETYPES[WET_RUST] = {
       matchers: [{ when: { kind: 'idIn', ids: [WET_RUST] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', selfInto: DIRT }]
     },
+    GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE,
   ],
   color: COLORS_U32[RUST],
 }
@@ -307,6 +455,7 @@ ARCHETYPES[DUST] = {
       matchers: [{ when: { kind: 'idIn', ids: [FIRE, PLASMA, EMBER, LAVA] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', selfInto: FIRE }],
     },
+    GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE,
   ],
   color: COLORS_U32[DUST],
 }
@@ -317,7 +466,7 @@ ARCHETYPES[GLITTER] = {
     chance: 0.03, sampler: { kind: 'self' },
     matchers: [{ when: { kind: 'idIn', ids: [GLITTER] }, outcomeId: 0 }],
     outcomes: [{ kind: 'transform', selfInto: EMPTY }]
-  }],
+  }, MOVE_SKIP_RULE, GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE],
   moveSkipChance: 0.7,
   color: COLORS_U32[GLITTER],
 }
@@ -336,15 +485,16 @@ ARCHETYPES[WATER] = {
       { kind: 'transform', selfInto: WATER, neighborInto: EMPTY },
       { kind: 'transform', selfInto: WATER, neighborInto: WAX },
     ],
-  }],
+  }, GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE, LIQUID_LATERAL_RULE, LIQUID_MIX_RULE],
   color: COLORS_U32[WATER],
 }
 
-ARCHETYPES[HONEY] = { gravity: 0.15, liquid: 0.3, density: 3, color: COLORS_U32[HONEY] }
+ARCHETYPES[HONEY] = { gravity: 0.15, liquid: 0.3, density: 3, rules: [GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE, LIQUID_LATERAL_RULE, LIQUID_MIX_RULE], color: COLORS_U32[HONEY] }
 
 ARCHETYPES[NITRO] = {
   gravity: 1.0, liquid: 0.5, density: 3,
   explosive: [12, 1],
+  rules: [GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE, LIQUID_LATERAL_RULE, LIQUID_MIX_RULE],
   color: COLORS_U32[NITRO],
 }
 
@@ -355,7 +505,7 @@ ARCHETYPES[SLIME] = {
     chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
     matchers: [{ when: { kind: 'idIn', ids: [FIRE, PLASMA, EMBER, LAVA] }, outcomeId: 0 }],
     outcomes: [{ kind: 'transform', selfInto: GAS }],
-  }],
+  }, MOVE_SKIP_RULE, GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE, LIQUID_LATERAL_RULE, LIQUID_MIX_RULE],
   color: COLORS_U32[SLIME],
 }
 
@@ -376,7 +526,7 @@ ARCHETYPES[POISON] = {
       { kind: 'transform', selfInto: WATER, neighborInto: POISON, neighborChance: 0.05, selfChance: 0.5 },
       { kind: 'transform', selfInto: WATER, neighborInto: EMPTY, neighborChance: 0.15, selfChance: 0.5 },
     ],
-  }],
+  }, MOVE_SKIP_RULE, GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE, LIQUID_LATERAL_RULE, LIQUID_MIX_RULE],
   color: COLORS_U32[POISON],
 }
 
@@ -394,7 +544,7 @@ ARCHETYPES[ACID] = {
       { kind: 'transform', selfInto: EMPTY, neighborInto: EMPTY, neighborChance: 0.08, selfChance: 0.4 },
       { kind: 'transform', selfInto: EMPTY, neighborInto: ACID, neighborChance: 0.5, selfChance: 0.4 },
     ],
-  }],
+  }, GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE, LIQUID_LATERAL_RULE, LIQUID_MIX_RULE],
   color: COLORS_U32[ACID],
 }
 
@@ -430,6 +580,7 @@ ARCHETYPES[LAVA] = {
         { kind: 'transform', selfInto: STONE, neighborInto: FIRE, neighborChance: 0.8, selfChance: 0.15 },
       ],
     },
+    MOVE_SKIP_RULE, GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE, LIQUID_LATERAL_RULE, LIQUID_MIX_RULE,
   ],
   color: COLORS_U32[LAVA],
 }
@@ -440,29 +591,38 @@ ARCHETYPES[MERCURY] = {
     chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
     matchers: [{ when: { kind: 'idIn', ids: [BUG, ANT, BIRD, BEE, SLIME] }, outcomeId: 0 }],
     outcomes: [{ kind: 'transform', neighborInto: EMPTY, neighborChance: 0.5 }],
-  }],
+  }, GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE, LIQUID_LATERAL_RULE, LIQUID_MIX_RULE],
   color: COLORS_U32[MERCURY],
 }
 
 // ── Rising / gaseous ──
 
 ARCHETYPES[FIRE] = {
-  buoyancy: 0.5, firelike: true,
+  buoyancy: 1.0,
   rules: [
     {
       chance: 0.00225, sampler: { kind: 'self' },
       matchers: [{ when: { kind: 'idIn', ids: [FIRE] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: EMBER }]
+      outcomes: [{ kind: 'transform', selfInto: EMBER }],
+      pass: 'rising',
     },
     {
       chance: 0.00375, sampler: { kind: 'self' },
       matchers: [{ when: { kind: 'idIn', ids: [FIRE] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: SMOKE }]
+      outcomes: [{ kind: 'transform', selfInto: SMOKE }],
+      pass: 'rising',
     },
     {
       chance: 0.024, sampler: { kind: 'self' },
       matchers: [{ when: { kind: 'idIn', ids: [FIRE] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: EMPTY }]
+      outcomes: [{ kind: 'transform', selfInto: EMPTY }],
+      pass: 'rising',
+    },
+    {
+      chance: 0.15, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [FIRE, CHAOTIC_FIRE, BLUE_FIRE] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: CHAOTIC_FIRE }],
+      pass: 'rising',
     },
     {
       chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
@@ -474,43 +634,46 @@ ARCHETYPES[FIRE] = {
         { kind: 'transform', neighborInto: FIRE, neighborChance: 0.5 },
         { kind: 'transform', neighborInto: BURNING_WAX, neighborChance: 0.5 },
       ],
+      pass: 'rising',
     },
+    RISING_DRIFT_RULE, RISING_UP_RULE, RISING_DIAG_RULE,
   ],
   driftChance: 0.06,
   color: COLORS_U32[FIRE], palette: 1,
 }
 
 ARCHETYPES[GAS] = {
-  buoyancy: 1.0, gaslike: true,
+  buoyancy: 0.7,
   driftChance: 0.08,
-  moveSkipChance: 0.3,
   rules: [{
     chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 4 },
-    matchers: [{ when: { kind: 'idIn', ids: [FIRE, BLUE_FIRE, PLASMA, LAVA, EMBER] }, outcomeId: 0 }],
+    matchers: [{ when: { kind: 'idIn', ids: [FIRE, BLUE_FIRE, PLASMA, LAVA, EMBER, CHAOTIC_FIRE] }, outcomeId: 0 }],
     outcomes: [{ kind: 'transform', selfInto: FIRE }],
-  }],
+    pass: 'rising',
+  }, RISING_DRIFT_RULE, GAS_RISE_RULE, GAS_RISE_DIAG_RULE, GAS_LATERAL_RULE],
   color: COLORS_U32[GAS],
 }
 
 ARCHETYPES[SMOKE] = {
-  buoyancy: 1.0, gaslike: true,
+  buoyancy: 0.9,
   rules: [{
     chance: 0.004, sampler: { kind: 'self' },
     matchers: [{ when: { kind: 'idIn', ids: [SMOKE] }, outcomeId: 0 }],
-    outcomes: [{ kind: 'transform', selfInto: EMPTY }]
-  }],
+    outcomes: [{ kind: 'transform', selfInto: EMPTY }],
+    pass: 'rising',
+  }, RISING_DRIFT_RULE, GAS_RISE_RULE, GAS_RISE_DIAG_RULE, GAS_LATERAL_RULE],
   driftChance: 0.08,
-  moveSkipChance: 0.1,
   color: COLORS_U32[SMOKE],
 }
 
 ARCHETYPES[PLASMA] = {
-  buoyancy: 1.0, plasmalike: true,
+  buoyancy: 1.0,
   rules: [
     {
       chance: 0.08, sampler: { kind: 'self' },
       matchers: [{ when: { kind: 'idIn', ids: [PLASMA] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: EMPTY }]
+      outcomes: [{ kind: 'transform', selfInto: EMPTY }],
+      pass: 'rising',
     },
     {
       chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 3 },
@@ -522,18 +685,21 @@ ARCHETYPES[PLASMA] = {
         { kind: 'transform', neighborInto: PLASMA, neighborChance: 0.5 },
         { kind: 'transform', neighborInto: FIRE, neighborChance: 0.5 },
       ],
+      pass: 'rising',
     },
+    RISING_UP_RULE, RISING_DIAG_RULE,
   ],
   color: COLORS_U32[PLASMA], palette: 2,
 }
 
 ARCHETYPES[BLUE_FIRE] = {
-  buoyancy: 0.5, firelike: true,
+  buoyancy: 1.0,
   rules: [
     {
       chance: 0.08, sampler: { kind: 'self' },
       matchers: [{ when: { kind: 'idIn', ids: [BLUE_FIRE] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: EMPTY }]
+      outcomes: [{ kind: 'transform', selfInto: EMPTY }],
+      pass: 'rising',
     },
     {
       chance: 1.0, sampler: { kind: 'radius', r: 3, samples: 3 },
@@ -545,27 +711,31 @@ ARCHETYPES[BLUE_FIRE] = {
         { kind: 'transform', neighborInto: FIRE, neighborChance: 0.4 },
         { kind: 'transform', neighborInto: BURNING_WAX, neighborChance: 0.4 },
       ],
+      pass: 'rising',
     },
+    RISING_DRIFT_RULE, RISING_UP_RULE, RISING_DIAG_RULE,
   ],
   driftChance: 0.06,
   color: COLORS_U32[BLUE_FIRE], palette: 4,
 }
 
 ARCHETYPES[SPORE] = {
-  gaslike: true,
+  buoyancy: 0.4,
   driftChance: 0.15,
-  moveSkipChance: 0.6,
   rules: [
     {
       chance: 0.01, sampler: { kind: 'self' },
       matchers: [{ when: { kind: 'idIn', ids: [SPORE] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: EMPTY }]
+      outcomes: [{ kind: 'transform', selfInto: EMPTY }],
+      pass: 'rising',
     },
     {
       chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 3 },
       matchers: [{ when: { kind: 'idIn', ids: [PLANT, FLOWER, FLUFF, HONEY, DIRT, ALGAE] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', selfInto: EMPTY, neighborInto: MOLD, neighborChance: 0.35 }],
+      pass: 'rising',
     },
+    RISING_DRIFT_RULE, GAS_RISE_RULE, GAS_RISE_DIAG_RULE, GAS_LATERAL_RULE,
   ],
   color: COLORS_U32[SPORE],
 }
@@ -576,7 +746,8 @@ ARCHETYPES[CLOUD] = {
     chance: 0.013, sampler: { kind: 'offsets', offsets: [[-1, 1], [0, 1], [1, 1]], samples: 1 },
     matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
     outcomes: [{ kind: 'transform', neighborInto: WATER }],
-  }],
+    pass: 'rising',
+  }, RISING_DRIFT_RULE, RISING_UP_RULE, RISING_DIAG_RULE, RANDOM_WALK_RULE],
   driftChance: 0.3,
   randomWalk: 0.3,
   color: COLORS_U32[CLOUD],
@@ -630,6 +801,7 @@ ARCHETYPES[EMBER] = {
         { kind: 'transform', neighborInto: BURNING_WAX, neighborChance: 0.4 },
       ],
     },
+    GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE,
   ],
   color: COLORS_U32[EMBER],
 }
@@ -640,7 +812,7 @@ ARCHETYPES[STATIC] = {
     chance: 0.08, sampler: { kind: 'self' },
     matchers: [{ when: { kind: 'idIn', ids: [STATIC] }, outcomeId: 0 }],
     outcomes: [{ kind: 'transform', selfInto: EMPTY }]
-  }],
+  }, RANDOM_WALK_RULE],
   color: COLORS_U32[STATIC],
 }
 
@@ -657,6 +829,7 @@ ARCHETYPES[QUARK] = {
       matchers: [{ when: { kind: 'idIn', ids: [QUARK] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', selfInto: CRYSTAL }]
     },
+    RANDOM_WALK_RULE,
   ],
   color: COLORS_U32[QUARK],
 }
@@ -931,6 +1104,7 @@ ARCHETYPES[SEED] = {
       matchers: [{ when: { kind: 'idIn', ids: [BUG, ANT, BIRD] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', selfInto: EMPTY, selfChance: 0.3 }]
     },
+    GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE,
   ],
   color: COLORS_U32[SEED],
 }
@@ -1003,12 +1177,35 @@ ARCHETYPES[MOLD] = {
 
 ARCHETYPES[VOID] = {
   immobile: true,
-  rules: [{
-    chance: 0.003, sampler: { kind: 'self' },
-    matchers: [{ when: { kind: 'idIn', ids: [VOID] }, outcomeId: 0 }],
-    outcomes: [{ kind: 'transform', selfInto: EMPTY }]
-  }],
-  handler: 'void',
+  rules: [
+    // Self-decay: 0.3% chance to vanish
+    {
+      chance: 0.003, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'idIn', ids: [VOID] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: EMPTY }]
+    },
+    // Lightning neutralizes void → static
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
+      matchers: [{ when: { kind: 'idIn', ids: [LIGHTNING] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: STATIC }]
+    },
+    // Consume non-immune neighbors
+    {
+      chance: 0.1, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{
+        when: { kind: 'not', p: { kind: 'idIn', ids: [EMPTY, STONE, GLASS, CRYSTAL, VOID, TAP, VOLCANO] } },
+        outcomeId: 0,
+      }],
+      outcomes: [{ kind: 'transform', neighborInto: EMPTY }]
+    },
+    // Slow spread into empty neighbors
+    {
+      chance: 0.002, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: VOID }]
+    },
+  ],
   color: COLORS_U32[VOID],
 }
 
@@ -1085,6 +1282,7 @@ ARCHETYPES[MOLTEN_WAX] = {
       matchers: [{ when: { kind: 'idIn', ids: [BURNING_WAX, FIRE, EMBER, LAVA] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', selfInto: BURNING_WAX }]
     },
+    MOVE_SKIP_RULE, GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE, LIQUID_LATERAL_RULE, LIQUID_MIX_RULE,
   ],
   color: COLORS_U32[MOLTEN_WAX],
 }
@@ -1157,28 +1355,73 @@ ARCHETYPES[GROWING_PLANT] = {
   color: COLORS_U32[GROWING_PLANT],
 }
 
+// ── Chaotic fire (internal — visually identical to fire, random 8-dir movement) ──
+
+ARCHETYPES[CHAOTIC_FIRE] = {
+  buoyancy: 1.0,
+  rules: [
+    // Quick decay back to normal fire
+    {
+      chance: 0.18, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'idIn', ids: [CHAOTIC_FIRE] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: FIRE }],
+      pass: 'rising',
+    },
+    // Same decay as normal fire
+    {
+      chance: 0.024, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'idIn', ids: [CHAOTIC_FIRE] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: EMPTY }],
+      pass: 'rising',
+    },
+    // Spread to flammable (same as fire)
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
+      matchers: [
+        { when: { kind: 'idIn', ids: [PLANT, FLUFF, GAS, FLOWER, HIVE, NEST, DUST, SPORE] }, outcomeId: 0 },
+        { when: { kind: 'idIn', ids: [WAX] }, outcomeId: 1 },
+      ],
+      outcomes: [
+        { kind: 'transform', neighborInto: FIRE, neighborChance: 0.5 },
+        { kind: 'transform', neighborInto: BURNING_WAX, neighborChance: 0.5 },
+      ],
+      pass: 'rising',
+    },
+    // Random 8-dir movement into empty (the "chaotic" behavior)
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }],
+      pass: 'rising', stamp: true,
+    },
+    RISING_UP_RULE, RISING_DIAG_RULE,
+  ],
+  driftChance: 0.06,
+  color: COLORS_U32[CHAOTIC_FIRE], palette: 1,
+}
+
 // ---------------------------------------------------------------------------
 // ARCHETYPE_FLAGS  -- precomputed bitmask array for fast dispatch
 // ---------------------------------------------------------------------------
 
-const MAX_TYPE = 76
+const MAX_TYPE = 78
 export const ARCHETYPE_FLAGS = new Uint32Array(MAX_TYPE)
 for (let i = 0; i < MAX_TYPE; i++) {
   const a = ARCHETYPES[i]
   if (!a) continue
   let f = 0
-  if (a.gravity !== undefined) f |= F_GRAVITY
-  if (a.buoyancy !== undefined) f |= F_BUOYANCY
-  if (a.liquid !== undefined) f |= F_LIQUID
-  if (a.randomWalk !== undefined) f |= F_RANDOM_WALK
+  // F_RISING: has buoyancy (data value used by rising rules) or has rules with pass='rising'
+  if (a.buoyancy !== undefined) f |= F_RISING
+  if (a.rules) {
+    for (const r of a.rules) {
+      if (r.pass === 'rising') { f |= F_RISING; break }
+    }
+  }
   if (a.immobile) f |= F_IMMOBILE
   if (a.explosive) f |= F_EXPLOSIVE
   if (a.isSpawner) f |= F_SPAWNER
   if (a.creature) f |= F_CREATURE
   if (a.handler) f |= F_HANDLER
-  if (a.firelike) f |= F_FIRELIKE
-  if (a.gaslike) f |= F_GASLIKE
-  if (a.plasmalike) f |= F_PLASMALIKE
   if (a.rules) f |= F_REACTIONS
   ARCHETYPE_FLAGS[i] = f
 }
@@ -1216,7 +1459,7 @@ function assignTag(tag: number, ...ids: number[]) {
 }
 
 assignTag(TAG_HEAT,
-  FIRE, PLASMA, EMBER, LAVA, BLUE_FIRE, LIT_GUNPOWDER, BURNING_WAX)
+  FIRE, PLASMA, EMBER, LAVA, BLUE_FIRE, LIT_GUNPOWDER, BURNING_WAX, CHAOTIC_FIRE)
 
 assignTag(TAG_FLAMMABLE,
   PLANT, FLUFF, GAS, FLOWER, HIVE, NEST, DUST, SPORE, WAX)

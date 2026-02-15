@@ -20,6 +20,7 @@ export const WAX = 69, BURNING_WAX = 70, MOLTEN_WAX = 71
 export const DRY_ROOT = 72, WET_ROOT = 73, GROWING_PLANT = 74
 export const WET_DIRT = 75
 export const WET_RUST = 76
+export const CHAOTIC_FIRE = 77
 
 export type Material = 'empty' | 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent' | 'wax'
 
@@ -81,6 +82,7 @@ export const COLORS_U32 = new Uint32Array([
   0xFF228B22, // GROWING_PLANT: same as PLANT
   0xFF2B5A8B, // WET_DIRT: same as DIRT
   0xFF0E41B7, // WET_RUST: same as RUST
+  0,          // CHAOTIC_FIRE: uses fire animated palette
 ])
 
 export const FIRE_COLORS = new Uint32Array(32)

@@ -1,13 +1,12 @@
 import {
   ARCHETYPES, ARCHETYPE_FLAGS,
-  F_BUOYANCY, F_HANDLER, F_CREATURE, F_REACTIONS,
-  F_FIRELIKE, F_GASLIKE, F_PLASMALIKE,
+  F_RISING, F_HANDLER, F_CREATURE, F_REACTIONS,
 } from '../archetypes'
 import { EMPTY, BULLET_N, BULLET_NW } from '../constants'
 import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../ChunkMap'
 import {
   applyReactions, flushEndOfPass,
-  applyCreature, applyFireRising, applyGasRising,
+  applyCreature,
 } from './generic'
 import { updateBulletRising } from './projectiles'
 import { PASS_RISING } from '../reactionCompiler'
@@ -43,13 +42,14 @@ export function risingPhysicsSystem(g: Uint8Array, cols: number, rows: number, c
         const arch = ARCHETYPES[c]
         if (!arch) continue
 
-        // Determine if this is a rising-phase particle — skip (don't stamp) falling-only particles
-        const isRising = !!(flags & (F_BUOYANCY | F_FIRELIKE | F_GASLIKE | F_PLASMALIKE))
+        // Determine if this is a rising-phase particle
+        const isRising = !!(flags & F_RISING)
         const isRisingCreature = !!(flags & F_CREATURE) && arch.creature?.pass === 'rising'
+        const isRisingHandler = !!(flags & F_HANDLER) && !!NAMED_RISING_HANDLERS[arch.handler!]
         const isRisingProjectile = !!(flags & F_HANDLER) && arch.handler === 'projectile'
           && c >= BULLET_N && c <= BULLET_NW && c !== BULLET_N + 4 // Not BULLET_S
 
-        if (!isRising && !isRisingCreature && !isRisingProjectile) continue
+        if (!isRising && !isRisingCreature && !isRisingHandler && !isRisingProjectile) continue
 
         // Only stamp cells we actually handle in this pass
         if (stampGrid[p] === tickParity) continue
@@ -68,50 +68,17 @@ export function risingPhysicsSystem(g: Uint8Array, cols: number, rows: number, c
         }
 
         // ── Named handlers for complex rising particles ──
-        if ((flags & F_HANDLER) && arch.handler) {
-          const handler = NAMED_RISING_HANDLERS[arch.handler]
-          if (handler) {
-            handler(g, x, y, p, cols, rows, rand)
-            continue
-          }
+        if (isRisingHandler) {
+          const handler = NAMED_RISING_HANDLERS[arch.handler!]
+          handler(g, x, y, p, cols, rows, rand)
+          continue
         }
 
-        // ── Reactions (neighbor reactions, dissolve, spread, spawn — unified) ──
+        // ── Reactions + movement (all rule-based: decay, spread, drift, rise, etc.) ──
         if (flags & F_REACTIONS) {
-          if (applyReactions(g, x, y, p, cols, rows, c, rand, PASS_RISING)) continue
-        }
-
-        // ── Fire-like rising movement (fire, blue fire) ──
-        if (flags & F_FIRELIKE) {
-          applyFireRising(g, x, y, p, c, cols, rows, rand, stampGrid, tickParity)
-          continue
-        }
-
-        // ── Plasma-like rising ──
-        if (flags & F_PLASMALIKE) {
-          applyFireRising(g, x, y, p, c, cols, rows, rand, stampGrid, tickParity)
-          continue
-        }
-
-        // ── Gas-like rising movement (gas, smoke) ──
-        if (flags & F_GASLIKE) {
-          applyGasRising(g, x, y, p, c, cols, rows, rand, stampGrid, tickParity)
-          continue
-        }
-
-        // ── Generic buoyancy for other rising particles ──
-        if (flags & F_BUOYANCY) {
-          if (rand() > (arch.buoyancy ?? 0.5)) continue
-          if (y > 0 && g[(y - 1) * cols + x] === EMPTY) {
-            const up = (y - 1) * cols + x
-            g[up] = c; g[p] = EMPTY; stampGrid[up] = tickParity
-          } else {
-            const dx = rand() < 0.5 ? -1 : 1
-            if (y > 0 && x + dx >= 0 && x + dx < cols && g[(y - 1) * cols + x + dx] === EMPTY) {
-              const d = (y - 1) * cols + x + dx
-              g[d] = c; g[p] = EMPTY; stampGrid[d] = tickParity
-            }
-          }
+          applyReactions(g, x, y, p, cols, rows, c, rand, PASS_RISING, stampGrid, tickParity)
+          // Vanish rising particles at top edge (can't be expressed as a rule)
+          if (y === 0 && g[p] !== EMPTY) g[p] = EMPTY
         }
       } // x
     } // cc

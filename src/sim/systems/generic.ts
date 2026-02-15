@@ -1,8 +1,7 @@
-import { ARCHETYPES, ARCHETYPE_FLAGS, F_IMMOBILE } from '../archetypes'
-import type { ArchetypeDef } from '../archetypes'
-import { EMPTY, FIRE, WATER } from '../constants'
+import { ARCHETYPES, ARCHETYPE_FLAGS, F_IMMOBILE, type ArchetypeDef } from '../archetypes'
+import { EMPTY, FIRE, WATER, DENSITY_SWAP_RATE } from '../constants'
 import {
-  COMPILED_REACTIONS, NO_MATCH, OP_TRANSFORM, OP_SPAWN, OP_SWAP,
+  COMPILED_REACTIONS, NO_MATCH, OP_TRANSFORM, OP_SWAP, OP_DENSITY_SWAP, OP_STOP,
   PASS_EITHER, COMMIT_IMMEDIATE, COMMIT_END_OF_PASS,
 } from '../reactionCompiler'
 
@@ -42,7 +41,8 @@ export function flushEndOfTick(g: Uint8Array): void {
 export function applyReactions(
   g: Uint8Array, x: number, y: number, p: number,
   cols: number, rows: number, type: number, rand: () => number,
-  passId: number
+  passId: number,
+  stampGrid?: Uint8Array, tickParity?: number
 ): boolean {
   const rules = COMPILED_REACTIONS[type]
   if (!rules) return false
@@ -62,6 +62,7 @@ export function applyReactions(
     const outcomes = rule.outcomes
     const limit = rule.limit
     const deferred = rule.commit !== COMMIT_IMMEDIATE
+    const doStamp = rule.stamp && stampGrid !== undefined
     let hits = 0
 
     // Select target queue for deferred rules (only evaluated if deferred)
@@ -69,9 +70,21 @@ export function applyReactions(
       ? (rule.commit === COMMIT_END_OF_PASS ? endOfPassQueue : endOfTickQueue)
       : null
 
-    for (let i = 0; i < rule.sampleCount; i++) {
-      // Pick a random offset pair
-      const oi = ((rand() * offsetCount) | 0) * 2
+    // Ordered sampler: pick a random group and iterate sequentially
+    // Normal sampler: randomly sample from all offsets
+    let sampleStart = 0
+    let sampleEnd = rule.sampleCount
+    const isOrdered = rule.ordered
+
+    if (isOrdered) {
+      const gi = (rand() * rule.groupCount) | 0
+      sampleStart = rule.groupStarts[gi]
+      sampleEnd = gi + 1 < rule.groupCount ? rule.groupStarts[gi + 1] : offsetCount
+    }
+
+    sampleLoop: for (let i = sampleStart; i < sampleEnd; i++) {
+      // Ordered: iterate sequentially; Normal: pick a random offset pair
+      const oi = isOrdered ? i * 2 : ((rand() * offsetCount) | 0) * 2
       const dx = offsets[oi], dy = offsets[oi + 1]
       const nx = x + dx, ny = y + dy
       if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue
@@ -109,8 +122,7 @@ export function applyReactions(
               }
             }
             // Stop this rule's sample loop (reaction-like always stops after first match)
-            i = rule.sampleCount
-            break
+            break sampleLoop
           }
 
           // Spread-like (selfInto === -1): only change neighbor, continue sampling
@@ -121,44 +133,7 @@ export function applyReactions(
               g[ni] = neighborInto
             }
             if (++hits >= limit) {
-              i = rule.sampleCount // break inner loop
-            }
-          }
-          break
-        }
-
-        case OP_SPAWN: {
-          const spawnInto = outcome.a
-          const spawnAt = outcome.b   // 0=self, 1=neighbor, 2=offset
-          const spawnChance = outcome.c
-
-          if (rand() >= spawnChance) break
-
-          let si: number
-          if (spawnAt === 1) {
-            // Spawn at neighbor position
-            si = ni
-          } else if (spawnAt === 0) {
-            // Spawn at self position
-            si = p
-          } else {
-            // Spawn at fixed offset from self
-            const packed = outcome.d
-            const sdx = (packed & 0xFF) << 24 >> 24  // sign-extend
-            const sdy = (packed >> 8) << 24 >> 24
-            const sx = x + sdx, sy = y + sdy
-            if (sx < 0 || sx >= cols || sy < 0 || sy >= rows) break
-            si = sy * cols + sx
-          }
-
-          if (g[si] === EMPTY) {
-            if (deferred) {
-              queue!.push(si, spawnInto)
-            } else {
-              g[si] = spawnInto
-            }
-            if (++hits >= limit) {
-              i = rule.sampleCount // break inner loop
+              break sampleLoop
             }
           }
           break
@@ -173,11 +148,34 @@ export function applyReactions(
               const temp = g[p]
               g[p] = g[ni]
               g[ni] = temp
+              if (doStamp) stampGrid![ni] = tickParity!
               return g[p] !== type
             }
           }
           break
         }
+
+        case OP_DENSITY_SWAP: {
+          const selfDensity = ARCHETYPES[g[p]]?.density ?? 0
+          const neighborDensity = ARCHETYPES[g[ni]]?.density ?? 0
+          const swapChance = (selfDensity - neighborDensity) * DENSITY_SWAP_RATE
+          if (swapChance > 0 && rand() < swapChance) {
+            if (deferred) {
+              queue!.push(p, g[ni])
+              queue!.push(ni, g[p])
+            } else {
+              const temp = g[p]
+              g[p] = g[ni]
+              g[ni] = temp
+              if (doStamp) stampGrid![ni] = tickParity!
+              return g[p] !== type
+            }
+          }
+          break
+        }
+
+        case OP_STOP:
+          return true
 
         // OP_NOOP: do nothing
       }
@@ -338,32 +336,6 @@ export function applyCreature(
 }
 
 // ---------------------------------------------------------------------------
-// Random Walk System
-// ---------------------------------------------------------------------------
-
-export function applyRandomWalk(
-  g: Uint8Array, x: number, y: number, p: number,
-  cols: number, rows: number, rand: () => number,
-  stamp: Uint8Array, tp: number,
-  arch: ArchetypeDef
-): boolean {
-  if (rand() > arch.randomWalk!) return false
-  const dx = Math.floor(rand() * 3) - 1
-  const dy = Math.floor(rand() * 3) - 1
-  if (dx === 0 && dy === 0) return false
-  const nx = x + dx, ny = y + dy
-  if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) return false
-  const ni = ny * cols + nx
-  if (g[ni] === EMPTY) {
-    g[ni] = g[p]
-    g[p] = EMPTY
-    stamp[ni] = tp
-    return true
-  }
-  return false
-}
-
-// ---------------------------------------------------------------------------
 // Explosion System — contact-triggered and detonation explosions
 // ---------------------------------------------------------------------------
 
@@ -465,131 +437,4 @@ export function checkDetonation(
     }
   }
   return true
-}
-
-// ---------------------------------------------------------------------------
-// Buoyancy movement — generic rising for fire-like and gas-like particles
-// ---------------------------------------------------------------------------
-
-/**
- * Apply fire-like rising movement: rise up, drift, chaotic near same type.
- * Returns true if moved.
- */
-export function applyFireRising(
-  g: Uint8Array, x: number, y: number, p: number, type: number,
-  cols: number, rows: number, rand: () => number,
-  stamp: Uint8Array, tp: number
-): boolean {
-  const arch = ARCHETYPES[type]!
-
-  if (y === 0) { g[p] = EMPTY; return true }
-
-  // Horizontal drift
-  if (arch.driftChance && rand() < arch.driftChance) {
-    const hdx = rand() < 0.5 ? -1 : 1
-    if (x + hdx >= 0 && x + hdx < cols && g[(y) * cols + x + hdx] === EMPTY) {
-      const d = y * cols + x + hdx
-      g[d] = type; g[p] = EMPTY; stamp[d] = tp
-      return true
-    }
-  }
-
-  // Chaotic movement when near same type
-  let nearby = 0
-  if (x > 0 && g[y * cols + x - 1] === type) nearby++
-  if (x + 1 < cols && g[y * cols + x + 1] === type) nearby++
-  if (y > 0 && g[(y - 1) * cols + x] === type) nearby++
-  if (y + 1 < rows && g[(y + 1) * cols + x] === type) nearby++
-  if (nearby >= 1 && rand() < 0.15) {
-    const rdx = Math.floor(rand() * 3) - 1
-    const rdy = Math.floor(rand() * 3) - 1
-    if (rdx !== 0 || rdy !== 0) {
-      const nx = x + rdx, ny = y + rdy
-      if (nx >= 0 && nx < cols && ny >= 0 && ny < rows && g[ny * cols + nx] === EMPTY) {
-        const d = ny * cols + nx
-        g[d] = type; g[p] = EMPTY; stamp[d] = tp
-        return true
-      }
-    }
-  }
-
-  // Rise upward
-  const up = (y - 1) * cols + x
-  if (y > 0 && g[up] === EMPTY) {
-    g[up] = type; g[p] = EMPTY; stamp[up] = tp
-    return true
-  }
-  // Diagonal rise
-  const dx = rand() < 0.5 ? -1 : 1
-  if (y > 0 && x + dx >= 0 && x + dx < cols && g[(y - 1) * cols + x + dx] === EMPTY) {
-    const d = (y - 1) * cols + x + dx
-    g[d] = type; g[p] = EMPTY; stamp[d] = tp
-    return true
-  }
-  return false
-}
-
-/**
- * Apply gas-like rising movement: density displacement, slow rise.
- * Returns true if moved.
- */
-export function applyGasRising(
-  g: Uint8Array, x: number, y: number, p: number, type: number,
-  cols: number, _rows: number, rand: () => number,
-  stamp: Uint8Array, tp: number
-): boolean {
-  const arch = ARCHETYPES[type]!
-
-  if (y === 0) { g[p] = EMPTY; return true }
-
-  // Horizontal drift
-  if (arch.driftChance && rand() < arch.driftChance) {
-    const hdx = rand() < 0.5 ? -1 : 1
-    if (x + hdx >= 0 && x + hdx < cols && g[y * cols + x + hdx] === EMPTY) {
-      const d = y * cols + x + hdx
-      g[d] = type; g[p] = EMPTY; stamp[d] = tp
-      return true
-    }
-  }
-
-  // Slow rise
-  if (arch.moveSkipChance && rand() < arch.moveSkipChance) return false
-
-  const up = (y - 1) * cols + x
-  const upCell = y > 0 ? g[up] : -1
-
-  if (upCell === EMPTY) {
-    g[up] = type; g[p] = EMPTY; stamp[up] = tp
-    return true
-  }
-
-  // Density displacement: gas can push aside heavier mobile particles
-  if (upCell > 0 && !(ARCHETYPE_FLAGS[upCell] & F_IMMOBILE)) {
-    const upArch = ARCHETYPES[upCell]
-    if (upArch && upArch.density !== undefined) {
-      g[up] = type; g[p] = upCell; stamp[up] = tp
-      return true
-    }
-  }
-
-  // Diagonal rise with displacement
-  const dx = rand() < 0.5 ? -1 : 1
-  const diagX = x + dx
-  if (y > 0 && diagX >= 0 && diagX < cols) {
-    const dc = g[(y - 1) * cols + diagX]
-    if (dc === EMPTY || (dc > 0 && !(ARCHETYPE_FLAGS[dc] & F_IMMOBILE) && ARCHETYPES[dc]?.density !== undefined)) {
-      const d = (y - 1) * cols + diagX
-      g[d] = type; g[p] = dc === EMPTY ? EMPTY : dc; stamp[d] = tp
-      return true
-    }
-  }
-
-  // Lateral movement
-  if (diagX >= 0 && diagX < cols && g[y * cols + diagX] === EMPTY) {
-    const d = y * cols + diagX
-    g[d] = type; g[p] = EMPTY; stamp[d] = tp
-    return true
-  }
-
-  return false
 }

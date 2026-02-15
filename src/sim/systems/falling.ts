@@ -1,16 +1,13 @@
 import {
   ARCHETYPES, ARCHETYPE_FLAGS,
-  F_BUOYANCY, F_GRAVITY, F_LIQUID, F_IMMOBILE, F_HANDLER,
+  F_RISING, F_IMMOBILE, F_HANDLER,
   F_CREATURE, F_SPAWNER, F_REACTIONS,
-  F_RANDOM_WALK, F_EXPLOSIVE, F_FIRELIKE,
-  F_GASLIKE, F_PLASMALIKE,
+  F_EXPLOSIVE,
 } from '../archetypes'
 import { EMPTY } from '../constants'
-import { applyGravity } from './gravity'
-import { applyLiquid, applyLiquidMix } from './liquid'
 import {
   applyReactions, flushEndOfPass,
-  applyCreature, applyRandomWalk,
+  applyCreature,
   checkContactExplosion, checkDetonation,
 } from './generic'
 import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../ChunkMap'
@@ -20,7 +17,6 @@ import { PASS_FALLING } from '../reactionCompiler'
 type ParticleHandler = (g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number) => void
 
 import { updateGun, updateVolcano, updateStar, updateBlackHole } from './spawners'
-import { updateVoid } from './reactions'
 import { updateBulletFalling, updateBulletTrail } from './projectiles'
 
 const NAMED_HANDLERS: Record<string, ParticleHandler> = {
@@ -28,7 +24,6 @@ const NAMED_HANDLERS: Record<string, ParticleHandler> = {
   volcano: updateVolcano,
   star: updateStar,
   blackHole: updateBlackHole,
-  void: updateVoid,
 }
 
 // Projectile handler needs extra args — handled specially
@@ -64,7 +59,7 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
         if (!arch) continue
 
         // Skip particles handled in the rising pass
-        if (flags & (F_BUOYANCY | F_FIRELIKE | F_GASLIKE | F_PLASMALIKE)) continue
+        if (flags & F_RISING) continue
 
         // ── Named handler dispatch ──
         if (flags & F_HANDLER) {
@@ -108,7 +103,7 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
 
         // ── Reactions (neighbor reactions, dissolve, spread, spawn — unified) ──
         if (flags & F_REACTIONS) {
-          if (applyReactions(g, x, y, p, cols, rows, c, rand, PASS_FALLING)) continue
+          if (applyReactions(g, x, y, p, cols, rows, c, rand, PASS_FALLING, stampGrid, tickParity)) continue
         }
 
         // ── Wake radius for spawner-type particles (tap, anthill, hive, nest, vent) ──
@@ -124,25 +119,6 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
 
         // ── Immobile particles stop here ──
         if (flags & F_IMMOBILE) continue
-
-        // ── Move skip chance (slows particle) ──
-        if (arch.moveSkipChance && rand() < arch.moveSkipChance) continue
-
-        // ── Random walk ──
-        if (flags & F_RANDOM_WALK) {
-          if (applyRandomWalk(g, x, y, p, cols, rows, rand, stampGrid, tickParity, arch)) continue
-        }
-
-        // ── Generic gravity + liquid movement ──
-        let moved = false
-        if (flags & F_GRAVITY) {
-          moved = applyGravity(g, x, y, p, cols, rows, c, rand, stampGrid, tickParity)
-        }
-        if (!moved && (flags & F_LIQUID)) {
-          if (!applyLiquid(g, x, y, p, cols, c, rand, stampGrid, tickParity)) {
-            applyLiquidMix(g, x, y, p, cols, rows, c, rand, stampGrid, tickParity)
-          }
-        }
       } // xi (cells within chunk)
     } // cc (chunk columns)
   } // y
