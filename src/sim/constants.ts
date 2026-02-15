@@ -10,7 +10,7 @@ export const BULLET_TRAIL = 39
 export const CLOUD = 40, ACID = 41, LAVA = 42, SNOW = 43, VOLCANO = 44
 export const MOLD = 45, MERCURY = 46, VOID = 47, SEED = 48, RUST = 49
 export const SPORE = 50, ALGAE = 51, POISON = 52, DUST = 53, FIREWORK = 54
-export const BUBBLE = 55, GLITTER = 56, STAR = 57, COMET = 58, BLUE_FIRE = 59
+export const GLITTER = 56, STAR = 57, COMET = 58, BLUE_FIRE = 59
 export const BLACK_HOLE = 60, FIREFLY = 61
 export const WORM = 62, FAIRY = 63
 export const FISH = 64, MOTH = 65, VENT = 66
@@ -19,8 +19,9 @@ export const SMOKE = 68
 export const WAX = 69, BURNING_WAX = 70, MOLTEN_WAX = 71
 export const DRY_ROOT = 72, WET_ROOT = 73, GROWING_PLANT = 74
 export const WET_DIRT = 75
+export const WET_RUST = 76
 
-export type Material = 'empty' | 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent' | 'wax'
+export type Material = 'empty' | 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent' | 'wax'
 
 export const MATERIAL_TO_ID: Record<Material, number> = {
   empty: EMPTY, sand: SAND, water: WATER, dirt: DIRT, stone: STONE, plant: PLANT,
@@ -30,7 +31,7 @@ export const MATERIAL_TO_ID: Record<Material, number> = {
   bee: BEE, flower: FLOWER, hive: HIVE, honey: HONEY, nest: NEST, gun: GUN, cloud: CLOUD,
   acid: ACID, lava: LAVA, snow: SNOW, volcano: VOLCANO, mold: MOLD, mercury: MERCURY, void: VOID, seed: SEED,
   rust: RUST, spore: SPORE, algae: ALGAE, poison: POISON, dust: DUST,
-  firework: FIREWORK, bubble: BUBBLE, glitter: GLITTER, star: STAR, comet: COMET, blackhole: BLACK_HOLE,
+  firework: FIREWORK, glitter: GLITTER, star: STAR, comet: COMET, blackhole: BLACK_HOLE,
   firefly: FIREFLY,
   worm: WORM, fairy: FAIRY,
   fish: FISH, moth: MOTH,
@@ -79,6 +80,7 @@ export const COLORS_U32 = new Uint32Array([
   0xFF1E3750, // WET_ROOT: dark wet brown
   0xFF228B22, // GROWING_PLANT: same as PLANT
   0xFF2B5A8B, // WET_DIRT: same as DIRT
+  0xFF0E41B7, // WET_RUST: same as RUST
 ])
 
 export const FIRE_COLORS = new Uint32Array(32)

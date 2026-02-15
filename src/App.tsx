@@ -2,7 +2,7 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 import { DEFAULT_ZOOM, MAX_ZOOM, MATERIAL_TO_ID } from './sim/constants'
 
-type Material = 'empty' | 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent' | 'wax'
+type Material = 'empty' | 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent' | 'wax'
 type Tool = Material
 
 const BUTTON_COLORS: Record<Tool, string> = {
@@ -16,7 +16,7 @@ const BUTTON_COLORS: Record<Tool, string> = {
   acid: '#bfff00', lava: '#dc1414', snow: '#e0f0ff',
   volcano: '#660000', mold: '#7b68ee', mercury: '#b8c0c8', void: '#2e0854', seed: '#d4a574',
   rust: '#b7410e', spore: '#20b2aa', algae: '#2e8b57', poison: '#8b008b', dust: '#deb887',
-  firework: '#ff6600', bubble: '#87ceeb', glitter: '#c0c0c0', star: '#ffdf00', comet: '#7df9ff', blackhole: '#000000',
+  firework: '#ff6600', glitter: '#c0c0c0', star: '#ffdf00', comet: '#7df9ff', blackhole: '#000000',
   firefly: '#bfff00',
   worm: '#c09080', fairy: '#ff88ff',
   fish: '#ffa500', moth: '#d2b48c',
@@ -521,7 +521,7 @@ function App() {
 
   const categories: Array<{ label: string; items: Tool[] }> = [
     { label: 'basic', items: ['empty', 'sand', 'water', 'dirt', 'stone', 'glass', 'snow', 'dust', 'fluff'] },
-    { label: 'fluid', items: ['slime', 'acid', 'lava', 'mercury', 'honey', 'poison', 'gas', 'bubble'] },
+    { label: 'fluid', items: ['slime', 'acid', 'lava', 'mercury', 'honey', 'poison', 'gas'] },
     { label: 'energy', items: ['fire', 'ember', 'plasma', 'lightning', 'static', 'nitro', 'gunpowder', 'firework', 'quark', 'comet', 'wax'] },
     { label: 'nature', items: ['plant', 'seed', 'flower', 'algae', 'mold', 'spore', 'rust', 'crystal', 'void', 'glitter'] },
     { label: 'spawner', items: ['tap', 'anthill', 'hive', 'nest', 'gun', 'volcano', 'vent', 'cloud', 'star', 'blackhole'] },

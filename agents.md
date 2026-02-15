@@ -31,7 +31,7 @@ The game uses a **chunked grid engine** with **data-driven archetypes** and **co
 - `/src/sim/systems/generic.ts` - **8 composable generic systems**: `applyReactions`, `applyCreature`, `applyVolatile`, `applyRandomWalk`, `checkContactExplosion`, `checkDetonation`, `applyFireRising`, `applyGasRising`
 - `/src/sim/systems/falling.ts` - Falling pass (bottom-to-top, chunk-aware): named handler dispatch + composable system pipeline for all falling-phase particles
 - `/src/sim/systems/rising.ts` - Rising pass (top-to-bottom, chunk-aware): named handler dispatch + composable system pipeline for rising/buoyant particles
-- `/src/sim/systems/handlers.ts` - 5 complex named handlers that can't be fully data-driven: `updateFirework`, `updateBubble`, `updateComet`, `updateLightning`, `updateSpore`
+- `/src/sim/systems/handlers.ts` - 3 complex named handlers that can't be fully data-driven: `updateFirework`, `updateComet`, `updateLightning`
 - `/src/sim/systems/spawners.ts` - 4 complex spawner handlers: `updateGun`, `updateVolcano`, `updateStar`, `updateBlackHole`
 - `/src/sim/systems/reactions.ts` - 2 complex reaction handlers: `updateRust`, `updateVoid`
 - `/src/sim/systems/growing.ts` - 2 complex growth handlers: `updateSeed`, `updateAlgae`

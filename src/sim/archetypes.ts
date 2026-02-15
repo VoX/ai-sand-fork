@@ -6,9 +6,9 @@ import {
   BULLET_N, BULLET_NE, BULLET_E, BULLET_SE, BULLET_S, BULLET_SW, BULLET_W, BULLET_NW,
   BULLET_TRAIL, CLOUD, ACID, LAVA, SNOW, VOLCANO,
   MOLD, MERCURY, VOID, SEED, RUST, SPORE, ALGAE, POISON, DUST, FIREWORK,
-  BUBBLE, GLITTER, STAR, COMET, BLUE_FIRE, BLACK_HOLE, FIREFLY,
+  GLITTER, STAR, COMET, BLUE_FIRE, BLACK_HOLE, FIREFLY,
   WORM, FAIRY, FISH, MOTH, VENT, LIT_GUNPOWDER, SMOKE,
-  WAX, BURNING_WAX, MOLTEN_WAX, DRY_ROOT, WET_ROOT, GROWING_PLANT, WET_DIRT, COLORS_U32,
+  WAX, BURNING_WAX, MOLTEN_WAX, DRY_ROOT, WET_ROOT, GROWING_PLANT, WET_DIRT, WET_RUST, COLORS_U32,
 } from './constants'
 
 // ---------------------------------------------------------------------------
@@ -119,8 +119,6 @@ export interface ArchetypeDef {
 
   // ── Reaction tags ──
   immobile?: true
-  living?: true
-  killsCreatures?: true
 
   // ── Parameterized behaviors ──
   explosive?: [number, number]  // [radius, trigger: 0=heat-adjacent, 1=solid-contact]
@@ -234,9 +232,20 @@ ARCHETYPES[SNOW] = {
 
 ARCHETYPES[RUST] = {
   gravity: 0.1,
-  reactions: [{ chance: 0.005, samples: 1, offsets: SELF, targets: { [RUST]: DIRT } }],
-  // Rust spreads to stone when near water
-  handler: 'rust',
+  reactions: [
+    { chance: 0.005, samples: 1, offsets: SELF, targets: { [RUST]: DIRT } },
+    { chance: 1.0, samples: 2, targets: { [WATER]: [WET_RUST, -1] } },
+  ],
+  color: COLORS_U32[RUST],
+}
+
+ARCHETYPES[WET_RUST] = {
+  gravity: 0.1,
+  reactions: [
+    { chance: 0.15, samples: 1, offsets: SELF, targets: { [WET_RUST]: RUST } },
+    { chance: 0.03, samples: 2, targets: { [STONE]: [-1, RUST] } },
+    { chance: 0.003, samples: 1, offsets: SELF, targets: { [WET_RUST]: DIRT } },
+  ],
   color: COLORS_U32[RUST],
 }
 
@@ -296,7 +305,7 @@ ARCHETYPES[SLIME] = {
 }
 
 ARCHETYPES[POISON] = {
-  gravity: 0.3, liquid: 0.5, density: 2, killsCreatures: true,
+  gravity: 0.3, liquid: 0.5, density: 2,
   moveSkipChance: 0.7,
   reactions: [{
     chance: 1.0, samples: 3,
@@ -312,7 +321,7 @@ ARCHETYPES[POISON] = {
 }
 
 ARCHETYPES[ACID] = {
-  gravity: 1.0, liquid: 0.5, density: 3, killsCreatures: true,
+  gravity: 1.0, liquid: 0.5, density: 3,
   reactions: [{
     chance: 1.0, samples: 3,
     targets: {
@@ -352,7 +361,7 @@ ARCHETYPES[LAVA] = {
 }
 
 ARCHETYPES[MERCURY] = {
-  gravity: 1.0, liquid: 0.5, density: 8, killsCreatures: true,
+  gravity: 1.0, liquid: 0.5, density: 8,
   reactions: [{
     chance: 1.0, samples: 2,
     targets: {
@@ -436,18 +445,19 @@ ARCHETYPES[BLUE_FIRE] = {
 }
 
 ARCHETYPES[SPORE] = {
-  buoyancy: 0.4,
+  gaslike: true,
+  driftChance: 0.15,
+  moveSkipChance: 0.6,
   reactions: [
     { chance: 0.01, samples: 1, offsets: SELF, targets: { [SPORE]: EMPTY } },
     {
       chance: 1.0, samples: 3,
       targets: {
-        [PLANT]: [-1, MOLD, 0.35], [FLOWER]: [-1, MOLD, 0.35], [FLUFF]: [-1, MOLD, 0.35],
-        [HONEY]: [-1, MOLD, 0.35], [DIRT]: [-1, MOLD, 0.35], [ALGAE]: [-1, MOLD, 0.35],
+        [PLANT]: [EMPTY, MOLD, 0.35], [FLOWER]: [EMPTY, MOLD, 0.35], [FLUFF]: [EMPTY, MOLD, 0.35],
+        [HONEY]: [EMPTY, MOLD, 0.35], [DIRT]: [EMPTY, MOLD, 0.35], [ALGAE]: [EMPTY, MOLD, 0.35],
       },
     },
   ],
-  handler: 'spore',
   color: COLORS_U32[SPORE],
 }
 
@@ -467,12 +477,6 @@ ARCHETYPES[FIREWORK] = {
   buoyancy: 0.95,
   handler: 'firework',
   color: COLORS_U32[FIREWORK],
-}
-
-ARCHETYPES[BUBBLE] = {
-  buoyancy: 0.6,
-  handler: 'bubble',
-  color: COLORS_U32[BUBBLE],
 }
 
 ARCHETYPES[COMET] = {
@@ -591,7 +595,7 @@ ARCHETYPES[VENT] = {
 // ── Creatures ──
 
 ARCHETYPES[BUG] = {
-  living: true,
+
   creature: {
     pass: 'falling', idleChance: 0.5,
     movement: 'ground', downBias: 0.7,
@@ -603,7 +607,7 @@ ARCHETYPES[BUG] = {
 }
 
 ARCHETYPES[ANT] = {
-  living: true,
+
   creature: {
     pass: 'falling', idleChance: 0.5,
     movement: 'burrowing', downBias: 0.7,
@@ -614,7 +618,7 @@ ARCHETYPES[ANT] = {
 }
 
 ARCHETYPES[BIRD] = {
-  living: true,
+
   creature: {
     pass: 'rising', idleChance: 0.4,
     movement: 'flying',
@@ -630,7 +634,7 @@ ARCHETYPES[BIRD] = {
 }
 
 ARCHETYPES[BEE] = {
-  living: true,
+
   creature: {
     pass: 'rising', idleChance: 0.2,
     movement: 'flying',
@@ -643,7 +647,7 @@ ARCHETYPES[BEE] = {
 }
 
 ARCHETYPES[FIREFLY] = {
-  living: true,
+
   creature: {
     pass: 'rising', idleChance: 0.5,
     movement: 'flying',
@@ -660,7 +664,7 @@ ARCHETYPES[FIREFLY] = {
 }
 
 ARCHETYPES[ALIEN] = {
-  living: true,
+
   creature: {
     pass: 'falling', idleChance: 0.4,
     movement: 'ground', downBias: 0.3,
@@ -676,7 +680,7 @@ ARCHETYPES[ALIEN] = {
 }
 
 ARCHETYPES[WORM] = {
-  living: true,
+
   creature: {
     pass: 'falling', idleChance: 0.4,
     movement: 'burrowing', downBias: 0.6,
@@ -687,7 +691,7 @@ ARCHETYPES[WORM] = {
 }
 
 ARCHETYPES[FAIRY] = {
-  living: true,
+
   creature: {
     pass: 'falling', idleChance: 0.3,
     movement: 'floating', downBias: 0.4,
@@ -700,7 +704,7 @@ ARCHETYPES[FAIRY] = {
 }
 
 ARCHETYPES[FISH] = {
-  living: true,
+
   creature: {
     pass: 'falling', idleChance: 0.4,
     movement: 'swimming', downBias: 0,
@@ -711,7 +715,7 @@ ARCHETYPES[FISH] = {
 }
 
 ARCHETYPES[MOTH] = {
-  living: true,
+
   creature: {
     pass: 'falling', idleChance: 0.3,
     movement: 'floating', downBias: 0.4,
@@ -799,7 +803,7 @@ ARCHETYPES[MOLD] = {
 }
 
 ARCHETYPES[VOID] = {
-  immobile: true, killsCreatures: true,
+  immobile: true,
   reactions: [{ chance: 0.003, samples: 1, offsets: SELF, targets: { [VOID]: EMPTY } }],
   handler: 'void',
   color: COLORS_U32[VOID],
@@ -870,7 +874,7 @@ ARCHETYPES[MOLTEN_WAX] = {
 
 const rootWaterScanOffsets: [number, number][] = [
   ...radiusOffsets(1),
-  ...rectOffsets(0, 20, 2, 2),
+  ...rectOffsets(0, 10, 1, 1),
 ]
 
 const upwardScanOffsets: [number, number][] = rectOffsets(30, 0, 2, 2)

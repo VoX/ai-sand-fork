@@ -1,30 +1,7 @@
 import {
-  EMPTY, WATER, STONE, LIGHTNING, STATIC, GLASS, CRYSTAL,
-  VOID, TAP, VOLCANO, RUST, DIRT,
+  EMPTY, LIGHTNING, STATIC, GLASS, CRYSTAL,
+  VOID, TAP, VOLCANO, STONE,
 } from '../constants'
-
-export function updateRust(g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number): void {
-  const idx = (bx: number, by: number) => by * cols + bx
-  const belowCell = y < rows - 1 ? g[idx(x, y + 1)] : EMPTY
-  if (rand() < 0.005) { g[p] = DIRT; return }
-  let waterNearby = false
-  for (let i = 0; i < 2; i++) {
-    const rdx = Math.floor(rand() * 3) - 1, rdy = Math.floor(rand() * 3) - 1
-    const rnx = x + rdx, rny = y + rdy
-    if (rnx >= 0 && rnx < cols && rny >= 0 && rny < rows) {
-      if (g[idx(rnx, rny)] === WATER) { waterNearby = true; break }
-    }
-  }
-  if (waterNearby && rand() < 0.03) {
-    const rdx = Math.floor(rand() * 3) - 1
-    const rdy = Math.floor(rand() * 3) - 1
-    const rnx = x + rdx, rny = y + rdy
-    if (rnx >= 0 && rnx < cols && rny >= 0 && rny < rows) {
-      if (g[idx(rnx, rny)] === STONE) g[idx(rnx, rny)] = RUST
-    }
-  }
-  if (belowCell === EMPTY && rand() < 0.1) { g[idx(x, y + 1)] = RUST; g[p] = EMPTY }
-}
 
 export function updateVoid(g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number): void {
   const idx = (bx: number, by: number) => by * cols + bx

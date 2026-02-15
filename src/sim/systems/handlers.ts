@@ -1,7 +1,7 @@
 import {
-  EMPTY, FIRE, BLUE_FIRE, GAS, SPORE, FIREWORK, BUBBLE, COMET, PLASMA, LIGHTNING,
+  EMPTY, FIRE, BLUE_FIRE, GAS, FIREWORK, COMET, PLASMA, LIGHTNING,
   PLANT, FLUFF, BUG, FLOWER, EMBER, SAND, GLASS,
-  WATER, ACID, HONEY, POISON, MOLD, ALGAE, DIRT, STONE, STATIC, NITRO, GLITTER,
+  WATER, DIRT, STONE, STATIC, NITRO, GLITTER,
   FIREWORK_BURST_RADIUS_HIT, FIREWORK_BURST_RADIUS_TIMEOUT, LIGHTNING_NITRO_RADIUS,
 } from '../constants'
 
@@ -45,52 +45,6 @@ export function updateFirework(
         }
       }
     }
-  }
-}
-
-export function updateBubble(
-  g: Uint8Array, x: number, y: number, p: number,
-  cols: number, rows: number, rand: () => number
-): void {
-  const idx = (bx: number, by: number) => by * cols + bx
-  let inLiquid = false
-  for (let bi = 0; bi < 3; bi++) {
-    const bdx = Math.floor(rand() * 3) - 1, bdy = Math.floor(rand() * 3) - 1
-    const bnx = x + bdx, bny = y + bdy
-    if (bnx >= 0 && bnx < cols && bny >= 0 && bny < rows) {
-      const bnc = g[idx(bnx, bny)]
-      if (bnc === WATER || bnc === ACID || bnc === HONEY || bnc === POISON) { inLiquid = true; break }
-    }
-  }
-  if (inLiquid) {
-    if (y > 0 && rand() < 0.6) {
-      const above = idx(x, y - 1)
-      const ac = g[above]
-      if (ac === WATER || ac === ACID || ac === HONEY || ac === POISON) {
-        g[above] = BUBBLE; g[p] = ac
-      } else if (ac === EMPTY) {
-        g[p] = EMPTY
-        for (let bi = 0; bi < 3; bi++) {
-          const sx = x + Math.floor(rand() * 3) - 1
-          const sy = y - 1 - Math.floor(rand() * 2)
-          if (sx >= 0 && sx < cols && sy >= 0 && sy < rows && g[idx(sx, sy)] === EMPTY) {
-            g[idx(sx, sy)] = WATER
-          }
-        }
-      }
-    }
-    if (rand() < 0.2) {
-      const bdx = rand() < 0.5 ? -1 : 1
-      if (x + bdx >= 0 && x + bdx < cols) {
-        const side = idx(x + bdx, y)
-        const sc = g[side]
-        if (sc === WATER || sc === ACID || sc === HONEY || sc === POISON) {
-          g[side] = BUBBLE; g[p] = sc
-        }
-      }
-    }
-  } else {
-    g[p] = GAS
   }
 }
 
@@ -192,32 +146,4 @@ export function updateLightning(
       if (bx >= 0 && bx < cols && g[idx(bx, y)] === EMPTY) g[idx(bx, y)] = LIGHTNING
     }
   } else if (!struck) g[p] = EMPTY
-}
-
-export function updateSpore(
-  g: Uint8Array, x: number, y: number, p: number,
-  cols: number, rows: number, rand: () => number
-): void {
-  const idx = (bx: number, by: number) => by * cols + bx
-  if (rand() < 0.01) { g[p] = EMPTY; return }
-  for (let si = 0; si < 3; si++) {
-    const sdx = Math.floor(rand() * 3) - 1, sdy = Math.floor(rand() * 3) - 1
-    if (sdx === 0 && sdy === 0) continue
-    const snx = x + sdx, sny = y + sdy
-    if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
-      const snc = g[idx(snx, sny)]
-      if ((snc === PLANT || snc === FLOWER || snc === FLUFF || snc === HONEY || snc === DIRT || snc === ALGAE) && rand() < 0.35) {
-        g[idx(snx, sny)] = MOLD; g[p] = EMPTY; break
-      }
-    }
-  }
-  if (g[p] !== SPORE) return
-  if (rand() < 0.4) {
-    const sdx = Math.floor(rand() * 3) - 1
-    const sdy = rand() < 0.6 ? -1 : (rand() < 0.5 ? 0 : 1)
-    const snx = x + sdx, sny = y + sdy
-    if (snx >= 0 && snx < cols && sny >= 0 && sny < rows && g[idx(snx, sny)] === EMPTY) {
-      g[idx(snx, sny)] = SPORE; g[p] = EMPTY
-    }
-  }
 }
