@@ -1,7 +1,31 @@
 import { ARCHETYPES, ARCHETYPE_FLAGS, F_IMMOBILE } from '../archetypes'
 import type { ArchetypeDef } from '../archetypes'
 import { EMPTY, FIRE, WATER } from '../constants'
-import { COMPILED_REACTIONS, NO_MATCH, OP_TRANSFORM, OP_SPAWN, OP_SWAP } from '../reactionCompiler'
+import {
+  COMPILED_REACTIONS, NO_MATCH, OP_TRANSFORM, OP_SPAWN, OP_SWAP,
+  PASS_EITHER, COMMIT_IMMEDIATE, COMMIT_END_OF_PASS,
+} from '../reactionCompiler'
+
+// ---------------------------------------------------------------------------
+// Deferred effect queues — for endOfPass / endOfTick commit modes
+// ---------------------------------------------------------------------------
+
+const endOfPassQueue: number[] = []
+const endOfTickQueue: number[] = []
+
+export function flushEndOfPass(g: Uint8Array): void {
+  for (let i = 0; i < endOfPassQueue.length; i += 2) {
+    g[endOfPassQueue[i]] = endOfPassQueue[i + 1]
+  }
+  endOfPassQueue.length = 0
+}
+
+export function flushEndOfTick(g: Uint8Array): void {
+  for (let i = 0; i < endOfTickQueue.length; i += 2) {
+    g[endOfTickQueue[i]] = endOfTickQueue[i + 1]
+  }
+  endOfTickQueue.length = 0
+}
 
 // ---------------------------------------------------------------------------
 // Unified Reaction System — compiled hot loop
@@ -17,13 +41,18 @@ import { COMPILED_REACTIONS, NO_MATCH, OP_TRANSFORM, OP_SPAWN, OP_SWAP } from '.
  */
 export function applyReactions(
   g: Uint8Array, x: number, y: number, p: number,
-  cols: number, rows: number, type: number, rand: () => number
+  cols: number, rows: number, type: number, rand: () => number,
+  passId: number
 ): boolean {
   const rules = COMPILED_REACTIONS[type]
   if (!rules) return false
 
   for (let ri = 0; ri < rules.length; ri++) {
     const rule = rules[ri]
+
+    // Pass filter — skip rules that don't match the current physics pass
+    if (rule.pass !== PASS_EITHER && rule.pass !== passId) continue
+
     if (rand() > rule.chance) continue
 
     const offsets = rule.offsets
@@ -32,7 +61,13 @@ export function applyReactions(
     const matchTableLen = rule.matchTableLen
     const outcomes = rule.outcomes
     const limit = rule.limit
+    const deferred = rule.commit !== COMMIT_IMMEDIATE
     let hits = 0
+
+    // Select target queue for deferred rules (only evaluated if deferred)
+    const queue = deferred
+      ? (rule.commit === COMMIT_END_OF_PASS ? endOfPassQueue : endOfTickQueue)
+      : null
 
     for (let i = 0; i < rule.sampleCount; i++) {
       // Pick a random offset pair
@@ -57,21 +92,34 @@ export function applyReactions(
 
           if (selfInto !== -1) {
             // Reaction-like: stop sampling after first match
-            if (neighborInto !== -1 && rand() < outcome.c) {
-              g[ni] = neighborInto
+            if (deferred) {
+              if (neighborInto !== -1 && rand() < outcome.c) {
+                queue!.push(ni, neighborInto)
+              }
+              if (rand() < outcome.d) {
+                queue!.push(p, selfInto)
+              }
+            } else {
+              if (neighborInto !== -1 && rand() < outcome.c) {
+                g[ni] = neighborInto
+              }
+              if (rand() < outcome.d) {
+                g[p] = selfInto
+                return selfInto !== type
+              }
             }
-            if (rand() < outcome.d) {
-              g[p] = selfInto
-              return selfInto !== type
-            }
-            // sChance failed — still stop this rule's sample loop
-            i = rule.sampleCount // break inner loop
+            // Stop this rule's sample loop (reaction-like always stops after first match)
+            i = rule.sampleCount
             break
           }
 
           // Spread-like (selfInto === -1): only change neighbor, continue sampling
           if (neighborInto !== -1 && rand() < outcome.c) {
-            g[ni] = neighborInto
+            if (deferred) {
+              queue!.push(ni, neighborInto)
+            } else {
+              g[ni] = neighborInto
+            }
             if (++hits >= limit) {
               i = rule.sampleCount // break inner loop
             }
@@ -104,7 +152,11 @@ export function applyReactions(
           }
 
           if (g[si] === EMPTY) {
-            g[si] = spawnInto
+            if (deferred) {
+              queue!.push(si, spawnInto)
+            } else {
+              g[si] = spawnInto
+            }
             if (++hits >= limit) {
               i = rule.sampleCount // break inner loop
             }
@@ -114,10 +166,15 @@ export function applyReactions(
 
         case OP_SWAP: {
           if (rand() < outcome.c) {
-            const temp = g[p]
-            g[p] = g[ni]
-            g[ni] = temp
-            return g[p] !== type
+            if (deferred) {
+              queue!.push(p, g[ni])
+              queue!.push(ni, g[p])
+            } else {
+              const temp = g[p]
+              g[p] = g[ni]
+              g[ni] = temp
+              return g[p] !== type
+            }
           }
           break
         }

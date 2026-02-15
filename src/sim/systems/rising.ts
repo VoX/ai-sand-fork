@@ -6,10 +6,11 @@ import {
 import { EMPTY, BULLET_N, BULLET_NW } from '../constants'
 import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../ChunkMap'
 import {
-  applyReactions,
+  applyReactions, flushEndOfPass,
   applyCreature, applyFireRising, applyGasRising,
 } from './generic'
 import { updateBulletRising } from './projectiles'
+import { PASS_RISING } from '../reactionCompiler'
 
 // Named handlers for complex rising-phase particles
 type RisingHandler = (g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number) => void
@@ -77,7 +78,7 @@ export function risingPhysicsSystem(g: Uint8Array, cols: number, rows: number, c
 
         // ── Reactions (neighbor reactions, dissolve, spread, spawn — unified) ──
         if (flags & F_REACTIONS) {
-          if (applyReactions(g, x, y, p, cols, rows, c, rand)) continue
+          if (applyReactions(g, x, y, p, cols, rows, c, rand, PASS_RISING)) continue
         }
 
         // ── Fire-like rising movement (fire, blue fire) ──
@@ -115,4 +116,5 @@ export function risingPhysicsSystem(g: Uint8Array, cols: number, rows: number, c
       } // x
     } // cc
   } // y
+  flushEndOfPass(g)
 }

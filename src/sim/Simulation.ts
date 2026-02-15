@@ -6,6 +6,7 @@ import { createRNG } from './rng'
 import type { RNG } from './rng'
 import { risingPhysicsSystem } from './systems/rising'
 import { fallingPhysicsSystem } from './systems/falling'
+import { flushEndOfTick } from './systems/generic'
 import { isSpawnerType } from './orchestration'
 
 // Binary format v4 constants
@@ -39,6 +40,7 @@ export class Simulation {
     this.chunkMap.flipTick()
     risingPhysicsSystem(this.grid, this.cols, this.rows, this.chunkMap, this.rand)
     fallingPhysicsSystem(this.grid, this.cols, this.rows, this.chunkMap, this.rand)
+    flushEndOfTick(this.grid)
     this.chunkMap.updateActivity(this.grid, isSpawnerType)
     this.simStep++
   }

@@ -26,6 +26,16 @@ export const OP_SPAWN = 1
 export const OP_SWAP = 2
 export const OP_NOOP = 3
 
+// Pass constants — which physics pass a rule fires in
+export const PASS_EITHER = 0
+export const PASS_RISING = 1
+export const PASS_FALLING = 2
+
+// Commit constants — when grid writes are applied
+export const COMMIT_IMMEDIATE = 0
+export const COMMIT_END_OF_PASS = 1
+export const COMMIT_END_OF_TICK = 2
+
 // ---------------------------------------------------------------------------
 // Compiled types
 // ---------------------------------------------------------------------------
@@ -65,6 +75,12 @@ export interface CompiledRule {
 
   // -- Outcomes --
   outcomes: CompiledOutcome[]
+
+  // -- Scheduling --
+  /** When to apply grid writes: COMMIT_IMMEDIATE | COMMIT_END_OF_PASS | COMMIT_END_OF_TICK */
+  commit: number
+  /** Which physics pass this rule fires in: PASS_EITHER | PASS_RISING | PASS_FALLING */
+  pass: number
 }
 
 /** Sentinel value for "no match" in the match table. */
@@ -84,7 +100,9 @@ function isStaticPredicate(pred: TargetPredicate): boolean {
     case 'any':
     case 'idIn':
     case 'hasTag':
-    case 'propGE':
+    case 'propEqual':
+    case 'propGreater':
+    case 'propLess':
       return true
     case 'stateGE':
       return false  // requires per-cell state at runtime
@@ -112,10 +130,22 @@ function evalStaticPredicate(pred: TargetPredicate, materialId: number): boolean
       return pred.ps.every(p => evalStaticPredicate(p, materialId))
     case 'or':
       return pred.ps.some(p => evalStaticPredicate(p, materialId))
-    case 'propGE': {
+    case 'propEqual': {
       const arch = ARCHETYPES[materialId]
       if (!arch) return false
-      if (pred.prop === 'density') return (arch.density ?? 0) >= pred.value
+      if (pred.prop === 'density') return (arch.density ?? 0) === pred.value
+      return false
+    }
+    case 'propGreater': {
+      const arch = ARCHETYPES[materialId]
+      if (!arch) return false
+      if (pred.prop === 'density') return (arch.density ?? 0) > pred.value
+      return false
+    }
+    case 'propLess': {
+      const arch = ARCHETYPES[materialId]
+      if (!arch) return false
+      if (pred.prop === 'density') return (arch.density ?? 0) < pred.value
       return false
     }
     case 'stateGE':
@@ -231,6 +261,12 @@ function compileRule(rule: Rule): CompiledRule {
     matchTable,
     matchTableLen: MAX_TYPE,
     outcomes,
+    commit: rule.commit === 'endOfPass' ? COMMIT_END_OF_PASS
+      : rule.commit === 'endOfTick' ? COMMIT_END_OF_TICK
+        : COMMIT_IMMEDIATE,
+    pass: rule.pass === 'rising' ? PASS_RISING
+      : rule.pass === 'falling' ? PASS_FALLING
+        : PASS_EITHER,
   }
 }
 

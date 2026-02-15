@@ -9,11 +9,12 @@ import { EMPTY } from '../constants'
 import { applyGravity } from './gravity'
 import { applyLiquid, applyLiquidMix } from './liquid'
 import {
-  applyReactions,
+  applyReactions, flushEndOfPass,
   applyCreature, applyRandomWalk,
   checkContactExplosion, checkDetonation,
 } from './generic'
 import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../ChunkMap'
+import { PASS_FALLING } from '../reactionCompiler'
 
 // Named handler dispatch table — for truly complex behaviors that can't be data-driven yet
 type ParticleHandler = (g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number) => void
@@ -107,7 +108,7 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
 
         // ── Reactions (neighbor reactions, dissolve, spread, spawn — unified) ──
         if (flags & F_REACTIONS) {
-          if (applyReactions(g, x, y, p, cols, rows, c, rand)) continue
+          if (applyReactions(g, x, y, p, cols, rows, c, rand, PASS_FALLING)) continue
         }
 
         // ── Wake radius for spawner-type particles (tap, anthill, hive, nest, vent) ──
@@ -145,4 +146,5 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
       } // xi (cells within chunk)
     } // cc (chunk columns)
   } // y
+  flushEndOfPass(g)
 }

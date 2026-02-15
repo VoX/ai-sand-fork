@@ -33,7 +33,7 @@ export type Sampler =
   | { kind: 'self' }
 
 /** Boolean predicate language for matching neighbor cells.
- *  "Static" predicates (any, idIn, hasTag, propGE, not/and/or of statics)
+ *  "Static" predicates (any, idIn, hasTag, propEqual/propGreater/propLess, not/and/or of statics)
  *  compile into O(1) lookup tables at load time — no runtime cost.
  *  "Dynamic" predicates (stateGE) require per-cell evaluation at runtime. */
 export type TargetPredicate =
@@ -43,7 +43,9 @@ export type TargetPredicate =
   | { kind: 'not'; p: TargetPredicate }
   | { kind: 'and'; ps: TargetPredicate[] }
   | { kind: 'or'; ps: TargetPredicate[] }
-  | { kind: 'propGE'; prop: 'density'; value: number }
+  | { kind: 'propEqual'; prop: 'density'; value: number }
+  | { kind: 'propGreater'; prop: 'density'; value: number }
+  | { kind: 'propLess'; prop: 'density'; value: number }
   | { kind: 'stateGE'; key: string; value: number }
 
 /** A matcher pairs a predicate with an outcome index. First-match-wins ordering. */
@@ -64,6 +66,10 @@ export interface Rule {
   matchers: Matcher[]
   /** Effects referenced by matcher outcomeId. */
   outcomes: Effect[]
+  /** When to apply grid writes. Default: "immediate". */
+  commit?: 'immediate' | 'endOfPass' | 'endOfTick'
+  /** Which physics pass this rule fires in. Default: "either" (both passes). */
+  pass?: 'rising' | 'falling' | 'either'
 }
 
 // ---------------------------------------------------------------------------
