@@ -92,7 +92,7 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
 
           // Named handlers with additional data-driven behaviors
           // (e.g., seed has both handler AND reactions — handler runs first, then reactions below)
-          if (!arch.reactions) continue
+          if (!arch.rules) continue
         }
 
         // ── Detonation check (fuse particles like LIT_GUNPOWDER) ──
@@ -107,7 +107,7 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
 
         // ── Reactions (neighbor reactions, dissolve, spread, spawn — unified) ──
         if (flags & F_REACTIONS) {
-          if (applyReactions(g, x, y, p, cols, rows, c, rand, arch)) continue
+          if (applyReactions(g, x, y, p, cols, rows, c, rand)) continue
         }
 
         // ── Wake radius for spawner-type particles (tap, anthill, hive, nest, vent) ──

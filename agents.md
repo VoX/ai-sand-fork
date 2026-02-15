@@ -26,7 +26,8 @@ The game uses a **chunked grid engine** with **data-driven archetypes** and **co
 - `/src/sim/ChunkMap.ts` - Chunk subdivision (32×32), activity tracking, sleep/wake, dirty-rect management, checksum-based change detection, per-cell stamp grid for double-move prevention
 - `/src/sim/rng.ts` - Mulberry32 fast seedable PRNG with `getState()`/`setState()` for save/load (returns [0,1) like Math.random)
 - `/src/sim/constants.ts` - Particle type IDs (0–68), color tables (`COLORS_U32`, animated palettes), `Material` type, `MATERIAL_TO_ID`, world dimensions, explosion radius constants
-- `/src/sim/archetypes.ts` - **Central behavior hub**: `ArchetypeDef` interface with 2 data sub-interfaces (`ReactionRule`, `CreatureDef`), `ReactionEffect` type, `radiusOffsets()` helper, `ARCHETYPES[]` table (indexed by particle type ID), `ARCHETYPE_FLAGS` bitmask array, 14 flag bit constants
+- `/src/sim/archetypes.ts` - **Central behavior hub**: `ArchetypeDef` interface with 2 data sub-interfaces (`ReactionRule`, `CreatureDef`), legacy `ReactionEffect` type, new `Effect`/`Sampler`/`Filter`/`Rule` types for flexible authoring, `radiusOffsets()` helper, `ARCHETYPES[]` table (indexed by particle type ID), `ARCHETYPE_FLAGS` bitmask array, 14 flag bit constants
+- `/src/sim/reactionCompiler.ts` - **Reaction compiler**: compiles `ReactionRule[]` (legacy) and `Rule[]` (new) into dense `CompiledRule` structures with Uint16Array match tables and pre-expanded Int16Array offsets. Runs at module load time. Exports `COMPILED_REACTIONS[]` indexed by material ID
 - `/src/sim/orchestration.ts` - Grid utilities (`queryCell`, `simSetCell`, `paintCircle`, `createIdx`), spawner type detection (`isSpawnerType`)
 - `/src/sim/systems/generic.ts` - **8 composable generic systems**: `applyReactions`, `applyCreature`, `applyVolatile`, `applyRandomWalk`, `checkContactExplosion`, `checkDetonation`, `applyFireRising`, `applyGasRising`
 - `/src/sim/systems/falling.ts` - Falling pass (bottom-to-top, chunk-aware): named handler dispatch + composable system pipeline for all falling-phase particles
@@ -188,8 +189,16 @@ Each particle type is defined as an `ArchetypeDef` in `archetypes.ts`. The syste
 - `blastRadius?: number` — outward push radius for detonation blast wave
 - `detonationChance?: number` — chance per tick to detonate (for fuse particles like LIT_GUNPOWDER). Applied by `checkDetonation()`
 
-### Reactions (`reactions?: ReactionRule[]`)
+### Reactions (`reactions?: ReactionRule[]` or `rules?: Rule[]`)
 Unified system for neighbor reactions, spreading, dissolving, growth, and spawning. Applied by `applyReactions()`.
+
+All reaction rules (both legacy `ReactionRule[]` and new `Rule[]`) are **compiled at module load** into dense `CompiledRule` structures by `reactionCompiler.ts`. The runtime hot loop uses:
+- **Uint16Array match tables** — O(1) neighborMaterialId → outcomeIndex lookup (replaces Record property access)
+- **Pre-expanded Int16Array offsets** — no array destructuring in the hot loop
+- **Pre-normalized outcomes** — no variable-length tuple normalization at runtime
+- **Opcode-based outcomes** — extensible via new opcodes (OP_TRANSFORM, OP_SPAWN, OP_SWAP, OP_NOOP)
+
+#### Legacy format (compact, used by all existing archetypes)
 ```typescript
 type ReactionEffect =
   | number                           // selfInto (neighbor unchanged, 100%)
@@ -209,12 +218,81 @@ interface ReactionRule {
 // Helper: generate offsets for a radius, optionally biased upward
 function radiusOffsets(r: number, yBias?: number): [number, number][]
 ```
+
+#### New flexible format (Sampler + Matcher + Effect model)
+```typescript
+type Effect =
+  | { kind: 'transform'; selfInto?: number; neighborInto?: number; selfChance?: number; neighborChance?: number }
+  | { kind: 'spawn'; at: 'self' | 'neighbor' | 'offset'; into: number; chance?: number; offset?: [number, number] }
+  | { kind: 'swap' }
+  | { kind: 'noop' }
+
+type Sampler =
+  | { kind: 'radius'; r: number; yBias?: number; samples?: number }
+  | { kind: 'offsets'; offsets: [number, number][]; samples?: number }
+  | { kind: 'self' }
+
+// Boolean predicate language — static predicates compile to O(1) lookup tables
+type TargetPredicate =
+  | { kind: 'any' }
+  | { kind: 'idIn'; ids: number[] }
+  | { kind: 'hasTag'; mask: number }             // match materials with ALL tag bits set
+  | { kind: 'not'; p: TargetPredicate }
+  | { kind: 'and'; ps: TargetPredicate[] }
+  | { kind: 'or'; ps: TargetPredicate[] }
+  | { kind: 'propGE'; prop: 'density'; value: number }  // material property check
+  | { kind: 'stateGE'; key: string; value: number }     // per-cell state (dynamic, future)
+
+interface Matcher {
+  when: TargetPredicate
+  outcomeId: number           // index into outcomes[]
+}
+
+interface Rule {
+  chance: number
+  limit?: number
+  sampler: Sampler
+  matchers: Matcher[]         // first-match-wins ordering
+  outcomes: Effect[]
+}
+```
+
+#### Material tags
+Materials have a `tags` bitmask for predicate-based filtering. Tags are defined in `archetypes.ts` and assigned via `assignTag()` or inline `tags` on the archetype. Using `hasTag` predicates, rules can target categories of materials without naming each one:
+```typescript
+// Tag constants (bitfields)
+TAG_HEAT, TAG_FLAMMABLE, TAG_CREATURE, TAG_ORGANIC, TAG_SOIL,
+TAG_WET, TAG_MINERAL, TAG_LIQUID, TAG_GAS, TAG_EXPLOSIVE
+
+// Example: fire spreading to all flammable materials via tag
+rules: [{
+  chance: 1.0,
+  sampler: { kind: 'radius', r: 1, samples: 2 },
+  matchers: [
+    { when: { kind: 'hasTag', mask: TAG_FLAMMABLE }, outcomeId: 0 },
+  ],
+  outcomes: [
+    { kind: 'transform', neighborInto: FIRE, neighborChance: 0.5 },
+  ],
+}]
+```
+
+Static predicates (`any`, `idIn`, `hasTag`, `propGE`, `not`/`and`/`or` of statics) are evaluated once per material at compile time and baked into the Uint16Array match table — zero runtime cost. Dynamic predicates (`stateGE`) require per-cell evaluation (infrastructure ready, per-cell state not yet implemented).
+
+#### Behavior modes
 - **selfInto != -1** (reaction-like): stops after first match, one reaction per tick. Self transformed → stops pipeline.
 - **selfInto == -1** (spread-like): continues through all samples, only changes neighbors. Respects `limit` if set.
 - **Spawning** is expressed as a spread-like reaction targeting `EMPTY`: `{ [EMPTY]: [-1, SPAWN_TYPE] }`. Spawner particles set `isSpawner: true` for chunk sleep prevention.
 - **offsets**: when omitted, defaults to all 8 neighbors at radius 1. Use `radiusOffsets(r)` for larger radii. Use `radiusOffsets(r, yBias)` to bias sampling upward (duplicates upper offsets). Custom offset lists allow precise spawn positions (e.g., `[[0, 1]]` for directly below).
 - **limit**: caps spread reactions per rule per tick. Useful for "spawn at most N" behaviors.
 Used by: gunpowder (ignites near heat), water (extinguishes fire), fire (spreads to flammable), acid (dissolves organics), lava, mercury, mold, wax, plant/algae (growth via biased offsets), tap/vent/cloud/anthill/hive/nest (spawning via EMPTY reactions).
+
+#### Adding new effect kinds
+To add a new effect (e.g. `emitEnergy`, `push`, `placePattern`):
+1. Add the new variant to the `Effect` union type in `archetypes.ts`
+2. Add a new `OP_*` opcode constant in `reactionCompiler.ts`
+3. Add the compilation mapping in `compileEffect()` in `reactionCompiler.ts`
+4. Add a `case OP_*` handler in the `switch` inside `applyReactions()` in `generic.ts`
 
 ### Creature AI (`creature?: CreatureDef`)
 Full data-driven creature behavior. Applied by `applyCreature()`.
@@ -337,7 +415,7 @@ These 8 systems read behavior entirely from archetype data and require no per-ty
 
 | System | Flag | Data source | Description |
 |--------|------|-------------|-------------|
-| `applyReactions` | `F_REACTIONS` | `arch.reactions` | Unified neighbor reactions, spreading, dissolving, growth, and spawning |
+| `applyReactions` | `F_REACTIONS` | `COMPILED_REACTIONS[]` | Compiled reaction system: match tables, opcodes, pre-expanded offsets |
 | `applyCreature` | `F_CREATURE` | `arch.creature` | Full creature AI (movement, eating, hazards, reproduction) |
 | `applyVolatile` | `F_VOLATILE` | `arch.volatile` + `arch.decayProducts` | Probabilistic decay/transform |
 | `applyRandomWalk` | `F_RANDOM_WALK` | `arch.randomWalk` | Random 8-directional movement |

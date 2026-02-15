@@ -77,7 +77,7 @@ export function risingPhysicsSystem(g: Uint8Array, cols: number, rows: number, c
 
         // ── Reactions (neighbor reactions, dissolve, spread, spawn — unified) ──
         if (flags & F_REACTIONS) {
-          if (applyReactions(g, x, y, p, cols, rows, c, rand, arch)) continue
+          if (applyReactions(g, x, y, p, cols, rows, c, rand)) continue
         }
 
         // ── Fire-like rising movement (fire, blue fire) ──

@@ -1,71 +1,128 @@
-import { ARCHETYPES, ARCHETYPE_FLAGS, F_IMMOBILE, radiusOffsets } from '../archetypes'
-import type { ArchetypeDef, ReactionEffect } from '../archetypes'
+import { ARCHETYPES, ARCHETYPE_FLAGS, F_IMMOBILE } from '../archetypes'
+import type { ArchetypeDef } from '../archetypes'
 import { EMPTY, FIRE, WATER } from '../constants'
-
-// Default offset pool when rule.offsets is not specified (radius-1 neighbors)
-const DEFAULT_OFFSETS = radiusOffsets(1)
+import { COMPILED_REACTIONS, NO_MATCH, OP_TRANSFORM, OP_SPAWN, OP_SWAP } from '../reactionCompiler'
 
 // ---------------------------------------------------------------------------
-// Unified Reaction System — neighbor reactions, spreading, dissolving, spawning
+// Unified Reaction System — compiled hot loop
 // ---------------------------------------------------------------------------
 
 /**
- * Process all reaction rules for a particle. Returns true if self was
+ * Process all compiled reaction rules for a particle. Returns true if self was
  * transformed to a different type (caller should stop pipeline).
+ *
+ * Uses pre-compiled match tables (Uint16Array) for O(1) neighbor material
+ * lookup and pre-normalized outcomes, eliminating runtime tuple normalization
+ * and Record property access from the hot loop.
  */
 export function applyReactions(
   g: Uint8Array, x: number, y: number, p: number,
-  cols: number, rows: number, type: number, rand: () => number,
-  arch: ArchetypeDef
+  cols: number, rows: number, type: number, rand: () => number
 ): boolean {
-  const rules = arch.reactions!
+  const rules = COMPILED_REACTIONS[type]
+  if (!rules) return false
+
   for (let ri = 0; ri < rules.length; ri++) {
     const rule = rules[ri]
     if (rand() > rule.chance) continue
-    const offsets = rule.offsets ?? DEFAULT_OFFSETS
-    const limit = rule.limit ?? Infinity
+
+    const offsets = rule.offsets
+    const offsetCount = rule.offsetCount
+    const matchTable = rule.matchTable
+    const matchTableLen = rule.matchTableLen
+    const outcomes = rule.outcomes
+    const limit = rule.limit
     let hits = 0
 
-    for (let i = 0; i < rule.samples; i++) {
-      const oi = Math.floor(rand() * offsets.length)
-      const [dx, dy] = offsets[oi]
+    for (let i = 0; i < rule.sampleCount; i++) {
+      // Pick a random offset pair
+      const oi = ((rand() * offsetCount) | 0) * 2
+      const dx = offsets[oi], dy = offsets[oi + 1]
       const nx = x + dx, ny = y + dy
       if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) continue
       const ni = ny * cols + nx
       const nc = g[ni]
-      const effect: ReactionEffect | undefined = rule.targets[nc]
-      if (effect === undefined) continue
 
-      // Normalize the variable-length tuple
-      let selfInto: number, neighborInto: number, nChance: number, sChance: number
-      if (typeof effect === 'number') {
-        selfInto = effect; neighborInto = -1; nChance = 1; sChance = 1
-      } else if (effect.length === 2) {
-        selfInto = effect[0]; neighborInto = effect[1]; nChance = 1; sChance = 1
-      } else if (effect.length === 3) {
-        selfInto = effect[0]; neighborInto = effect[1]; nChance = effect[2]; sChance = 1
-      } else {
-        selfInto = effect[0]; neighborInto = effect[1]; nChance = effect[2]; sChance = effect[3]
-      }
+      // O(1) match table lookup (vs Record property access)
+      const outcomeIdx = nc < matchTableLen ? matchTable[nc] : NO_MATCH
+      if (outcomeIdx === NO_MATCH) continue
 
-      if (selfInto !== -1) {
-        // Reaction-like: stop after first match (one reaction per tick)
-        if (neighborInto !== -1 && rand() < nChance) {
-          g[ni] = neighborInto
+      // Fetch pre-normalized outcome (no tuple length branching)
+      const outcome = outcomes[outcomeIdx]
+
+      switch (outcome.op) {
+        case OP_TRANSFORM: {
+          const selfInto = outcome.a
+          const neighborInto = outcome.b
+
+          if (selfInto !== -1) {
+            // Reaction-like: stop sampling after first match
+            if (neighborInto !== -1 && rand() < outcome.c) {
+              g[ni] = neighborInto
+            }
+            if (rand() < outcome.d) {
+              g[p] = selfInto
+              return selfInto !== type
+            }
+            // sChance failed — still stop this rule's sample loop
+            i = rule.sampleCount // break inner loop
+            break
+          }
+
+          // Spread-like (selfInto === -1): only change neighbor, continue sampling
+          if (neighborInto !== -1 && rand() < outcome.c) {
+            g[ni] = neighborInto
+            if (++hits >= limit) {
+              i = rule.sampleCount // break inner loop
+            }
+          }
+          break
         }
-        if (rand() < sChance) {
-          g[p] = selfInto
-          return selfInto !== type  // true only if type actually changed
-        }
-        // sChance failed — still stop this rule's loop (one reaction per tick)
-        break
-      }
 
-      // Spread-like (selfInto === -1): only change neighbor, continue sampling
-      if (neighborInto !== -1 && rand() < nChance) {
-        g[ni] = neighborInto
-        hits++
-        if (hits >= limit) break
+        case OP_SPAWN: {
+          const spawnInto = outcome.a
+          const spawnAt = outcome.b   // 0=self, 1=neighbor, 2=offset
+          const spawnChance = outcome.c
+
+          if (rand() >= spawnChance) break
+
+          let si: number
+          if (spawnAt === 1) {
+            // Spawn at neighbor position
+            si = ni
+          } else if (spawnAt === 0) {
+            // Spawn at self position
+            si = p
+          } else {
+            // Spawn at fixed offset from self
+            const packed = outcome.d
+            const sdx = (packed & 0xFF) << 24 >> 24  // sign-extend
+            const sdy = (packed >> 8) << 24 >> 24
+            const sx = x + sdx, sy = y + sdy
+            if (sx < 0 || sx >= cols || sy < 0 || sy >= rows) break
+            si = sy * cols + sx
+          }
+
+          if (g[si] === EMPTY) {
+            g[si] = spawnInto
+            if (++hits >= limit) {
+              i = rule.sampleCount // break inner loop
+            }
+          }
+          break
+        }
+
+        case OP_SWAP: {
+          if (rand() < outcome.c) {
+            const temp = g[p]
+            g[p] = g[ni]
+            g[ni] = temp
+            return g[p] !== type
+          }
+          break
+        }
+
+        // OP_NOOP: do nothing
       }
     }
   }
