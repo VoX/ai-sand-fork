@@ -400,12 +400,6 @@ g[p] = FIRE  // creature dies in fire
 g[ni] = PARTICLE_TYPE; g[p] = SLIME  // alien leaves slime
 ```
 
-## Placement Rules
-
-Normal particle placement only writes into EMPTY cells (non-empty cells are never overwritten). Special cases:
-- **Gun:** Single-pixel placement that can overwrite non-empty cells, except Stone, Tap, Gun, and Black Hole
-- **Erase:** Overwrites any cell regardless of type
-
 **After making changes**, always run the relevant checks to catch errors early:
 1. `npx tsc -b` — typecheck first (catches most issues quickly)
 2. `npx eslint .` — lint for style/unused-import violations
