@@ -1,15 +1,9 @@
-import {
-  ARCHETYPES, ARCHETYPE_FLAGS,
-  F_IMMOBILE,
-  F_CREATURE, F_SPAWNER, F_REACTIONS,
-} from '../archetypes'
 import { EMPTY } from '../constants'
 import {
-  applyReactions, flushEndOfPass,
-  applyCreature,
-} from './generic'
+  applyRules, flushEndOfPass,
+} from './rules'
 import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../ChunkMap'
-import { PASS_FALLING } from '../reactionCompiler'
+import { COMPILED_RULES_FALLING } from '../rulesCompiler'
 
 export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, chunkMap: ChunkMap, rand: () => number): void {
   const { chunkCols, active, stampGrid, tickParity } = chunkMap
@@ -31,28 +25,7 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
         if (stampGrid[p] === tickParity) continue
         stampGrid[p] = tickParity
 
-        const flags = ARCHETYPE_FLAGS[c]
-        const arch = ARCHETYPES[c]
-        if (!arch) continue
-
-        // ── Reactions (neighbor reactions, dissolve, spread, spawn — unified) ──
-        if (flags & F_REACTIONS) {
-          if (applyReactions(g, x, y, p, cols, rows, c, rand, PASS_FALLING, stampGrid, tickParity)) continue
-        }
-
-        // ── Wake radius for spawner-type particles (tap, anthill, hive, nest, vent) ──
-        if (flags & F_SPAWNER) {
-          chunkMap.wakeRadius(x, y, 2)
-        }
-
-        // ── Creature AI ──
-        if ((flags & F_CREATURE) && arch.creature && arch.creature.pass === 'falling') {
-          applyCreature(g, x, y, p, c, cols, rows, rand)
-          continue
-        }
-
-        // ── Immobile particles stop here ──
-        if (flags & F_IMMOBILE) continue
+        applyRules(g, x, y, p, cols, rows, c, rand, COMPILED_RULES_FALLING, stampGrid, tickParity)
       } // xi (cells within chunk)
     } // cc (chunk columns)
   } // y

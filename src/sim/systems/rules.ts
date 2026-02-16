@@ -1,9 +1,10 @@
 import { ARCHETYPES } from '../archetypes'
-import { EMPTY, WATER, DENSITY_SWAP_RATE } from '../constants'
+import { DENSITY_SWAP_RATE } from '../constants'
 import {
-  COMPILED_REACTIONS, NO_MATCH, OP_TRANSFORM, OP_SWAP, OP_DENSITY_SWAP, OP_STOP, OP_DIRECTION_SWAP,
-  PASS_EITHER, COMMIT_IMMEDIATE, COMMIT_END_OF_PASS,
-} from '../reactionCompiler'
+  NO_MATCH, OP_TRANSFORM, OP_SWAP, OP_DENSITY_SWAP, OP_STOP, OP_DIRECTION_SWAP,
+  COMMIT_IMMEDIATE, COMMIT_END_OF_PASS,
+  type CompiledRule,
+} from '../rulesCompiler'
 
 // ---------------------------------------------------------------------------
 // Deferred effect queues — for endOfPass / endOfTick commit modes
@@ -27,31 +28,28 @@ export function flushEndOfTick(g: Uint8Array): void {
 }
 
 // ---------------------------------------------------------------------------
-// Unified Reaction System — compiled hot loop
+// Unified Rule System — compiled hot loop
 // ---------------------------------------------------------------------------
 
 /**
- * Process all compiled reaction rules for a particle. Returns true if self was
+ * Process all compiled rules for a particle. Returns true if self was
  * transformed to a different type (caller should stop pipeline).
  *
  * Uses pre-compiled match tables (Uint16Array) for O(1) neighbor material
  * lookup and pre-normalized outcomes, eliminating runtime tuple normalization
  * and Record property access from the hot loop.
  */
-export function applyReactions(
+export function applyRules(
   g: Uint8Array, x: number, y: number, p: number,
   cols: number, rows: number, type: number, rand: () => number,
-  passId: number,
+  compiledRules: (CompiledRule[] | null)[],
   stampGrid?: Uint8Array, tickParity?: number
 ): boolean {
-  const rules = COMPILED_REACTIONS[type]
+  const rules = compiledRules[type]
   if (!rules) return false
 
   for (let ri = 0; ri < rules.length; ri++) {
     const rule = rules[ri]
-
-    // Pass filter — skip rules that don't match the current physics pass
-    if (rule.pass !== PASS_EITHER && rule.pass !== passId) continue
 
     if (rand() > rule.chance) continue
 
@@ -104,7 +102,7 @@ export function applyReactions(
           const neighborInto = outcome.b
 
           if (selfInto !== -1) {
-            // Reaction-like: stop sampling after first match
+            // Self-transforming: stop sampling after first match
             if (deferred) {
               if (neighborInto !== -1 && rand() < outcome.c) {
                 queue!.push(ni, neighborInto)
@@ -122,7 +120,7 @@ export function applyReactions(
                 return selfInto !== type
               }
             }
-            // Stop this rule's sample loop (reaction-like always stops after first match)
+            // Stop this rule's sample loop (self-transforming always stops after first match)
             break sampleLoop
           }
 
@@ -232,153 +230,3 @@ export function applyReactions(
   return false
 }
 
-// ---------------------------------------------------------------------------
-// Generic Creature System — data-driven creature AI
-// ---------------------------------------------------------------------------
-
-export function applyCreature(
-  g: Uint8Array, x: number, y: number, p: number, type: number,
-  cols: number, rows: number, rand: () => number
-): void {
-  const arch = ARCHETYPES[type]!
-  const def = arch.creature!
-
-  // Idle check
-  if (rand() < def.idleChance) return
-
-  // Swimming creatures must be adjacent to water
-  if (def.movement === 'swimming') {
-    let inWater = false
-    if (y < rows - 1 && g[(y + 1) * cols + x] === WATER) inWater = true
-    else if (y > 0 && g[(y - 1) * cols + x] === WATER) inWater = true
-    else if (x > 0 && g[y * cols + x - 1] === WATER) inWater = true
-    else if (x < cols - 1 && g[y * cols + x + 1] === WATER) inWater = true
-    if (!inWater) { g[p] = EMPTY; return }
-  }
-
-  // Trail emission
-  if (def.trail) {
-    const [trailType, trailChance] = def.trail
-    if (rand() < trailChance) {
-      const tx = x + Math.floor(rand() * 3) - 1
-      const ty = y + Math.floor(rand() * 3) - 1
-      if (tx >= 0 && tx < cols && ty >= 0 && ty < rows && g[ty * cols + tx] === EMPTY) {
-        g[ty * cols + tx] = trailType
-      }
-    }
-  }
-
-  // Hazard check
-  if (def.hazards) {
-    for (let i = 0; i < 2; i++) {
-      const hx = x + Math.floor(rand() * 3) - 1
-      const hy = y + Math.floor(rand() * 3) - 1
-      if (hx < 0 || hx >= cols || hy < 0 || hy >= rows) continue
-      const hc = g[hy * cols + hx]
-      const deathResult = def.hazards[hc]
-      if (deathResult !== undefined) {
-        g[p] = deathResult
-        return
-      }
-    }
-  }
-
-  // Seek attracted types
-  let sdx = 0, sdy = 0
-  if (def.attractedTo && def.attractedTo.length > 0) {
-    for (let i = 0; i < 3; i++) {
-      const sx = Math.floor(rand() * 9) - 4
-      const sy = Math.floor(rand() * 9) - 4
-      const snx = x + sx, sny = y + sy
-      if (snx >= 0 && snx < cols && sny >= 0 && sny < rows) {
-        const sc = g[sny * cols + snx]
-        if (def.attractedTo.includes(sc)) {
-          sdx = Math.sign(sx)
-          sdy = Math.sign(sy)
-          break
-        }
-      }
-    }
-  }
-
-  // Calculate movement direction
-  let dx: number, dy: number
-  if (sdx !== 0 || sdy !== 0) {
-    dx = sdx; dy = sdy
-  } else {
-    switch (def.movement) {
-      case 'flying': {
-        const r1 = rand(), r2 = rand()
-        if (r1 < 0.5) { dy = -1; dx = r2 < 0.35 ? -1 : r2 < 0.7 ? 1 : 0 }
-        else if (r1 < 0.75) { dx = r2 < 0.5 ? -1 : 1; dy = r2 < 0.4 ? -1 : 0 }
-        else { dy = rand() < 0.3 ? 1 : -1; dx = rand() < 0.5 ? -1 : 1 }
-        break
-      }
-      case 'swimming':
-      case 'ground':
-      case 'burrowing': {
-        dx = Math.floor(rand() * 3) - 1
-        dy = rand() < (def.downBias ?? 0.5) ? 1 : Math.floor(rand() * 3) - 1
-        break
-      }
-      case 'floating': {
-        dx = Math.floor(rand() * 3) - 1
-        dy = rand() < (def.downBias ?? 0.4) ? -1 : Math.floor(rand() * 3) - 1
-        break
-      }
-      default:
-        dx = Math.floor(rand() * 3) - 1
-        dy = Math.floor(rand() * 3) - 1
-    }
-  }
-
-  if (dx === 0 && dy === 0) return
-
-  const nx = x + dx, ny = y + dy
-  if (nx < 0 || nx >= cols || ny < 0 || ny >= rows) return
-  const ni = ny * cols + nx
-  const nc = g[ni]
-
-  // Eat target
-  if (def.eats) {
-    const leaveBehind = def.eats[nc]
-    if (leaveBehind !== undefined) {
-      g[ni] = type
-      g[p] = rand() < 0.6 ? leaveBehind : EMPTY
-      // Reproduction near eaten food
-      if (def.reproduce) {
-        const [repChance] = def.reproduce
-        if (rand() < repChance) {
-          const bx = x + Math.floor(rand() * 3) - 1
-          const by = y + Math.floor(rand() * 3) - 1
-          if (bx >= 0 && bx < cols && by >= 0 && by < rows && g[by * cols + bx] === EMPTY) {
-            g[by * cols + bx] = type
-          }
-        }
-      }
-      return
-    }
-  }
-
-  // Reproduction near specific types (even without eating)
-  if (def.reproduce) {
-    const [repChance, nearType] = def.reproduce
-    if (nc === nearType && rand() < repChance) {
-      const bx = x + Math.floor(rand() * 3) - 1
-      const by = y + Math.floor(rand() * 3) - 1
-      if (bx >= 0 && bx < cols && by >= 0 && by < rows && g[by * cols + bx] === EMPTY) {
-        g[by * cols + bx] = type
-      }
-      return
-    }
-  }
-
-  // Move through traversable materials
-  if (def.canTraverse) {
-    if (def.canTraverse.includes(nc)) {
-      g[ni] = type
-      g[p] = nc === EMPTY ? EMPTY : nc
-      return
-    }
-  }
-}

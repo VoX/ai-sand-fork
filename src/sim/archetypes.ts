@@ -17,10 +17,10 @@ import {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Flexible reaction system — Sampler + Predicate + Matcher + Effect
+// Flexible rule system — Sampler + Predicate + Matcher + Effect
 // ---------------------------------------------------------------------------
 
-/** Discriminated union for reaction effects. Extensible via new 'kind' variants. */
+/** Discriminated union for rule effects. Extensible via new 'kind' variants. */
 export type Effect =
   | { kind: 'transform'; selfInto?: number; neighborInto?: number; selfChance?: number; neighborChance?: number }
   | { kind: 'swap'; chance?: number }
@@ -61,11 +61,11 @@ export interface Matcher {
   outcomeId: number
 }
 
-/** A flexible reaction rule using the Sampler + Matcher + Effect model. */
+/** A flexible rule using the Sampler + Matcher + Effect model. */
 export interface Rule {
   /** Chance per tick to attempt this rule (0-1), or { byProp: key } to read from self archetype. */
   chance: number | { byProp: keyof ArchetypeDef }
-  /** Max successful reactions before stopping. */
+  /** Max successful rule applications before stopping. */
   limit?: number
   /** Where to look for neighbor cells. */
   sampler: Sampler
@@ -79,30 +79,6 @@ export interface Rule {
   pass?: 'rising' | 'falling' | 'either'
   /** Stamp destination after swap to prevent double-move. Used by gravity rules. */
   stamp?: true
-}
-
-/** Creature behavior definition — data-driven AI. */
-export interface CreatureDef {
-  /** Which physics pass handles this creature: 'rising' for flyers, 'falling' for ground. */
-  pass: 'rising' | 'falling'
-  /** Chance per tick to skip movement entirely. */
-  idleChance: number
-  /** Movement style. */
-  movement: 'ground' | 'flying' | 'swimming' | 'burrowing' | 'floating'
-  /** Downward bias for ground creatures (0-1). */
-  downBias?: number
-  /** Types this creature can move through (swap with). */
-  canTraverse?: number[]
-  /** Types this creature can eat (replace with self, leave behind what). */
-  eats?: Record<number, number>  // targetType → leaveBehind
-  /** Hazards that kill this creature on contact. */
-  hazards?: Record<number, number>  // hazardType → deathResult
-  /** Types this creature is attracted to (seeks in scan radius). */
-  attractedTo?: number[]
-  /** Trail particle type to leave behind (chance-based). */
-  trail?: [number, number]  // [trailType, chance]
-  /** Reproduction: [chance, nearType] — reproduce when near certain types. */
-  reproduce?: [number, number]  // [chance, nearType (or -1 for any)]
 }
 
 export interface ArchetypeDef {
@@ -119,30 +95,17 @@ export interface ArchetypeDef {
   color: number              // ABGR uint32 color
   palette?: number           // Animated palette (0=static, 1=fire, 2=plasma, 3=lightning, 4=blue_fire)
 
-  // ── Reaction tags ──
+  // ── Rule tags ──
   immobile?: true
-  tags?: number              // Material tag bitmask for predicate-based reaction filtering
+  tags?: number              // Material tag bitmask for predicate-based rule filtering
 
-  // ── Reactions (unified neighbor/spread/dissolve/spawn) ──
+  // ── Rules (unified neighbor/spread/dissolve/spawn) ──
   rules?: Rule[]
-
-  // ── Creature ──
-  creature?: CreatureDef
 
   // ── Special handler (for truly unique complex behaviors) ──
   handler?: string            // Named handler for behaviors that can't be data-driven yet
   isSpawner?: true            // Mark as spawner (prevents chunk sleeping, used by orchestration)
 }
-
-// ---------------------------------------------------------------------------
-// Archetype flag bits (for ARCHETYPE_FLAGS bitmask)
-// ---------------------------------------------------------------------------
-
-export const F_IMMOBILE = 1 << 5
-export const F_SPAWNER = 1 << 7
-export const F_CREATURE = 1 << 8
-export const F_HANDLER = 1 << 9
-export const F_REACTIONS = 1 << 12
 
 // ---------------------------------------------------------------------------
 // Shared gravity rules — referenced by all gravity-having archetypes
@@ -294,7 +257,7 @@ export const MOVE_SKIP_RULE: Rule = {
 }
 
 // ---------------------------------------------------------------------------
-// Material tag constants — bitfields for predicate-based reaction filtering
+// Material tag constants — bitfields for predicate-based rule filtering
 // ---------------------------------------------------------------------------
 
 export const TAG_HEAT = 1 << 0   // Heat sources: fire, plasma, ember, lava, etc.
@@ -351,7 +314,7 @@ ARCHETYPES[WET_DIRT] = {
   color: COLORS_U32[WET_DIRT],
 }
 
-ARCHETYPES[FLUFF] = { gravity: 0.3, rules: [GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE], color: COLORS_U32[FLUFF] }
+ARCHETYPES[FLUFF] = { gravity: 0.3, density: 1, rules: [GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE], color: COLORS_U32[FLUFF] }
 
 ARCHETYPES[GUNPOWDER] = {
   gravity: 1.0, density: 4,
@@ -893,7 +856,7 @@ ARCHETYPES[LIGHTNING] = {
         { kind: 'transform', selfInto: EMPTY },                                    // 6: anything else → die
       ],
     },
-    // Water conduction: spread LIGHTNING to adjacent water (chain reaction)
+    // Water conduction: spread LIGHTNING to adjacent water (chain rule)
     {
       chance: 0.7,
       sampler: { kind: 'offsets', offsets: [[-1, 0], [1, 0], [0, 1], [-1, 1], [1, 1]], samples: 3 },
@@ -1043,7 +1006,7 @@ ARCHETYPES[NEST] = {
 ARCHETYPES[GUN] = {
   immobile: true, isSpawner: true,
   rules: [
-    // 92% no-fire gate: selfInto GUN (no-op) returns from applyReactions
+    // 92% no-fire gate: selfInto GUN (no-op) returns from applyRules
     // without stopping the caller pipeline, so spawner wake still runs
     {
       chance: 0.92, sampler: { kind: 'self' },
@@ -1243,138 +1206,370 @@ ARCHETYPES[VENT] = {
   color: COLORS_U32[VENT],
 }
 
-// ── Creatures ──
+// ── Creatures (fully data-driven via rules) ──
 
 ARCHETYPES[BUG] = {
-
-  creature: {
-    pass: 'falling', idleChance: 0.5,
-    movement: 'ground', downBias: 0.7,
-    canTraverse: [EMPTY, WATER],
-    eats: { [PLANT]: DIRT },
-    hazards: { [FIRE]: FIRE, [PLASMA]: FIRE, [LIGHTNING]: FIRE, [EMBER]: FIRE },
-  },
+  rules: [
+    {
+      chance: 0.5, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+      outcomes: [{ kind: 'stop' }], pass: 'falling'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
+      matchers: [{ when: { kind: 'idIn', ids: [FIRE, PLASMA, LIGHTNING, EMBER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: FIRE }], pass: 'falling'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [PLANT] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: DIRT, neighborInto: BUG }], pass: 'falling', stamp: true
+    },
+    {
+      chance: 0.7, sampler: { kind: 'offsets', offsets: [[-1, 1], [0, 1], [1, 1]], samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY, WATER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'falling', stamp: true
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY, WATER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'falling', stamp: true
+    },
+  ],
   color: COLORS_U32[BUG],
 }
 
 ARCHETYPES[ANT] = {
-
-  creature: {
-    pass: 'falling', idleChance: 0.5,
-    movement: 'burrowing', downBias: 0.7,
-    canTraverse: [EMPTY, WATER, DIRT, SAND, PLANT, FLOWER],
-    hazards: { [FIRE]: FIRE, [PLASMA]: FIRE, [LAVA]: FIRE, [ACID]: EMPTY },
-  },
+  rules: [
+    {
+      chance: 0.5, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+      outcomes: [{ kind: 'stop' }], pass: 'falling'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
+      matchers: [
+        { when: { kind: 'idIn', ids: [FIRE, PLASMA, LAVA] }, outcomeId: 0 },
+        { when: { kind: 'idIn', ids: [ACID] }, outcomeId: 1 },
+      ],
+      outcomes: [
+        { kind: 'transform', selfInto: FIRE },
+        { kind: 'transform', selfInto: EMPTY },
+      ], pass: 'falling'
+    },
+    {
+      chance: 0.7, sampler: { kind: 'offsets', offsets: [[-1, 1], [0, 1], [1, 1]], samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY, WATER, DIRT, SAND, PLANT, FLOWER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'falling', stamp: true
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY, WATER, DIRT, SAND, PLANT, FLOWER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'falling', stamp: true
+    },
+  ],
   color: COLORS_U32[ANT],
 }
 
 ARCHETYPES[BIRD] = {
-
-  creature: {
-    pass: 'rising', idleChance: 0.4,
-    movement: 'flying',
-    canTraverse: [EMPTY, FLUFF],
-    eats: { [ANT]: PLANT, [BUG]: PLANT, [BEE]: PLANT },
-    hazards: {
-      [FIRE]: FIRE, [PLASMA]: FIRE, [LIGHTNING]: FIRE, [EMBER]: FIRE,
-      [ALIEN]: EMPTY, [QUARK]: EMPTY,
+  rules: [
+    {
+      chance: 0.4, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+      outcomes: [{ kind: 'stop' }], pass: 'rising'
     },
-    trail: [FLUFF, 0.003],
-  },
+    {
+      chance: 0.003, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: FLUFF }], pass: 'rising'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
+      matchers: [
+        { when: { kind: 'idIn', ids: [FIRE, PLASMA, LIGHTNING, EMBER] }, outcomeId: 0 },
+        { when: { kind: 'idIn', ids: [ALIEN, QUARK] }, outcomeId: 1 },
+      ],
+      outcomes: [
+        { kind: 'transform', selfInto: FIRE },
+        { kind: 'transform', selfInto: EMPTY },
+      ], pass: 'rising'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [ANT, BUG, BEE] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: PLANT, neighborInto: BIRD }], pass: 'rising', stamp: true
+    },
+    {
+      chance: 0.75, sampler: { kind: 'offsets', offsets: [[-1, -1], [0, -1], [1, -1]], samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY, FLUFF] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'rising', stamp: true
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY, FLUFF] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'rising', stamp: true
+    },
+  ],
   color: COLORS_U32[BIRD],
 }
 
 ARCHETYPES[BEE] = {
-
-  creature: {
-    pass: 'rising', idleChance: 0.2,
-    movement: 'flying',
-    canTraverse: [EMPTY],
-    eats: { [FLOWER]: HONEY },
-    hazards: { [FIRE]: FIRE, [PLASMA]: FIRE, [LIGHTNING]: FIRE, [EMBER]: FIRE },
-    attractedTo: [PLANT, FLOWER],
-  },
+  rules: [
+    {
+      chance: 0.2, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+      outcomes: [{ kind: 'stop' }], pass: 'rising'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
+      matchers: [{ when: { kind: 'idIn', ids: [FIRE, PLASMA, LIGHTNING, EMBER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: FIRE }], pass: 'rising'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [FLOWER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: HONEY, neighborInto: BEE }], pass: 'rising', stamp: true
+    },
+    {
+      chance: 0.3, sampler: { kind: 'ring', rMin: 1, rMax: 4, samples: 3 },
+      matchers: [{ when: { kind: 'idIn', ids: [PLANT, FLOWER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'directionSwap', length: 1, destPred: { kind: 'idIn', ids: [EMPTY] } }],
+      pass: 'rising', stamp: true
+    },
+    {
+      chance: 0.75, sampler: { kind: 'offsets', offsets: [[-1, -1], [0, -1], [1, -1]], samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'rising', stamp: true
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'rising', stamp: true
+    },
+  ],
   color: COLORS_U32[BEE],
 }
 
 ARCHETYPES[FIREFLY] = {
-
-  creature: {
-    pass: 'rising', idleChance: 0.5,
-    movement: 'flying',
-    canTraverse: [EMPTY],
-    hazards: {
-      [FIRE]: FIRE, [PLASMA]: FIRE, [LAVA]: FIRE,
-      [WATER]: EMPTY, [ACID]: EMPTY, [BIRD]: EMPTY,
+  rules: [
+    {
+      chance: 0.5, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+      outcomes: [{ kind: 'stop' }], pass: 'rising'
     },
-    attractedTo: [FLOWER],
-    trail: [GLITTER, 0.15],
-    reproduce: [0.03, FLOWER],
-  },
+    {
+      chance: 0.15, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: GLITTER }], pass: 'rising'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
+      matchers: [
+        { when: { kind: 'idIn', ids: [FIRE, PLASMA, LAVA] }, outcomeId: 0 },
+        { when: { kind: 'idIn', ids: [WATER, ACID, BIRD] }, outcomeId: 1 },
+      ],
+      outcomes: [
+        { kind: 'transform', selfInto: FIRE },
+        { kind: 'transform', selfInto: EMPTY },
+      ], pass: 'rising'
+    },
+    {
+      chance: 0.01, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: FIREFLY }],
+      pass: 'rising', limit: 1
+    },
+    {
+      chance: 0.3, sampler: { kind: 'ring', rMin: 1, rMax: 4, samples: 3 },
+      matchers: [{ when: { kind: 'idIn', ids: [FLOWER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'directionSwap', length: 1, destPred: { kind: 'idIn', ids: [EMPTY] } }],
+      pass: 'rising', stamp: true
+    },
+    {
+      chance: 0.75, sampler: { kind: 'offsets', offsets: [[-1, -1], [0, -1], [1, -1]], samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'rising', stamp: true
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'rising', stamp: true
+    },
+  ],
   color: COLORS_U32[FIREFLY],
 }
 
 ARCHETYPES[ALIEN] = {
-
-  creature: {
-    pass: 'falling', idleChance: 0.4,
-    movement: 'ground', downBias: 0.3,
-    canTraverse: [EMPTY],
-    eats: {
-      [BUG]: SLIME, [ANT]: SLIME, [BIRD]: SLIME, [BEE]: SLIME,
-      [SLIME]: SLIME, [PLANT]: SLIME, [FLOWER]: SLIME,
+  rules: [
+    {
+      chance: 0.4, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+      outcomes: [{ kind: 'stop' }], pass: 'falling'
     },
-    hazards: { [FIRE]: SLIME, [PLASMA]: SLIME, [LIGHTNING]: SLIME },
-    trail: [SLIME, 0.1],
-  },
+    {
+      chance: 0.1, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: SLIME }], pass: 'falling'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
+      matchers: [{ when: { kind: 'idIn', ids: [FIRE, PLASMA, LIGHTNING] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: SLIME }], pass: 'falling'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [BUG, ANT, BIRD, BEE, SLIME, PLANT, FLOWER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: SLIME, neighborInto: ALIEN }], pass: 'falling', stamp: true
+    },
+    {
+      chance: 0.3, sampler: { kind: 'offsets', offsets: [[-1, 1], [0, 1], [1, 1]], samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'falling', stamp: true
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'falling', stamp: true
+    },
+  ],
   color: COLORS_U32[ALIEN],
 }
 
 ARCHETYPES[WORM] = {
-
-  creature: {
-    pass: 'falling', idleChance: 0.4,
-    movement: 'burrowing', downBias: 0.6,
-    canTraverse: [EMPTY, WATER, DIRT, SAND],
-    hazards: { [FIRE]: EMPTY, [LAVA]: EMPTY, [ACID]: EMPTY, [BIRD]: EMPTY },
-  },
+  rules: [
+    {
+      chance: 0.4, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+      outcomes: [{ kind: 'stop' }], pass: 'falling'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
+      matchers: [{ when: { kind: 'idIn', ids: [FIRE, LAVA, ACID, BIRD] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: EMPTY }], pass: 'falling'
+    },
+    {
+      chance: 0.6, sampler: { kind: 'offsets', offsets: [[-1, 1], [0, 1], [1, 1]], samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY, WATER, DIRT, SAND] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'falling', stamp: true
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY, WATER, DIRT, SAND] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'falling', stamp: true
+    },
+  ],
   color: COLORS_U32[WORM],
 }
 
 ARCHETYPES[FAIRY] = {
-
-  creature: {
-    pass: 'falling', idleChance: 0.3,
-    movement: 'floating', downBias: 0.4,
-    canTraverse: [EMPTY, WATER],
-    eats: { [DIRT]: FLOWER, [SAND]: FLOWER, [PLANT]: FLOWER, [WATER]: GLITTER },
-    hazards: { [FIRE]: GLITTER, [LAVA]: GLITTER, [PLASMA]: GLITTER, [STONE]: EMPTY },
-    trail: [GLITTER, 0.15],
-  },
+  rules: [
+    {
+      chance: 0.3, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+      outcomes: [{ kind: 'stop' }], pass: 'falling'
+    },
+    {
+      chance: 0.15, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: GLITTER }], pass: 'falling'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
+      matchers: [
+        { when: { kind: 'idIn', ids: [FIRE, LAVA, PLASMA] }, outcomeId: 0 },
+        { when: { kind: 'idIn', ids: [STONE] }, outcomeId: 1 },
+      ],
+      outcomes: [
+        { kind: 'transform', selfInto: GLITTER },
+        { kind: 'transform', selfInto: EMPTY },
+      ], pass: 'falling'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [
+        { when: { kind: 'idIn', ids: [DIRT, SAND, PLANT] }, outcomeId: 0 },
+        { when: { kind: 'idIn', ids: [WATER] }, outcomeId: 1 },
+      ],
+      outcomes: [
+        { kind: 'transform', selfInto: FLOWER, neighborInto: FAIRY },
+        { kind: 'transform', selfInto: GLITTER, neighborInto: FAIRY },
+      ], pass: 'falling', stamp: true
+    },
+    {
+      chance: 0.4, sampler: { kind: 'offsets', offsets: [[-1, -1], [0, -1], [1, -1]], samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY, WATER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'falling', stamp: true
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY, WATER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'falling', stamp: true
+    },
+  ],
   color: COLORS_U32[FAIRY],
 }
 
 ARCHETYPES[FISH] = {
-
-  creature: {
-    pass: 'falling', idleChance: 0.4,
-    movement: 'swimming', downBias: 0,
-    canTraverse: [WATER],
-    eats: { [BUG]: WATER, [ALGAE]: WATER, [WORM]: WATER },
-  },
+  rules: [
+    {
+      chance: 0.4, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+      outcomes: [{ kind: 'stop' }], pass: 'falling'
+    },
+    // Die if below isn't water/fish (approximates "die outside water")
+    {
+      chance: 1.0, sampler: { kind: 'offsets', offsets: [[0, 1]] },
+      matchers: [{ when: { kind: 'not', p: { kind: 'idIn', ids: [WATER, FISH] } }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: EMPTY }], pass: 'falling'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [BUG, ALGAE, WORM] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: WATER, neighborInto: FISH }], pass: 'falling', stamp: true
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [WATER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'falling', stamp: true
+    },
+  ],
   color: COLORS_U32[FISH],
 }
 
 ARCHETYPES[MOTH] = {
-
-  creature: {
-    pass: 'falling', idleChance: 0.3,
-    movement: 'floating', downBias: 0.4,
-    canTraverse: [EMPTY],
-    eats: { [PLANT]: PLANT, [FLOWER]: PLANT },
-    hazards: { [FIRE]: FIRE, [EMBER]: FIRE, [LAVA]: FIRE, [PLASMA]: FIRE },
-    attractedTo: [FIRE, EMBER, FIREFLY, LIGHTNING],
-  },
+  rules: [
+    {
+      chance: 0.3, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+      outcomes: [{ kind: 'stop' }], pass: 'falling'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
+      matchers: [{ when: { kind: 'idIn', ids: [FIRE, EMBER, LAVA, PLASMA] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: FIRE }], pass: 'falling'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [PLANT, FLOWER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: PLANT, neighborInto: MOTH }], pass: 'falling', stamp: true
+    },
+    {
+      chance: 0.3, sampler: { kind: 'ring', rMin: 1, rMax: 4, samples: 3 },
+      matchers: [{ when: { kind: 'idIn', ids: [FIRE, EMBER, FIREFLY, LIGHTNING] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'directionSwap', length: 1, destPred: { kind: 'idIn', ids: [EMPTY] } }],
+      pass: 'falling', stamp: true
+    },
+    {
+      chance: 0.4, sampler: { kind: 'offsets', offsets: [[-1, -1], [0, -1], [1, -1]], samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'falling', stamp: true
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }], pass: 'falling', stamp: true
+    },
+  ],
   color: COLORS_U32[MOTH],
 }
 
@@ -1931,27 +2126,10 @@ ARCHETYPES[GLASS_BOLT] = {
 }
 
 // ---------------------------------------------------------------------------
-// ARCHETYPE_FLAGS  -- precomputed bitmask array for fast dispatch
-// ---------------------------------------------------------------------------
-
-const MAX_TYPE = 81
-export const ARCHETYPE_FLAGS = new Uint32Array(MAX_TYPE)
-for (let i = 0; i < MAX_TYPE; i++) {
-  const a = ARCHETYPES[i]
-  if (!a) continue
-  let f = 0
-  if (a.immobile) f |= F_IMMOBILE
-  if (a.isSpawner) f |= F_SPAWNER
-  if (a.creature) f |= F_CREATURE
-  if (a.handler) f |= F_HANDLER
-  if (a.rules) f |= F_REACTIONS
-  ARCHETYPE_FLAGS[i] = f
-}
-
-// ---------------------------------------------------------------------------
 // MATERIAL_TAGS — precomputed tag bitmask per material type
 // ---------------------------------------------------------------------------
 
+const MAX_TYPE = 81
 export const MATERIAL_TAGS = new Uint32Array(MAX_TYPE)
 
 // Pick up inline tags from archetype definitions

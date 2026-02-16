@@ -1,14 +1,9 @@
-import {
-  ARCHETYPES, ARCHETYPE_FLAGS,
-  F_CREATURE, F_REACTIONS,
-} from '../archetypes'
 import { EMPTY } from '../constants'
 import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../ChunkMap'
 import {
-  applyReactions, flushEndOfPass,
-  applyCreature,
-} from './generic'
-import { PASS_RISING } from '../reactionCompiler'
+  applyRules, flushEndOfPass,
+} from './rules'
+import { COMPILED_RULES_RISING } from '../rulesCompiler'
 
 export function risingPhysicsSystem(g: Uint8Array, cols: number, rows: number, chunkMap: ChunkMap, rand: () => number): void {
   const { chunkCols, active, stampGrid, tickParity } = chunkMap
@@ -26,31 +21,12 @@ export function risingPhysicsSystem(g: Uint8Array, cols: number, rows: number, c
         const c = g[p]
         if (c === EMPTY) continue
 
-        const flags = ARCHETYPE_FLAGS[c]
-        const arch = ARCHETYPES[c]
-        if (!arch) continue
-
-        // Determine if this is a rising-phase particle
-        const isRisingCreature = !!(flags & F_CREATURE) && arch.creature?.pass === 'rising'
-
-        if (!isRisingCreature) continue
-
-        // Only stamp cells we actually handle in this pass
         if (stampGrid[p] === tickParity) continue
         stampGrid[p] = tickParity
 
-        // ── Data-driven rising creatures (bird, bee, firefly) ──
-        if (isRisingCreature) {
-          applyCreature(g, x, y, p, c, cols, rows, rand)
-          continue
-        }
-
-        // ── Reactions + movement (all rule-based: decay, spread, drift, rise, etc.) ──
-        if (flags & F_REACTIONS) {
-          applyReactions(g, x, y, p, cols, rows, c, rand, PASS_RISING, stampGrid, tickParity)
-          // Vanish rising particles at top edge (can't be expressed as a rule)
-          if (y === 0 && g[p] !== EMPTY) g[p] = EMPTY
-        }
+        applyRules(g, x, y, p, cols, rows, c, rand, COMPILED_RULES_RISING, stampGrid, tickParity)
+        // Vanish rising particles at top edge (can't be expressed as a rule)
+        if (y === 0 && g[p] !== EMPTY) g[p] = EMPTY
       } // x
     } // cc
   } // y

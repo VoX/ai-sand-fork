@@ -1,12 +1,12 @@
 // Orchestration — grid utilities and spawner type detection.
 
-import { ARCHETYPE_FLAGS, F_SPAWNER } from './archetypes'
+import { ARCHETYPES } from './archetypes'
 import { CHUNK_SHIFT } from './ChunkMap'
 import type { ChunkMap } from './ChunkMap'
 
-/** Check if a particle type ID has the F_SPAWNER flag. */
+/** Check if a particle type ID is a spawner. */
 export function isSpawnerType(typeId: number): boolean {
-  return typeId > 0 && (ARCHETYPE_FLAGS[typeId] & F_SPAWNER) !== 0
+  return typeId > 0 && (ARCHETYPES[typeId]?.isSpawner === true)
 }
 
 /** Create a grid-index closure for the given column count. */

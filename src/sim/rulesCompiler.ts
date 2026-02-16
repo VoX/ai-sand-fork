@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Reaction Compiler — compiles authoring-friendly reaction rules into dense,
+// Rules Compiler — compiles authoring-friendly rules into dense,
 // cache-friendly data structures for the runtime hot loop.
 //
 // Compilation pipeline:
@@ -54,7 +54,7 @@ export interface CompiledOutcome {
   destAllowed: Uint8Array | null
 }
 
-/** A fully compiled reaction rule, optimized for the runtime hot loop. */
+/** A fully compiled rule, optimized for the runtime hot loop. */
 export interface CompiledRule {
   /** Chance per tick to attempt this rule (0-1 float). */
   chance: number
@@ -76,7 +76,7 @@ export interface CompiledRule {
   groupCount: number
 
   // -- Matcher: material → outcome lookup --
-  /** Maps neighborMaterialId → outcomeIndex (NO_MATCH = no reaction).
+  /** Maps neighborMaterialId → outcomeIndex (NO_MATCH = no match).
    *  Built by evaluating static predicates against all material types at compile time. */
   matchTable: Uint16Array
   /** Length of the matchTable (for bounds checking). */
@@ -355,23 +355,27 @@ function compileRule(rule: Rule, selfId: number): CompiledRule {
 }
 
 // ---------------------------------------------------------------------------
-// Compile all reactions at module load time
+// Compile all rules at module load time
 // ---------------------------------------------------------------------------
 
-/** Compiled reaction rules indexed by material type ID. */
-export const COMPILED_REACTIONS: (CompiledRule[] | null)[] = new Array(MAX_TYPE).fill(null)
+/** Compiled rules for the rising pass (PASS_RISING + PASS_EITHER rules). */
+export const COMPILED_RULES_RISING: (CompiledRule[] | null)[] = new Array(MAX_TYPE).fill(null)
+/** Compiled rules for the falling pass (PASS_FALLING + PASS_EITHER rules). */
+export const COMPILED_RULES_FALLING: (CompiledRule[] | null)[] = new Array(MAX_TYPE).fill(null)
 
 for (let id = 0; id < MAX_TYPE; id++) {
   const arch = ARCHETYPES[id]
   if (!arch) continue
 
   if (arch.rules) {
-    const compiledRules: CompiledRule[] = []
+    const rising: CompiledRule[] = []
+    const falling: CompiledRule[] = []
     for (let i = 0; i < arch.rules.length; i++) {
-      compiledRules.push(compileRule(arch.rules[i], id))
+      const compiled = compileRule(arch.rules[i], id)
+      if (compiled.pass !== PASS_FALLING) rising.push(compiled)
+      if (compiled.pass !== PASS_RISING) falling.push(compiled)
     }
-    if (compiledRules.length > 0) {
-      COMPILED_REACTIONS[id] = compiledRules
-    }
+    if (rising.length > 0) COMPILED_RULES_RISING[id] = rising
+    if (falling.length > 0) COMPILED_RULES_FALLING[id] = falling
   }
 }
