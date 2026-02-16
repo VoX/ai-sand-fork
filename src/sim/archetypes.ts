@@ -102,8 +102,6 @@ export interface ArchetypeDef {
   // ── Rules (unified neighbor/spread/dissolve/spawn) ──
   rules?: Rule[]
 
-  // ── Special handler (for truly unique complex behaviors) ──
-  handler?: string            // Named handler for behaviors that can't be data-driven yet
   isSpawner?: true            // Mark as spawner (prevents chunk sleeping, used by orchestration)
 }
 
@@ -1111,9 +1109,9 @@ ARCHETYPES[STAR] = {
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', neighborInto: GLITTER, neighborChance: 0.4 }]
     },
-    // Life aura: transform materials at radius 3–15
+    // Life aura: transform materials at radius 15–30
     {
-      chance: 0.04, sampler: { kind: 'ring', rMin: 3, rMax: 15, samples: 1 },
+      chance: 0.04, sampler: { kind: 'ring', rMin: 15, rMax: 30, samples: 1 },
       matchers: [
         { when: { kind: 'idIn', ids: [PLANT] }, outcomeId: 0 },
         { when: { kind: 'idIn', ids: [WATER] }, outcomeId: 1 },
@@ -1142,7 +1140,7 @@ ARCHETYPES[STAR] = {
 }
 
 // Black hole: data-driven gravity pull via directionSwap rules.
-// Graduated gravity zones (high/medium/low) replace the old named handler.
+// Graduated gravity zones (high/medium/low) expressed as compiled rules.
 // Adjacent particles are consumed; further particles are pulled inward.
 const BH_PULLABLE: TargetPredicate = {
   kind: 'and', ps: [
@@ -1593,7 +1591,7 @@ ARCHETYPES[PLANT] = {
 }
 
 ARCHETYPES[SEED] = {
-  gravity: 1.0, density: 1,
+  gravity: 1.0, density: 3,
   rules: [
     {
       chance: 1.0, sampler: { kind: 'offsets', offsets: [[0, 1]] },

@@ -23,7 +23,7 @@ The game uses a **chunked grid engine** with **data-driven archetypes** and **co
 - `/src/sim/Simulation.ts` - **Headless simulation engine**: owns `grid`, `cols`, `rows`, `chunkMap`, `rand`, `simStep`, `initialSeed`. Contains `step()` (the physics pipeline), `save()`/`load()` (binary format v4), and `reset()`
 - `/src/sim/ChunkMap.ts` - Chunk subdivision (32x32), activity tracking, sleep/wake, dirty-rect management, checksum-based change detection, per-cell stamp grid for double-move prevention
 - `/src/sim/rng.ts` - Mulberry32 fast seedable PRNG with `getState()`/`setState()` for save/load (returns [0,1) like Math.random)
-- `/src/sim/constants.ts` - Particle type IDs (0-79), color tables (`COLORS_U32`, animated palettes), `Material` type, `MATERIAL_TO_ID`, world dimensions, physics constants
+- `/src/sim/constants.ts` - Particle type IDs (0-80), color tables (`COLORS_U32`, animated palettes), `Material` type, `MATERIAL_TO_ID`, world dimensions, physics constants
 - `/src/sim/archetypes.ts` - **Central behavior hub**: `ArchetypeDef` interface, `Effect`/`Sampler`/`TargetPredicate`/`Matcher`/`Rule` types for flexible rule authoring, shared rule constants (`GRAVITY_DOWN_RULE`, `GRAVITY_DIAG_RULE`, `LIQUID_LATERAL_RULE`, etc.), `ARCHETYPES[]` table (indexed by particle type ID), material tag constants and `MATERIAL_TAGS` array
 - `/src/sim/rulesCompiler.ts` - **Rules compiler**: compiles `Rule[]` into dense `CompiledRule` structures with Uint16Array match tables and pre-expanded Int16Array offsets. Runs at module load time. Exports `COMPILED_RULES_RISING` and `COMPILED_RULES_FALLING` indexed by material ID
 - `/src/sim/orchestration.ts` - Grid utilities (`queryCell`, `simSetCell`, `paintCircle`, `createIdx`), spawner type detection (`isSpawnerType`)
@@ -37,19 +37,21 @@ The game uses a **chunked grid engine** with **data-driven archetypes** and **co
 
 The `Simulation.step()` method runs:
 
-1. `chunkMap.flipTick()` — alternate tick parity for double-move prevention
+1. `chunkMap.flipTick()` — alternate tick parity for double-move prevention (rising pass)
 2. `risingPhysicsSystem(grid, cols, rows, chunkMap, rand)` — top-to-bottom, skips sleeping chunks
-3. `fallingPhysicsSystem(grid, cols, rows, chunkMap, rand)` — bottom-to-top, skips sleeping chunks
-4. `chunkMap.updateActivity(grid, isSpawnerType)` — recompute checksums, detect changes, manage sleep/wake
-5. `simStep++`
+3. `chunkMap.flipTick()` — reset tick parity for falling pass
+4. `fallingPhysicsSystem(grid, cols, rows, chunkMap, rand)` — bottom-to-top, skips sleeping chunks
+5. `flushEndOfTick(grid)` — apply deferred grid writes from rules with `commit: 'endOfTick'`
+6. `chunkMap.updateActivity(grid, isSpawnerType)` — recompute checksums, detect changes, manage sleep/wake
+7. `simStep++`
 
 After `sim.step()`, the worker calls `renderSystem()` separately:
 
-6. `renderSystem(typeGrid, cols, rows, data32, chunkMap)` — render only dirty chunks to the world buffer
+8. `renderSystem(typeGrid, cols, rows, data32, chunkMap)` — render only dirty chunks to the world buffer
 
 ### Dispatch strategy
 
-Both `fallingPhysicsSystem` and `risingPhysicsSystem` iterate every non-empty cell in active chunks and call `applyRules()` unconditionally. `applyRules` returns immediately for particle types with no compiled rules, so no flag-based dispatch is needed.
+Both `fallingPhysicsSystem` and `risingPhysicsSystem` iterate every non-empty, unstamped cell in active chunks and call `applyRules()`. Empty cells and cells already stamped with the current tick parity are skipped. `applyRules` returns immediately for particle types with no compiled rules, so no flag-based dispatch is needed.
 
 #### Falling pass pipeline (bottom-to-top)
 1. **Rules** — `applyRules()` processes all compiled rules for the particle: neighbor transforms, dissolving, spreading, spawning, gravity, density sinking, liquid lateral flow, liquid mixing, random walk, move skip, explosion triggers, black hole gravity
@@ -62,7 +64,7 @@ Both `fallingPhysicsSystem` and `risingPhysicsSystem` iterate every non-empty ce
 
 ## Particle System
 
-- Numeric IDs (0-79) defined in `constants.ts`
+- Numeric IDs (0-80) defined in `constants.ts`
 - Rising elements processed top-to-bottom in `rising.ts`
 - Falling elements processed bottom-to-top in `falling.ts` (starting at `rows - 2`)
 - Use `rand()` for probabilistic physics
@@ -106,7 +108,7 @@ The grid is divided into 32x32 chunks for spatial optimization:
 
 ## Component System (Archetypes)
 
-Each particle type is defined as an `ArchetypeDef` in `archetypes.ts`. The system is designed so that most particles are **fully defined by their archetype data** with no custom handler code. Components fall into categories:
+Each particle type is defined as an `ArchetypeDef` in `archetypes.ts`. All particles are **fully defined by their archetype data**. Components fall into categories:
 
 ### Movement components (data-driven)
 - `gravity: number` — probability of falling down each tick (0-1). Applied via `GRAVITY_DOWN_RULE` and `GRAVITY_DIAG_RULE` compiled rules
@@ -149,7 +151,10 @@ type Effect =
 
 type Sampler =
   | { kind: 'radius'; r: number; yBias?: number; samples?: number }
+  | { kind: 'ring'; rMin: number; rMax: number; samples?: number }
+  | { kind: 'rect'; up: number; down: number; left: number; right: number; samples?: number }
   | { kind: 'offsets'; offsets: [number, number][]; samples?: number }
+  | { kind: 'orderedOffsets'; groups: [number, number][][] }
   | { kind: 'self' }
 
 // Boolean predicate language — static predicates compile to O(1) lookup tables
@@ -235,11 +240,12 @@ Fire demonstrates multi-rule composition where order matters:
 
 ```typescript
 rules: [
-  // 1. Small chance to decay to ember (then smoke, then empty) each tick
+  // 1. Small chance to decay to ember, smoke, or empty each tick
   { chance: 0.00225, sampler: { kind: 'self' }, ..., outcomes: [{ kind: 'transform', selfInto: EMBER }] },
+  { chance: 0.00375, sampler: { kind: 'self' }, ..., outcomes: [{ kind: 'transform', selfInto: SMOKE }] },
   { chance: 0.024, sampler: { kind: 'self' }, ..., outcomes: [{ kind: 'transform', selfInto: EMPTY }] },
   // 2. Near other fire? Become chaotic (random-walk variant)
-  { chance: 0.15, sampler: { kind: 'radius', r: 1 }, matchers: [{ when: { kind: 'idIn', ids: [FIRE, CHAOTIC_FIRE] }, ... }],
+  { chance: 0.15, sampler: { kind: 'radius', r: 1, samples: 1 }, matchers: [{ when: { kind: 'idIn', ids: [FIRE, CHAOTIC_FIRE, BLUE_FIRE] }, ... }],
     outcomes: [{ kind: 'transform', selfInto: CHAOTIC_FIRE }] },
   // 3. Spread to any flammable neighbor (tag-based, not per-material)
   { chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
@@ -282,6 +288,9 @@ rules: [
   // Strong pull at close range (3-10 cells)
   { chance: 0.5, sampler: { kind: 'ring', rMin: 3, rMax: 10, samples: 12 },
     outcomes: [{ kind: 'directionSwap', length: -1, destPred: BH_SWAP_DEST }] },
+  // Medium pull at mid range (10-20 cells)
+  { chance: 0.2, sampler: { kind: 'ring', rMin: 10, rMax: 20, samples: 14 },
+    outcomes: [{ kind: 'directionSwap', length: -1, destPred: BH_SWAP_DEST }] },
   // Weak pull at far range (20-40 cells)
   { chance: 0.1, sampler: { kind: 'ring', rMin: 20, rMax: 40, samples: 30 },
     outcomes: [{ kind: 'directionSwap', length: -1, destPred: BH_SWAP_DEST }] },
@@ -289,7 +298,7 @@ rules: [
 ```
 
 ### Projectiles: generated directional rules
-Bullet particles use a `bulletRules(type, dirIndex)` helper that generates movement, material interaction, and edge-case rules for each of 8 compass directions. Each bullet direction is its own particle type, and all behavior is expressed as rules — no handler code.
+Bullet particles use a `bulletRules(type, dirIndex)` helper that generates movement, material interaction, and edge-case rules for each of 8 compass directions. Each bullet direction is its own particle type, and all behavior is expressed as rules.
 
 ### Deferred execution for multi-phase rules
 Rules with `commit: 'endOfPass'` defer their grid writes, allowing a particle to execute multiple rules in sequence within one tick. Fireworks use this to self-destruct and burst simultaneously:
@@ -324,7 +333,7 @@ When implementing new particle behaviors, prefer these approaches in order:
 4. Add color to `COLORS_U32` array at the matching index (ABGR format)
 5. Add button color to `BUTTON_COLORS` in `App.tsx` (if paintable)
 6. Add to `categories` array in `App.tsx` for button display (if paintable)
-7. **Add archetype in `src/sim/archetypes.ts`**: define the `ArchetypeDef` with appropriate data components. Most particles need **only archetype data** — no handler code:
+7. **Add archetype in `src/sim/archetypes.ts`**: define the `ArchetypeDef` with appropriate data components:
    - **Granular solid**: set `gravity`, `density`, append `GRAVITY_DOWN_RULE` and `GRAVITY_DIAG_RULE` to `rules`
    - **Liquid**: set `gravity`, `liquid`, `density`, append gravity rules + `LIQUID_LATERAL_RULE` + `LIQUID_MIX_RULE`
    - **Gas/rising**: set `buoyancy`, `driftChance`, append appropriate rising rules (`RISING_UP_RULE`, `GAS_RISE_RULE`, etc.) with `pass: 'rising'`
@@ -344,8 +353,8 @@ When implementing new particle behaviors, prefer these approaches in order:
 
 ## Common Patterns
 
-### Data-Driven Particle (no handler needed)
-Most particles are defined purely via archetype data — no handler function required:
+### Data-Driven Particle
+All particles are defined purely via archetype data:
 ```typescript
 // Basic granular solid:
 ARCHETYPES[NEW_SOLID] = {
@@ -385,26 +394,7 @@ The physics systems automatically process all data-driven components.
 
 ### Grid Operations
 
-Handlers modify the grid directly. Common patterns:
-```typescript
-// Move: swap current position with target
-g[ni] = PARTICLE_TYPE; g[p] = EMPTY
-
-// Swim through liquid: swap with liquid
-g[ni] = PARTICLE_TYPE; g[p] = WATER
-
-// Transform on contact: replace self
-g[p] = FIRE  // creature dies in fire
-
-// Consume and leave byproduct
-g[ni] = PARTICLE_TYPE; g[p] = SLIME  // alien leaves slime
-```
-
-## Placement Rules
-
-Normal particle placement only writes into EMPTY cells (non-empty cells are never overwritten). Special cases:
-- **Gun:** Single-pixel placement that can overwrite non-empty cells, except Stone, Tap, Gun, and Black Hole
-- **Erase:** Overwrites any cell regardless of type
+All particle movement and transformation is handled by the compiled rule system. The rule effects (`swap`, `transform`, `densitySwap`, `directionSwap`) cover all movement and interaction patterns. See the Rule format and Common Patterns sections above for how to express behaviors.
 
 **After making changes**, always run the relevant checks to catch errors early:
 1. `npx tsc -b` — typecheck first (catches most issues quickly)
