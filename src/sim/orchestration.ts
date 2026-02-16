@@ -51,5 +51,5 @@ export function paintCircle(
       }
     }
   }
-  chunkMap.wakeRadius(cx, cy, radius + 1)
+  chunkMap.wakeRadius(cx, cy, radius + 2)
 }

@@ -11,6 +11,49 @@ import { CHUNK_SIZE } from './sim/ChunkMap'
 import { createRNG } from './sim/rng'
 import { Simulation } from './sim/Simulation'
 
+// ── IndexedDB auto-save helpers ──────────────────────────────────────────
+const IDB_NAME = 'sand-sim'
+const IDB_VERSION = 1
+const IDB_STORE = 'autosave'
+const IDB_KEY = 'latest'
+const AUTO_SAVE_INTERVAL = 10_000 // 10 seconds
+
+function openDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION)
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE)
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function saveToDB(): Promise<void> {
+  if (!sim) return
+  try {
+    const buf = sim.save()
+    const db = await openDB()
+    const tx = db.transaction(IDB_STORE, 'readwrite')
+    tx.objectStore(IDB_STORE).put(buf, IDB_KEY)
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+    db.close()
+  } catch { /* silently ignore storage errors */ }
+}
+
+async function loadFromDB(): Promise<ArrayBuffer | null> {
+  try {
+    const db = await openDB()
+    const tx = db.transaction(IDB_STORE, 'readonly')
+    const req = tx.objectStore(IDB_STORE).get(IDB_KEY)
+    return new Promise((resolve) => {
+      req.onsuccess = () => { db.close(); resolve(req.result ?? null) }
+      req.onerror = () => { db.close(); resolve(null) }
+    })
+  } catch { return null }
+}
+
 // Worker state — display canvas (viewport-sized) + world canvas (1px/cell)
 let displayCanvas: OffscreenCanvas | null = null
 let displayCtx: OffscreenCanvasRenderingContext2D | null = null
@@ -50,6 +93,91 @@ function initGrid(displayWidth: number, displayHeight: number, cols?: number, ro
   zoom = Math.min(displayWidth / sim.cols, displayHeight / sim.rows)
   camX = 0
   camY = 0
+}
+
+/** Load simulation state from a binary save buffer. Returns true on success. */
+function loadFromBuffer(loadBuf: ArrayBuffer): boolean {
+  if (!displayCanvas) return false
+  const loadView = new DataView(loadBuf)
+  const loadU8 = new Uint8Array(loadBuf)
+
+  // Validate magic
+  if (loadU8[0] !== 0x53 || loadU8[1] !== 0x41 || loadU8[2] !== 0x4E || loadU8[3] !== 0x44) return false
+
+  // Parse header to determine format version and grid dimensions
+  let headerSize: number
+  let loadCols: number
+  let loadRows: number
+  let rngState: number | null = null
+  let simStep = 0
+  let initialSeed = 0
+
+  const maybeLegacyCols = loadView.getUint16(4, true)
+  const maybeLegacyRows = loadView.getUint16(6, true)
+  const v0GridSize = maybeLegacyCols * maybeLegacyRows
+  if (loadBuf.byteLength === 8 + v0GridSize && maybeLegacyCols > 0 && maybeLegacyRows > 0 && maybeLegacyCols <= 10000 && maybeLegacyRows <= 10000) {
+    loadCols = maybeLegacyCols
+    loadRows = maybeLegacyRows
+    headerSize = 8
+  } else {
+    const version = loadU8[4]
+    loadCols = loadView.getUint16(5, true)
+    loadRows = loadView.getUint16(7, true)
+    if (version === 1) {
+      headerSize = 9
+    } else if (version === 2) {
+      rngState = loadView.getInt32(9, true)
+      headerSize = 13
+    } else if (version === 3) {
+      rngState = loadView.getInt32(9, true)
+      simStep = loadView.getUint32(13, true)
+      headerSize = 17
+    } else if (version === 4) {
+      rngState = loadView.getInt32(9, true)
+      simStep = loadView.getUint32(13, true)
+      initialSeed = loadView.getInt32(17, true)
+      headerSize = 21
+    } else {
+      return false
+    }
+  }
+
+  if (loadCols <= 0 || loadRows <= 0) return false
+
+  // Re-create simulation at loaded dimensions if needed
+  const needsResize = !sim || loadCols !== sim.cols || loadRows !== sim.rows
+  if (needsResize) {
+    sim = new Simulation(loadCols, loadRows)
+    worldCanvas = new OffscreenCanvas(loadCols, loadRows)
+    worldCtx = worldCanvas.getContext('2d')!
+    worldImageData = worldCtx.createImageData(loadCols, loadRows)
+    worldData32 = new Uint32Array(worldImageData.data.buffer)
+  }
+
+  // Restore state
+  if (rngState !== null) sim!.rand.setState(rngState)
+  else sim!.rand = createRNG(Date.now())
+  sim!.simStep = simStep
+  sim!.initialSeed = initialSeed
+  sim!.grid.set(loadU8.subarray(headerSize, headerSize + loadCols * loadRows))
+  sim!.chunkMap.wakeAll()
+  if (worldData32) worldData32.fill(BG_COLOR)
+
+  // Zoom to fit loaded grid
+  zoom = Math.min(displayCanvas.width / loadCols, displayCanvas.height / loadRows)
+  camX = 0
+  camY = 0
+
+  // Notify main thread of new dimensions
+  ;(self as unknown as Worker).postMessage({
+    type: 'gridResized',
+    data: { cols: loadCols, rows: loadRows }
+  })
+  ;(self as unknown as Worker).postMessage({
+    type: 'cameraSync',
+    data: { camX, camY, zoom }
+  })
+  return true
 }
 
 function addParticles(cellX: number, cellY: number, tool: Material, brushSize: number) {
@@ -231,6 +359,10 @@ self.onmessage = (e: MessageEvent) => {
       lastUpdateTime = 0
       physicsAccum = 0
       requestAnimationFrame(gameLoop)
+      // Auto-load saved state (non-blocking — game loop starts with default grid)
+      loadFromDB().then(buf => { if (buf) loadFromBuffer(buf) })
+      // Periodic auto-save
+      setInterval(() => { saveToDB() }, AUTO_SAVE_INTERVAL)
       break
 
     case 'setGridSize': {
@@ -245,6 +377,7 @@ self.onmessage = (e: MessageEvent) => {
           type: 'cameraSync',
           data: { camX, camY, zoom }
         })
+      saveToDB()
       break
     }
 
@@ -275,6 +408,7 @@ self.onmessage = (e: MessageEvent) => {
 
     case 'pause':
       isPaused = data.paused
+      if (isPaused) saveToDB()
       break
 
     case 'setPauseAtStep':
@@ -303,6 +437,7 @@ self.onmessage = (e: MessageEvent) => {
       if (sim) {
         sim.reset(Date.now())
         if (worldData32) worldData32.fill(BG_COLOR)
+        saveToDB()
       }
       break
 
@@ -314,92 +449,16 @@ self.onmessage = (e: MessageEvent) => {
     }
 
     case 'load': {
-      if (!displayCanvas) break
       const loadBuf = data.buffer as ArrayBuffer
-      const loadView = new DataView(loadBuf)
-      const loadU8 = new Uint8Array(loadBuf)
-
-      // Validate magic
-      if (loadU8[0] !== 0x53 || loadU8[1] !== 0x41 || loadU8[2] !== 0x4E || loadU8[3] !== 0x44) break
-
-      // Parse header to determine format version and grid dimensions
-      let headerSize: number
-      let loadCols: number
-      let loadRows: number
-      let rngState: number | null = null
-      let simStep = 0
-      let initialSeed = 0
-
-      const maybeLegacyCols = loadView.getUint16(4, true)
-      const maybeLegacyRows = loadView.getUint16(6, true)
-      // v0 detection: offset 4 is cols directly (no version byte), value should look like a valid dimension
-      // We check if bytes 4-7 yield plausible dims AND total file size matches
-      const v0GridSize = maybeLegacyCols * maybeLegacyRows
-      if (loadBuf.byteLength === 8 + v0GridSize && maybeLegacyCols > 0 && maybeLegacyRows > 0 && maybeLegacyCols <= 10000 && maybeLegacyRows <= 10000) {
-        // Legacy v0 format: [magic(4)][cols(2)][rows(2)][grid...]
-        loadCols = maybeLegacyCols
-        loadRows = maybeLegacyRows
-        headerSize = 8
-      } else {
-        const version = loadU8[4]
-        loadCols = loadView.getUint16(5, true)
-        loadRows = loadView.getUint16(7, true)
-        if (version === 1) {
-          headerSize = 9
-        } else if (version === 2) {
-          rngState = loadView.getInt32(9, true)
-          headerSize = 13
-        } else if (version === 3) {
-          rngState = loadView.getInt32(9, true)
-          simStep = loadView.getUint32(13, true)
-          headerSize = 17
-        } else if (version === 4) {
-          rngState = loadView.getInt32(9, true)
-          simStep = loadView.getUint32(13, true)
-          initialSeed = loadView.getInt32(17, true)
-          headerSize = 21
-        } else {
-          break // Unknown version
-        }
+      if (loadFromBuffer(loadBuf)) {
+        saveToDB()
       }
-
-      if (loadCols <= 0 || loadRows <= 0) break
-
-      // Re-create simulation at loaded dimensions if needed
-      const needsResize = !sim || loadCols !== sim.cols || loadRows !== sim.rows
-      if (needsResize) {
-        sim = new Simulation(loadCols, loadRows)
-        worldCanvas = new OffscreenCanvas(loadCols, loadRows)
-        worldCtx = worldCanvas.getContext('2d')!
-        worldImageData = worldCtx.createImageData(loadCols, loadRows)
-        worldData32 = new Uint32Array(worldImageData.data.buffer)
-      }
-
-      // Restore state
-      if (rngState !== null) sim!.rand.setState(rngState)
-      else sim!.rand = createRNG(Date.now())
-      sim!.simStep = simStep
-      sim!.initialSeed = initialSeed
-      sim!.grid.set(loadU8.subarray(headerSize, headerSize + loadCols * loadRows))
-      sim!.chunkMap.wakeAll()
-      if (worldData32) worldData32.fill(BG_COLOR)
-
-      // Zoom to fit loaded grid
-      zoom = Math.min(displayCanvas.width / loadCols, displayCanvas.height / loadRows)
-      camX = 0
-      camY = 0
-
-        // Notify main thread of new dimensions
-        ; (self as unknown as Worker).postMessage({
-          type: 'gridResized',
-          data: { cols: loadCols, rows: loadRows }
-        })
-        ; (self as unknown as Worker).postMessage({
-          type: 'cameraSync',
-          data: { camX, camY, zoom }
-        })
       break
     }
+
+    case 'autoSave':
+      saveToDB()
+      break
   }
 }
 

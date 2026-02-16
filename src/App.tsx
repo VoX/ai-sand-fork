@@ -56,10 +56,16 @@ function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const workerRef = useRef<Worker | null>(null)
   const workerInitRef = useRef(false)
-  const [tool, setTool] = useState<Tool>('sand')
+  const [tool, setTool] = useState<Tool>(() => {
+    const saved = localStorage.getItem('sand-tool')
+    return (saved && saved in BUTTON_COLORS) ? saved as Tool : 'sand'
+  })
   const [isDrawing, setIsDrawing] = useState(false)
-  const [brushSize, setBrushSize] = useState(3)
-  const [isPaused, setIsPaused] = useState(false)
+  const [brushSize, setBrushSize] = useState(() => {
+    const saved = localStorage.getItem('sand-brushSize')
+    return saved ? Math.max(1, Math.min(30, parseInt(saved, 10) || 3)) : 3
+  })
+  const [isPaused, setIsPaused] = useState(() => localStorage.getItem('sand-paused') === 'true')
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [fps, setFps] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -102,6 +108,11 @@ function App() {
   useEffect(() => { brushSizeRef.current = brushSize }, [brushSize])
   useEffect(() => { panModeRef.current = panMode }, [panMode])
   useEffect(() => { debugModeRef.current = debugMode }, [debugMode])
+
+  // Persist UI preferences to localStorage
+  useEffect(() => { localStorage.setItem('sand-tool', tool) }, [tool])
+  useEffect(() => { localStorage.setItem('sand-brushSize', String(brushSize)) }, [brushSize])
+  useEffect(() => { localStorage.setItem('sand-paused', String(isPaused)) }, [isPaused])
 
   const clampCamera = useCallback(() => {
     const canvas = canvasRef.current
@@ -271,6 +282,17 @@ function App() {
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [clampCamera, sendCamera])
+
+  // Auto-save simulation when page becomes hidden (tab switch, browser close)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) {
+        workerRef.current?.postMessage({ type: 'autoSave' })
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
 
   // Sync pause state with worker
   useEffect(() => {

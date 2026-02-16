@@ -20,7 +20,6 @@ export function risingPhysicsSystem(g: Uint8Array, cols: number, rows: number, c
         const p = y * cols + x
         const c = g[p]
         if (c === EMPTY) continue
-
         if (stampGrid[p] === tickParity) continue
         stampGrid[p] = tickParity
 

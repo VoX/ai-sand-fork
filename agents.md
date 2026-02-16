@@ -308,6 +308,14 @@ Rules with `commit: 'endOfPass'` defer their grid writes, allowing a particle to
 // ...more burst types
 ```
 
+## Implementation Approach (preferred order)
+
+When implementing new particle behaviors, prefer these approaches in order:
+
+1. **Use existing rule primitives** — compose behavior from existing samplers, matchers, effects, and shared rules (e.g., `GRAVITY_DOWN_RULE`, `TAG_FLAMMABLE`). Most behaviors can be expressed this way.
+2. **Add intermediate particles** — for conditional states or multi-phase behaviors, create internal particle types that act as state transitions (e.g., `LIT_GUNPOWDER` → `DETONATING_GUNPOWDER`, `COMET` → `CRASHING_COMET`, `NITRO` → `EXPLODING_NITRO`). Each intermediate has its own rules and lives for a short time.
+3. **Modify/expand the Rule system** — add new effect kinds, sampler types, or opcodes only when the behavior genuinely cannot be expressed with the existing primitives. Follow the steps in "Adding new effect kinds" above.
+
 ## Adding New Particles
 
 1. Add constant in `src/sim/constants.ts`: `export const NEW_PARTICLE = XX`
