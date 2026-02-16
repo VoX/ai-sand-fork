@@ -1,52 +1,13 @@
 import {
-  EMPTY, FIRE, BLUE_FIRE, GAS, FIREWORK, COMET, PLASMA, LIGHTNING,
+  EMPTY, FIRE, BLUE_FIRE, GAS, COMET, LIGHTNING,
   PLANT, FLUFF, BUG, FLOWER, EMBER, SAND, GLASS,
-  WATER, DIRT, STONE, STATIC, NITRO, GLITTER,
-  FIREWORK_BURST_RADIUS_HIT, FIREWORK_BURST_RADIUS_TIMEOUT, LIGHTNING_NITRO_RADIUS,
+  WATER, DIRT, STONE, STATIC, NITRO,
+  LIGHTNING_NITRO_RADIUS,
 } from '../constants'
 
 // ---------------------------------------------------------------------------
 // Complex handlers — behaviors too unique to fully data-drive yet
 // ---------------------------------------------------------------------------
-
-export function updateFirework(
-  g: Uint8Array, x: number, y: number, p: number,
-  cols: number, rows: number, rand: () => number
-): void {
-  const idx = (bx: number, by: number) => by * cols + bx
-  const colors = [FIRE, EMBER, STATIC, PLASMA, GLITTER, BLUE_FIRE]
-  if (y > 0 && rand() < 0.95) {
-    const above = idx(x, y - 1)
-    if (g[above] === EMPTY) { g[above] = FIREWORK; g[p] = EMPTY }
-    else {
-      g[p] = EMPTY
-      const r = FIREWORK_BURST_RADIUS_HIT
-      for (let edy = -r; edy <= r; edy++) {
-        for (let edx = -r; edx <= r; edx++) {
-          if (edx * edx + edy * edy <= r * r && rand() < 0.5) {
-            const ex = x + edx, ey = y + edy
-            if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY) {
-              g[idx(ex, ey)] = colors[Math.floor(rand() * colors.length)]
-            }
-          }
-        }
-      }
-    }
-  } else {
-    g[p] = EMPTY
-    const r = FIREWORK_BURST_RADIUS_TIMEOUT
-    for (let edy = -r; edy <= r; edy++) {
-      for (let edx = -r; edx <= r; edx++) {
-        if (edx * edx + edy * edy <= r * r && rand() < 0.45) {
-          const ex = x + edx, ey = y + edy
-          if (ex >= 0 && ex < cols && ey >= 0 && ey < rows && g[idx(ex, ey)] === EMPTY) {
-            g[idx(ex, ey)] = colors[Math.floor(rand() * colors.length)]
-          }
-        }
-      }
-    }
-  }
-}
 
 export function updateComet(
   g: Uint8Array, x: number, y: number, p: number,

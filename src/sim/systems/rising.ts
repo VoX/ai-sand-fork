@@ -2,22 +2,20 @@ import {
   ARCHETYPES, ARCHETYPE_FLAGS,
   F_RISING, F_HANDLER, F_CREATURE, F_REACTIONS,
 } from '../archetypes'
-import { EMPTY, BULLET_N, BULLET_NW } from '../constants'
+import { EMPTY } from '../constants'
 import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../ChunkMap'
 import {
   applyReactions, flushEndOfPass,
   applyCreature,
 } from './generic'
-import { updateBulletRising } from './projectiles'
 import { PASS_RISING } from '../reactionCompiler'
 
 // Named handlers for complex rising-phase particles
 type RisingHandler = (g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number) => void
 
-import { updateFirework, updateComet, updateLightning } from './handlers'
+import { updateComet, updateLightning } from './handlers'
 
 const NAMED_RISING_HANDLERS: Record<string, RisingHandler> = {
-  firework: updateFirework,
   comet: updateComet,
   lightning: updateLightning,
 }
@@ -46,20 +44,12 @@ export function risingPhysicsSystem(g: Uint8Array, cols: number, rows: number, c
         const isRising = !!(flags & F_RISING)
         const isRisingCreature = !!(flags & F_CREATURE) && arch.creature?.pass === 'rising'
         const isRisingHandler = !!(flags & F_HANDLER) && !!NAMED_RISING_HANDLERS[arch.handler!]
-        const isRisingProjectile = !!(flags & F_HANDLER) && arch.handler === 'projectile'
-          && c >= BULLET_N && c <= BULLET_NW && c !== BULLET_N + 4 // Not BULLET_S
 
-        if (!isRising && !isRisingCreature && !isRisingHandler && !isRisingProjectile) continue
+        if (!isRising && !isRisingCreature && !isRisingHandler) continue
 
         // Only stamp cells we actually handle in this pass
         if (stampGrid[p] === tickParity) continue
         stampGrid[p] = tickParity
-
-        // ── Projectiles (upward/horizontal bullets) ──
-        if (isRisingProjectile) {
-          updateBulletRising(g, x, y, p, c, cols, rows, leftToRight, rand)
-          continue
-        }
 
         // ── Data-driven rising creatures (bird, bee, firefly) ──
         if (isRisingCreature) {

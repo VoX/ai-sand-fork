@@ -115,6 +115,7 @@ export function applyReactions(
             } else {
               if (neighborInto !== -1 && rand() < outcome.c) {
                 g[ni] = neighborInto
+                if (doStamp) stampGrid![ni] = tickParity!
               }
               if (rand() < outcome.d) {
                 g[p] = selfInto

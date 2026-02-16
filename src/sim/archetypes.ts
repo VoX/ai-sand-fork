@@ -31,6 +31,8 @@ export type Effect =
 /** Determines which neighbor cells a rule considers. */
 export type Sampler =
   | { kind: 'radius'; r: number; yBias?: number; samples?: number }
+  | { kind: 'ring'; rMin: number; rMax: number; samples?: number }
+  | { kind: 'rect'; up: number; down: number; left: number; right: number; samples?: number }
   | { kind: 'offsets'; offsets: [number, number][]; samples?: number }
   | { kind: 'orderedOffsets'; groups: [number, number][][] }
   | { kind: 'self' }
@@ -76,38 +78,6 @@ export interface Rule {
   pass?: 'rising' | 'falling' | 'either'
   /** Stamp destination after swap to prevent double-move. Used by gravity rules. */
   stamp?: true
-}
-
-// ---------------------------------------------------------------------------
-// Offset helpers — generate offset lists for rules
-// ---------------------------------------------------------------------------
-
-/**
- * Generate all [dx,dy] neighbor offsets within a square radius, excluding (0,0).
- * If yBias is provided (0-1), upward offsets (dy < 0) are duplicated to bias
- * random sampling toward the top.
- */
-export function radiusOffsets(r: number, yBias?: number): [number, number][] {
-  const offsets: [number, number][] = []
-  for (let dy = -r; dy <= r; dy++)
-    for (let dx = -r; dx <= r; dx++)
-      if (dx !== 0 || dy !== 0) offsets.push([dx, dy])
-  if (yBias !== undefined && yBias > 0) {
-    const top = offsets.filter(([, dy]) => dy < 0)
-    const t = top.length, n = offsets.length
-    const extra = Math.round((yBias * n - t) / (t * (1 - yBias)))
-    for (let i = 0; i < extra; i++) offsets.push(...top)
-  }
-  return offsets
-}
-
-/** Rectangle offset scan: all [dx,dy] in the rect from (-left, -up) to (+right, +down), excluding (0,0). */
-function rectOffsets(up: number, down: number, left: number, right: number): [number, number][] {
-  const offsets: [number, number][] = []
-  for (let dy = -up; dy <= down; dy++)
-    for (let dx = -left; dx <= right; dx++)
-      if (dx !== 0 || dy !== 0) offsets.push([dx, dy])
-  return offsets
 }
 
 /** Creature behavior definition — data-driven AI. */
@@ -330,6 +300,21 @@ export const MOVE_SKIP_RULE: Rule = {
 }
 
 // ---------------------------------------------------------------------------
+// Material tag constants — bitfields for predicate-based reaction filtering
+// ---------------------------------------------------------------------------
+
+export const TAG_HEAT = 1 << 0   // Heat sources: fire, plasma, ember, lava, etc.
+export const TAG_FLAMMABLE = 1 << 1   // Burns on contact with heat: plant, fluff, gas, etc.
+export const TAG_CREATURE = 1 << 2   // Living creatures: bug, ant, bird, bee, etc.
+export const TAG_ORGANIC = 1 << 3   // Organic matter: plant, flower, fluff, dirt, slime, etc.
+export const TAG_SOIL = 1 << 4   // Soil-like: dirt, wet dirt, sand
+export const TAG_WET = 1 << 5   // Contains water: water, wet dirt, wet root
+export const TAG_MINERAL = 1 << 6   // Hard minerals: stone, glass, crystal
+export const TAG_LIQUID = 1 << 7   // Liquid materials: water, acid, lava, mercury, etc.
+export const TAG_GAS = 1 << 8   // Gaseous: gas, smoke, spore
+export const TAG_EXPLOSIVE = 1 << 9   // Explosive: gunpowder, nitro, dust
+
+// ---------------------------------------------------------------------------
 // ARCHETYPES table  (indexed by particle type ID)
 // ---------------------------------------------------------------------------
 
@@ -386,7 +371,11 @@ ARCHETYPES[GUNPOWDER] = {
 ARCHETYPES[LIT_GUNPOWDER] = {
   gravity: 1.0, density: 4,
   explosive: [6, 0], blastRadius: 12, detonationChance: 0.08,
-  rules: [GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE],
+  rules: [{
+    chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+    matchers: [{ when: { kind: 'hasTag', mask: TAG_FLAMMABLE }, outcomeId: 0 }],
+    outcomes: [{ kind: 'transform', neighborInto: FIRE, neighborChance: 0.5 }],
+  }, GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE],
   color: COLORS_U32[LIT_GUNPOWDER],
 }
 
@@ -563,9 +552,9 @@ ARCHETYPES[LAVA] = {
         { when: { kind: 'idIn', ids: [WATER] }, outcomeId: 0 },
         { when: { kind: 'idIn', ids: [SNOW] }, outcomeId: 1 },
         { when: { kind: 'idIn', ids: [SAND] }, outcomeId: 2 },
-        { when: { kind: 'idIn', ids: [PLANT, FLUFF, GAS, FLOWER, HIVE, NEST] }, outcomeId: 3 },
-        { when: { kind: 'idIn', ids: [GUNPOWDER] }, outcomeId: 4 },
         { when: { kind: 'idIn', ids: [WAX] }, outcomeId: 5 },
+        { when: { kind: 'hasTag', mask: TAG_FLAMMABLE }, outcomeId: 3 },
+        { when: { kind: 'idIn', ids: [GUNPOWDER] }, outcomeId: 4 },
         { when: { kind: 'idIn', ids: [BURNING_WAX] }, outcomeId: 6 },
         { when: { kind: 'idIn', ids: [BUG, ANT, BIRD, BEE] }, outcomeId: 7 },
       ],
@@ -627,12 +616,10 @@ ARCHETYPES[FIRE] = {
     {
       chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
       matchers: [
-        { when: { kind: 'idIn', ids: [PLANT, FLUFF, GAS, FLOWER, HIVE, NEST, DUST, SPORE] }, outcomeId: 0 },
-        { when: { kind: 'idIn', ids: [WAX] }, outcomeId: 1 },
+        { when: { kind: 'hasTag', mask: TAG_FLAMMABLE }, outcomeId: 0 },
       ],
       outcomes: [
         { kind: 'transform', neighborInto: FIRE, neighborChance: 0.5 },
-        { kind: 'transform', neighborInto: BURNING_WAX, neighborChance: 0.5 },
       ],
       pass: 'rising',
     },
@@ -679,7 +666,7 @@ ARCHETYPES[PLASMA] = {
       chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 3 },
       matchers: [
         { when: { kind: 'idIn', ids: [SAND] }, outcomeId: 0 },
-        { when: { kind: 'idIn', ids: [PLANT, FLUFF, GAS, FLOWER] }, outcomeId: 1 },
+        { when: { kind: 'hasTag', mask: TAG_FLAMMABLE }, outcomeId: 1 },
       ],
       outcomes: [
         { kind: 'transform', neighborInto: PLASMA, neighborChance: 0.5 },
@@ -704,12 +691,10 @@ ARCHETYPES[BLUE_FIRE] = {
     {
       chance: 1.0, sampler: { kind: 'radius', r: 3, samples: 3 },
       matchers: [
-        { when: { kind: 'idIn', ids: [PLANT, FLUFF, GAS, FLOWER] }, outcomeId: 0 },
-        { when: { kind: 'idIn', ids: [WAX] }, outcomeId: 1 },
+        { when: { kind: 'hasTag', mask: TAG_FLAMMABLE }, outcomeId: 0 },
       ],
       outcomes: [
         { kind: 'transform', neighborInto: FIRE, neighborChance: 0.4 },
-        { kind: 'transform', neighborInto: BURNING_WAX, neighborChance: 0.4 },
       ],
       pass: 'rising',
     },
@@ -754,8 +739,45 @@ ARCHETYPES[CLOUD] = {
 }
 
 ARCHETYPES[FIREWORK] = {
-  buoyancy: 0.95,
-  handler: 'firework',
+  rules: [
+    // 95% chance to rise into EMPTY above (swap); if it fires, pipeline stops
+    { chance: 0.95,
+      sampler: { kind: 'offsets', offsets: [[0, -1]] },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }],
+      pass: 'rising', stamp: true },
+    // If we reach here: timeout (5%) OR blocked (above not EMPTY)
+    // Deferred self-destruct — pipeline continues to burst rules
+    { chance: 1.0, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'idIn', ids: [FIREWORK] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: EMPTY }],
+      commit: 'endOfPass', pass: 'rising' },
+    // Burst: spawn 6 particle types into EMPTY cells at radius 8
+    { chance: 1.0, sampler: { kind: 'radius', r: 8 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: FIRE, neighborChance: 0.083 }],
+      pass: 'rising' },
+    { chance: 1.0, sampler: { kind: 'radius', r: 8 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: EMBER, neighborChance: 0.083 }],
+      pass: 'rising' },
+    { chance: 1.0, sampler: { kind: 'radius', r: 8 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: STATIC, neighborChance: 0.083 }],
+      pass: 'rising' },
+    { chance: 1.0, sampler: { kind: 'radius', r: 8 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: PLASMA, neighborChance: 0.083 }],
+      pass: 'rising' },
+    { chance: 1.0, sampler: { kind: 'radius', r: 8 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: GLITTER, neighborChance: 0.083 }],
+      pass: 'rising' },
+    { chance: 1.0, sampler: { kind: 'radius', r: 8 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: BLUE_FIRE, neighborChance: 0.083 }],
+      pass: 'rising' },
+  ],
   color: COLORS_U32[FIREWORK],
 }
 
@@ -793,12 +815,10 @@ ARCHETYPES[EMBER] = {
     {
       chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
       matchers: [
-        { when: { kind: 'idIn', ids: [PLANT, FLUFF, GAS, FLOWER] }, outcomeId: 0 },
-        { when: { kind: 'idIn', ids: [WAX] }, outcomeId: 1 },
+        { when: { kind: 'hasTag', mask: TAG_FLAMMABLE }, outcomeId: 0 },
       ],
       outcomes: [
         { kind: 'transform', neighborInto: FIRE, neighborChance: 0.4 },
-        { kind: 'transform', neighborInto: BURNING_WAX, neighborChance: 0.4 },
       ],
     },
     GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE,
@@ -894,19 +914,103 @@ ARCHETYPES[NEST] = {
 
 ARCHETYPES[GUN] = {
   immobile: true, isSpawner: true,
-  handler: 'gun',
+  rules: [
+    // 92% no-fire gate: selfInto GUN (no-op) returns from applyReactions
+    // without stopping the caller pipeline, so spawner wake still runs
+    { chance: 0.92, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'idIn', ids: [GUN] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: GUN }] },
+    // 8% reached: fire one bullet in a random direction
+    // Chances calibrated for uniform direction selection (1/N remaining)
+    { chance: 0.125, sampler: { kind: 'offsets', offsets: [[0, -1]] },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_N }] },
+    { chance: 0.1429, sampler: { kind: 'offsets', offsets: [[1, -1]] },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_NE }] },
+    { chance: 0.1667, sampler: { kind: 'offsets', offsets: [[1, 0]] },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_E }] },
+    { chance: 0.2, sampler: { kind: 'offsets', offsets: [[1, 1]] },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_SE }] },
+    { chance: 0.25, sampler: { kind: 'offsets', offsets: [[0, 1]] },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_S }] },
+    { chance: 0.3333, sampler: { kind: 'offsets', offsets: [[-1, 1]] },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_SW }] },
+    { chance: 0.5, sampler: { kind: 'offsets', offsets: [[-1, 0]] },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_W }] },
+    { chance: 1.0, sampler: { kind: 'offsets', offsets: [[-1, -1]] },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_NW }] },
+  ],
   color: COLORS_U32[GUN],
 }
 
 ARCHETYPES[VOLCANO] = {
   immobile: true, isSpawner: true,
-  handler: 'volcano',
+  rules: [
+    // Evaporate nearby WATER→GAS; 8% chance to petrify self to STONE
+    { chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 3 },
+      matchers: [{ when: { kind: 'idIn', ids: [WATER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: STONE, selfChance: 0.08, neighborInto: GAS }] },
+    // Melt nearby SNOW→WATER
+    { chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 3 }, limit: 3,
+      matchers: [{ when: { kind: 'idIn', ids: [SNOW] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: WATER }] },
+    // Spawn LAVA above
+    { chance: 0.55, sampler: { kind: 'offsets', offsets: [[0, -1]] },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: LAVA }] },
+    // Spawn LAVA diagonal-above (random direction)
+    { chance: 0.25, sampler: { kind: 'offsets', offsets: [[-1, -1], [1, -1]], samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: LAVA }] },
+    // Spawn EMBER in upper-half neighbor
+    { chance: 0.1, sampler: { kind: 'offsets', offsets: [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0]], samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: EMBER }] },
+  ],
   color: COLORS_U32[VOLCANO],
 }
 
 ARCHETYPES[STAR] = {
   immobile: true, isSpawner: true,
-  handler: 'star',
+  rules: [
+    // Sparkle: spawn STATIC at radius 1–5
+    { chance: 0.12, sampler: { kind: 'ring', rMin: 1, rMax: 5, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: STATIC, neighborChance: 0.6 }] },
+    // Sparkle: spawn GLITTER at radius 1–5
+    { chance: 0.12, sampler: { kind: 'ring', rMin: 1, rMax: 5, samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: GLITTER, neighborChance: 0.4 }] },
+    // Life aura: transform materials at radius 3–15
+    { chance: 0.04, sampler: { kind: 'ring', rMin: 3, rMax: 15, samples: 1 },
+      matchers: [
+        { when: { kind: 'idIn', ids: [PLANT] }, outcomeId: 0 },
+        { when: { kind: 'idIn', ids: [WATER] }, outcomeId: 1 },
+        { when: { kind: 'idIn', ids: [DIRT] }, outcomeId: 2 },
+        { when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 3 },
+        { when: { kind: 'idIn', ids: [SNOW] }, outcomeId: 4 },
+        { when: { kind: 'idIn', ids: [MOLD] }, outcomeId: 5 },
+      ],
+      outcomes: [
+        { kind: 'transform', neighborInto: FLOWER, neighborChance: 0.3 },
+        { kind: 'transform', neighborInto: ALGAE, neighborChance: 0.1 },
+        { kind: 'transform', neighborInto: PLANT, neighborChance: 0.15 },
+        { kind: 'transform', neighborInto: PLANT, neighborChance: 0.05 },
+        { kind: 'transform', neighborInto: WATER, neighborChance: 0.2 },
+        { kind: 'transform', neighborInto: FLOWER, neighborChance: 0.1 },
+      ] },
+    // Evaporate nearby water
+    { chance: 0.02, sampler: { kind: 'radius', r: 2, samples: 5 }, limit: 5,
+      matchers: [{ when: { kind: 'idIn', ids: [WATER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: GAS }] },
+  ],
   color: COLORS_U32[STAR],
 }
 
@@ -1209,16 +1313,87 @@ ARCHETYPES[VOID] = {
   color: COLORS_U32[VOID],
 }
 
-// ── Projectiles ──
+// ── Projectiles (fully data-driven via rules) ──
 
-ARCHETYPES[BULLET_N] = { handler: 'projectile', color: COLORS_U32[BULLET_N] }
-ARCHETYPES[BULLET_NE] = { handler: 'projectile', color: COLORS_U32[BULLET_NE] }
-ARCHETYPES[BULLET_E] = { handler: 'projectile', color: COLORS_U32[BULLET_E] }
-ARCHETYPES[BULLET_SE] = { handler: 'projectile', color: COLORS_U32[BULLET_SE] }
-ARCHETYPES[BULLET_S] = { handler: 'projectile', color: COLORS_U32[BULLET_S] }
-ARCHETYPES[BULLET_SW] = { handler: 'projectile', color: COLORS_U32[BULLET_SW] }
-ARCHETYPES[BULLET_W] = { handler: 'projectile', color: COLORS_U32[BULLET_W] }
-ARCHETYPES[BULLET_NW] = { handler: 'projectile', color: COLORS_U32[BULLET_NW] }
+const BULLET_DIRS: [number, number][] = [
+  [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1],
+]
+const BULLET_REVERSE = [BULLET_S, BULLET_SW, BULLET_W, BULLET_NW, BULLET_N, BULLET_NE, BULLET_E, BULLET_SE]
+const ALL_BULLETS = [BULLET_N, BULLET_NE, BULLET_E, BULLET_SE, BULLET_S, BULLET_SW, BULLET_W, BULLET_NW, BULLET_TRAIL]
+
+function bulletRules(bulletType: number, dirIndex: number): Rule[] {
+  const dir: [number, number][] = [BULLET_DIRS[dirIndex]]
+  const reverseType = BULLET_REVERSE[dirIndex]
+  const [, dy] = BULLET_DIRS[dirIndex]
+  const pass: 'rising' | 'falling' = dy > 0 ? 'falling' : 'rising'
+
+  return [
+    // Water: 15% chance to die
+    {
+      chance: 0.15,
+      sampler: { kind: 'offsets', offsets: dir },
+      matchers: [{ when: { kind: 'idIn', ids: [WATER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: BULLET_TRAIL }],
+      pass,
+    },
+    // Water: 50% chance to stall (of remaining 85% ≈ 42.5% overall)
+    {
+      chance: 0.5,
+      sampler: { kind: 'offsets', offsets: dir },
+      matchers: [{ when: { kind: 'idIn', ids: [WATER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'stop' }],
+      pass,
+    },
+    // Main movement/interaction rule
+    {
+      chance: 1.0,
+      sampler: { kind: 'offsets', offsets: dir },
+      matchers: [
+        // Move through: empty, soft materials, creatures, water (remaining cases), other bullets
+        { when: { kind: 'idIn', ids: [
+          EMPTY, PLANT, FLOWER, GLASS, FLUFF, GAS,
+          BUG, ANT, BIRD, BEE, SLIME, WATER,
+          ...ALL_BULLETS,
+        ] }, outcomeId: 0 },
+        // Ignite explosives
+        { when: { kind: 'idIn', ids: [GUNPOWDER, NITRO] }, outcomeId: 1 },
+        // Mercury: reflect
+        { when: { kind: 'idIn', ids: [MERCURY] }, outcomeId: 2 },
+        // Hard terrain: penetrate with 80% chance
+        { when: { kind: 'idIn', ids: [STONE, DIRT, SAND] }, outcomeId: 3 },
+        // Everything else: die
+        { when: { kind: 'any' }, outcomeId: 4 },
+      ],
+      outcomes: [
+        // 0: move through (self→trail, neighbor→bullet)
+        { kind: 'transform', selfInto: BULLET_TRAIL, neighborInto: bulletType },
+        // 1: ignite (self→trail, neighbor→fire)
+        { kind: 'transform', selfInto: BULLET_TRAIL, neighborInto: FIRE },
+        // 2: reflect (self→reverse direction, neighbor unchanged)
+        { kind: 'transform', selfInto: reverseType },
+        // 3: penetrate hard (always leave trail, 80% chance to continue)
+        { kind: 'transform', selfInto: BULLET_TRAIL, neighborInto: bulletType, neighborChance: 0.8 },
+        // 4: die (self→trail)
+        { kind: 'transform', selfInto: BULLET_TRAIL },
+      ],
+      pass, stamp: true,
+    },
+    // Edge fallback: bullet at grid edge (offset out of bounds), become trail
+    {
+      chance: 1.0,
+      sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: BULLET_TRAIL }],
+      pass,
+    },
+  ]
+}
+
+for (let dir = 0; dir < 8; dir++) {
+  const type = BULLET_N + dir
+  ARCHETYPES[type] = { rules: bulletRules(type, dir), color: COLORS_U32[type] }
+}
+
 ARCHETYPES[BULLET_TRAIL] = {
   rules: [{
     chance: 0.3, sampler: { kind: 'self' },
@@ -1261,8 +1436,14 @@ ARCHETYPES[BURNING_WAX] = {
     },
     {
       chance: 0.5, sampler: { kind: 'radius', r: 1, samples: 2 },
-      matchers: [{ when: { kind: 'idIn', ids: [WAX] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', neighborInto: BURNING_WAX, neighborChance: 0.008 }]
+      matchers: [
+        { when: { kind: 'idIn', ids: [WAX] }, outcomeId: 0 },
+        { when: { kind: 'hasTag', mask: TAG_FLAMMABLE }, outcomeId: 1 },
+      ],
+      outcomes: [
+        { kind: 'transform', neighborInto: BURNING_WAX, neighborChance: 0.008 },
+        { kind: 'transform', neighborInto: FIRE, neighborChance: 0.5 },
+      ]
     },
   ],
   color: COLORS_U32[BURNING_WAX], palette: 1,
@@ -1289,17 +1470,10 @@ ARCHETYPES[MOLTEN_WAX] = {
 
 // ── Root / Growth chain (SEED → DRY_ROOT → WET_ROOT → GROWING_PLANT → PLANT) ──
 
-const rootWaterScanOffsets: [number, number][] = [
-  ...radiusOffsets(1),
-  ...rectOffsets(0, 10, 1, 1),
-]
-
-const upwardScanOffsets: [number, number][] = rectOffsets(30, 0, 2, 2)
-
 ARCHETYPES[DRY_ROOT] = {
   immobile: true,
   rules: [{
-    chance: 1.0, sampler: { kind: 'offsets', offsets: rootWaterScanOffsets, samples: 3 },
+    chance: 1.0, sampler: { kind: 'rect', up: 1, down: 10, left: 1, right: 1, samples: 3 },
     matchers: [{ when: { kind: 'idIn', ids: [WATER, WET_DIRT] }, outcomeId: 0 }],
     outcomes: [{ kind: 'transform', selfInto: WET_ROOT }],
   }],
@@ -1315,7 +1489,7 @@ ARCHETYPES[WET_ROOT] = {
       outcomes: [{ kind: 'transform', neighborInto: GROWING_PLANT, neighborChance: 0.1 }]
     },
     {
-      chance: 0.1, sampler: { kind: 'offsets', offsets: upwardScanOffsets, samples: 3 },
+      chance: 0.1, sampler: { kind: 'rect', up: 30, down: 0, left: 2, right: 2, samples: 3 },
       matchers: [{ when: { kind: 'idIn', ids: [PLANT] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', neighborInto: GROWING_PLANT }]
     },
@@ -1374,16 +1548,14 @@ ARCHETYPES[CHAOTIC_FIRE] = {
       outcomes: [{ kind: 'transform', selfInto: EMPTY }],
       pass: 'rising',
     },
-    // Spread to flammable (same as fire)
+    // Spread to flammable (tag-based)
     {
       chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 2 },
       matchers: [
-        { when: { kind: 'idIn', ids: [PLANT, FLUFF, GAS, FLOWER, HIVE, NEST, DUST, SPORE] }, outcomeId: 0 },
-        { when: { kind: 'idIn', ids: [WAX] }, outcomeId: 1 },
+        { when: { kind: 'hasTag', mask: TAG_FLAMMABLE }, outcomeId: 0 },
       ],
       outcomes: [
         { kind: 'transform', neighborInto: FIRE, neighborChance: 0.5 },
-        { kind: 'transform', neighborInto: BURNING_WAX, neighborChance: 0.5 },
       ],
       pass: 'rising',
     },
@@ -1425,21 +1597,6 @@ for (let i = 0; i < MAX_TYPE; i++) {
   if (a.rules) f |= F_REACTIONS
   ARCHETYPE_FLAGS[i] = f
 }
-
-// ---------------------------------------------------------------------------
-// Material tag constants — bitfields for predicate-based reaction filtering
-// ---------------------------------------------------------------------------
-
-export const TAG_HEAT = 1 << 0   // Heat sources: fire, plasma, ember, lava, etc.
-export const TAG_FLAMMABLE = 1 << 1   // Burns on contact with heat: plant, fluff, gas, etc.
-export const TAG_CREATURE = 1 << 2   // Living creatures: bug, ant, bird, bee, etc.
-export const TAG_ORGANIC = 1 << 3   // Organic matter: plant, flower, fluff, dirt, slime, etc.
-export const TAG_SOIL = 1 << 4   // Soil-like: dirt, wet dirt, sand
-export const TAG_WET = 1 << 5   // Contains water: water, wet dirt, wet root
-export const TAG_MINERAL = 1 << 6   // Hard minerals: stone, glass, crystal
-export const TAG_LIQUID = 1 << 7   // Liquid materials: water, acid, lava, mercury, etc.
-export const TAG_GAS = 1 << 8   // Gaseous: gas, smoke, spore
-export const TAG_EXPLOSIVE = 1 << 9   // Explosive: gunpowder, nitro, dust
 
 // ---------------------------------------------------------------------------
 // MATERIAL_TAGS — precomputed tag bitmask per material type

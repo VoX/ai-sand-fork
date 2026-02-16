@@ -16,22 +16,15 @@ import { PASS_FALLING } from '../reactionCompiler'
 // Named handler dispatch table — for truly complex behaviors that can't be data-driven yet
 type ParticleHandler = (g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number) => void
 
-import { updateGun, updateVolcano, updateStar, updateBlackHole } from './spawners'
-import { updateBulletFalling, updateBulletTrail } from './projectiles'
+import { updateBlackHole } from './spawners'
 
 const NAMED_HANDLERS: Record<string, ParticleHandler> = {
-  gun: updateGun,
-  volcano: updateVolcano,
-  star: updateStar,
   blackHole: updateBlackHole,
 }
 
-// Projectile handler needs extra args — handled specially
-import { BULLET_S, BULLET_SE, BULLET_SW, BULLET_TRAIL } from '../constants'
-
 /** Per-spawner-type wake radius (grid cells). */
 const SPAWNER_WAKE_RADIUS: Record<string, number> = {
-  gun: 2, volcano: 4, star: 6, blackHole: 12,
+  blackHole: 12,
 }
 
 export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, chunkMap: ChunkMap, rand: () => number): void {
@@ -64,16 +57,6 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
         // ── Named handler dispatch ──
         if (flags & F_HANDLER) {
           const handlerName = arch.handler!
-
-          // Projectiles need special handling (pass-split by direction)
-          if (handlerName === 'projectile') {
-            if (c === BULLET_S || c === BULLET_SE || c === BULLET_SW) {
-              updateBulletFalling(g, x, y, p, c, cols, rows, leftToRight, rand)
-            } else if (c === BULLET_TRAIL) {
-              updateBulletTrail(g, p, rand)
-            }
-            continue
-          }
 
           const handler = NAMED_HANDLERS[handlerName]
           if (handler) {

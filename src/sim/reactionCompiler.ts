@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import {
-  ARCHETYPES, MATERIAL_TAGS, radiusOffsets,
+  ARCHETYPES, MATERIAL_TAGS,
   type Rule, type Effect, type Sampler, type TargetPredicate,
 } from './archetypes'
 
@@ -173,6 +173,48 @@ function compileEffect(effect: Effect): CompiledOutcome {
 }
 
 // ---------------------------------------------------------------------------
+// Offset helpers — generate offset lists from sampler parameters
+// ---------------------------------------------------------------------------
+
+/** All [dx,dy] neighbor offsets within a square radius, excluding (0,0).
+ *  If yBias (0-1), upward offsets are duplicated to bias random sampling. */
+function radiusOffsets(r: number, yBias?: number): [number, number][] {
+  const offsets: [number, number][] = []
+  for (let dy = -r; dy <= r; dy++)
+    for (let dx = -r; dx <= r; dx++)
+      if (dx !== 0 || dy !== 0) offsets.push([dx, dy])
+  if (yBias !== undefined && yBias > 0) {
+    const top = offsets.filter(([, dy]) => dy < 0)
+    const t = top.length, n = offsets.length
+    const extra = Math.round((yBias * n - t) / (t * (1 - yBias)))
+    for (let i = 0; i < extra; i++) offsets.push(...top)
+  }
+  return offsets
+}
+
+/** Circular ring offsets: all [dx,dy] where rMin <= sqrt(dx²+dy²) <= rMax, excluding (0,0). */
+function ringOffsets(rMin: number, rMax: number): [number, number][] {
+  const offsets: [number, number][] = []
+  const rMin2 = rMin * rMin, rMax2 = rMax * rMax
+  for (let dy = -rMax; dy <= rMax; dy++)
+    for (let dx = -rMax; dx <= rMax; dx++) {
+      if (dx === 0 && dy === 0) continue
+      const d2 = dx * dx + dy * dy
+      if (d2 >= rMin2 && d2 <= rMax2) offsets.push([dx, dy])
+    }
+  return offsets
+}
+
+/** Rectangle offsets: all [dx,dy] in (-left, -up) to (+right, +down), excluding (0,0). */
+function rectOffsets(up: number, down: number, left: number, right: number): [number, number][] {
+  const offsets: [number, number][] = []
+  for (let dy = -up; dy <= down; dy++)
+    for (let dx = -left; dx <= right; dx++)
+      if (dx !== 0 || dy !== 0) offsets.push([dx, dy])
+  return offsets
+}
+
+// ---------------------------------------------------------------------------
 // Compiler: Sampler → Int16Array of offsets
 // ---------------------------------------------------------------------------
 
@@ -181,6 +223,12 @@ function compileSampler(sampler: Sampler): Int16Array {
   switch (sampler.kind) {
     case 'radius':
       pairs = radiusOffsets(sampler.r, sampler.yBias)
+      break
+    case 'ring':
+      pairs = ringOffsets(sampler.rMin, sampler.rMax)
+      break
+    case 'rect':
+      pairs = rectOffsets(sampler.up, sampler.down, sampler.left, sampler.right)
       break
     case 'offsets':
       pairs = sampler.offsets
@@ -216,6 +264,12 @@ function compileRule(rule: Rule, selfId: number): CompiledRule {
   let groupCount = 0
   switch (rule.sampler.kind) {
     case 'radius':
+      sampleCount = rule.sampler.samples ?? offsetCount
+      break
+    case 'ring':
+      sampleCount = rule.sampler.samples ?? offsetCount
+      break
+    case 'rect':
       sampleCount = rule.sampler.samples ?? offsetCount
       break
     case 'offsets':

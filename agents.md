@@ -12,8 +12,8 @@ The game uses a **chunked grid engine** with **data-driven archetypes** and **co
 - **Dirty-rect rendering** — only chunks with changes are re-rendered to the pixel buffer
 - Systems iterate the grid in row order, skipping sleeping chunk columns within each row
 - Each particle type is defined as an **archetype** — a data structure encoding all behavior parameters
-- **Nearly all behaviors are data-driven**: movement, reactions (neighbor, spreading, dissolving, growth), creature AI, spawning, explosions, decay — all read from archetype data and processed by generic composable systems
-- Only 6 particles still use **named handler** dispatch for behaviors too complex to fully data-drive (firework, comet, lightning, gun, volcano, star, black hole)
+- **Nearly all behaviors are data-driven**: movement, reactions (neighbor, spreading, dissolving, growth), creature AI, spawning, explosions, decay, projectiles — all read from archetype data and processed by generic composable systems
+- Only 3 particles still use **named handler** dispatch for behaviors too complex to fully data-drive (firework, comet, lightning)
 - A precomputed **`ARCHETYPE_FLAGS` bitmask array** enables fast flag-based dispatch per particle type
 - Handler functions operate on the global grid directly — chunking is transparent to them
 
@@ -35,7 +35,6 @@ The game uses a **chunked grid engine** with **data-driven archetypes** and **co
 - `/src/sim/systems/handlers.ts` - 3 complex named handlers that can't be fully data-driven: `updateFirework`, `updateComet`, `updateLightning`
 - `/src/sim/systems/spawners.ts` - 4 complex spawner handlers: `updateGun`, `updateVolcano`, `updateStar`, `updateBlackHole`
 - `/src/sim/systems/render.ts` - Dirty-chunk-only rendering: fills ImageData only for chunks marked `renderDirty`. Animated palettes for fire, chaotic fire, plasma, lightning, blue fire
-- `/src/sim/systems/projectiles.ts` - Bullet movement (rising/falling split by direction), bullet trail fading, mercury reflection
 - `/dist/` - Built output for deployment
 
 ## System Pipeline (per physics step)
@@ -64,7 +63,7 @@ Both `fallingPhysicsSystem` and `risingPhysicsSystem` use `ARCHETYPE_FLAGS[parti
 
 #### Falling pass pipeline (bottom-to-top)
 1. **Skip check** — skip particles with `F_RISING` (handled in rising pass)
-2. **Named handler dispatch** — if `F_HANDLER`, look up `arch.handler` in `NAMED_HANDLERS` table (gun, volcano, star, blackHole). Projectiles handled specially. Named handlers may also have data-driven behaviors that run after the handler
+2. **Named handler dispatch** — if `F_HANDLER`, look up `arch.handler` in `NAMED_HANDLERS` table (gun, volcano, star, blackHole). Named handlers may also have data-driven behaviors that run after the handler
 3. **Detonation** — if `arch.detonationChance`, check for blast wave + fire core (`checkDetonation`)
 4. **Contact explosion** — if `F_EXPLOSIVE` with trigger=1, check for NITRO-style explosion (`checkContactExplosion`)
 5. **Reactions** — if `F_REACTIONS`, process unified reaction rules: neighbor reactions, dissolving, spreading, spawning, gravity, density sinking, liquid lateral flow, liquid mixing, random walk, move skip (`applyReactions`)
@@ -74,11 +73,10 @@ Both `fallingPhysicsSystem` and `risingPhysicsSystem` use `ARCHETYPE_FLAGS[parti
 9. **End-of-pass flush** — `flushEndOfPass()` applies deferred rule writes
 
 #### Rising pass pipeline (top-to-bottom)
-1. **Filter** — only process particles with `F_RISING`, rising creatures (`creature.pass === 'rising'`), rising named handlers (firework, comet, lightning), or rising projectiles
-2. **Rising projectiles** — upward/horizontal bullets (`updateBulletRising`)
-3. **Rising creatures** — data-driven creature AI for flyers (`applyCreature`)
-4. **Named handlers** — firework, comet, lightning
-5. **Reactions + movement** — all rule-based: decay, spread, drift, rise via `applyReactions`. Gravity, rising movement, density displacement — all expressed as compiled rules with `pass: 'rising'`
+1. **Filter** — only process particles with `F_RISING`, rising creatures (`creature.pass === 'rising'`), or rising named handlers (firework, comet, lightning)
+2. **Rising creatures** — data-driven creature AI for flyers (`applyCreature`)
+3. **Named handlers** — firework, comet, lightning
+4. **Reactions + movement** — all rule-based: decay, spread, drift, rise, projectile movement via `applyReactions`. Gravity, rising movement, density displacement, bullet interactions — all expressed as compiled rules with `pass: 'rising'`
 6. **Edge vanish** — rising particles at y=0 are cleared (can't be expressed as a rule)
 7. **End-of-pass flush** — `flushEndOfPass()` applies deferred rule writes
 
@@ -129,8 +127,8 @@ The grid is divided into 32×32 chunks for spatial optimization:
 ## Internal (Non-Paintable) Particles
 
 Some particles are internal and NOT added to Material type or `MATERIAL_TO_ID`:
-- **Bullets:** BULLET_N (31), BULLET_NE (32), BULLET_E (33), BULLET_SE (34), BULLET_S (35), BULLET_SW (36), BULLET_W (37), BULLET_NW (38)
-- **Bullet Trail:** BULLET_TRAIL (39)
+- **Bullets:** BULLET_N (31), BULLET_NE (32), BULLET_E (33), BULLET_SE (34), BULLET_S (35), BULLET_SW (36), BULLET_W (37), BULLET_NW (38) — fully data-driven via `bulletRules()` helper that generates directional movement, water interaction, mercury reflection, and material penetration rules
+- **Bullet Trail:** BULLET_TRAIL (39) — data-driven decay to EMPTY
 - **Blue Fire:** BLUE_FIRE (59) — spawned as trail by comets
 - **Lit Gunpowder:** LIT_GUNPOWDER (67) — transient fuse state before gunpowder detonation
 - **Chaotic Fire:** CHAOTIC_FIRE (77) — fire near other fire transforms into this; has random 8-dir movement, decays back to FIRE. Visually identical to FIRE (same animated palette)
@@ -282,9 +280,11 @@ interface CreatureDef {
 Used by: bug, ant, bird, bee, firefly, alien, worm, fairy, fish, moth
 
 ### Named handler (`handler?: string`)
-For behaviors too complex to fully data-drive yet. Only 6 particles use this:
+For behaviors too complex to fully data-drive yet. Only 3 particles use this:
 - **Rising handlers** (in `handlers.ts`): firework, comet, lightning
 - **Falling handlers** (in `spawners.ts`): gun, volcano, star, blackHole
+
+Note: Projectiles (bullets) were previously handled via named handlers but are now fully data-driven via `bulletRules()` in `archetypes.ts`.
 
 ### Spawner
 - `isSpawner?: true` — prevents chunk sleeping for particles that continuously produce others (spawner handlers + data-driven spawners like tap, anthill, etc.)
@@ -475,7 +475,7 @@ Normal particle placement only writes into EMPTY cells (non-empty cells are neve
 
 ## Destruction Hierarchy
 
-- Bullets interact per-type: pass through soft materials (plant, flower, glass, fluff, gas), kill creatures, penetrate solids (stone, dirt, sand) ~80% of the time, ignite explosives, get slowed/stopped by water, reflect off mercury
+- Bullets interact per-type via data-driven rules: pass through soft materials (plant, flower, glass, fluff, gas), kill creatures, penetrate solids (stone, dirt, sand) ~80% of the time, ignite explosives, get slowed/stopped by water (15% die, 42.5% stall, 42.5% pass through), reflect off mercury. Each bullet direction is a separate particle type with rules generated by `bulletRules()` in `archetypes.ts`.
 - Gunpowder: heat-adjacent ignition via `rules`, converts to Lit Gunpowder, then `detonationChance` triggers blast wave (radius 6) pushing particles outward + fire core
 - Nitro: contact explosion via `explosive: [12, 1]` destroys most things except Stone/Glass; converts Water to Stone (70%) or Empty (30%)
 - Fire: `rules` targets flammable materials (plant, fluff, bug, gas, flower, hive, nest, dust, spore); near other fire transforms to CHAOTIC_FIRE for random movement
