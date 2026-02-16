@@ -1,6 +1,6 @@
 import {
   ARCHETYPES, ARCHETYPE_FLAGS,
-  F_RISING, F_HANDLER, F_CREATURE, F_REACTIONS,
+  F_CREATURE, F_REACTIONS,
 } from '../archetypes'
 import { EMPTY } from '../constants'
 import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../ChunkMap'
@@ -9,16 +9,6 @@ import {
   applyCreature,
 } from './generic'
 import { PASS_RISING } from '../reactionCompiler'
-
-// Named handlers for complex rising-phase particles
-type RisingHandler = (g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number) => void
-
-import { updateComet, updateLightning } from './handlers'
-
-const NAMED_RISING_HANDLERS: Record<string, RisingHandler> = {
-  comet: updateComet,
-  lightning: updateLightning,
-}
 
 export function risingPhysicsSystem(g: Uint8Array, cols: number, rows: number, chunkMap: ChunkMap, rand: () => number): void {
   const { chunkCols, active, stampGrid, tickParity } = chunkMap
@@ -41,11 +31,9 @@ export function risingPhysicsSystem(g: Uint8Array, cols: number, rows: number, c
         if (!arch) continue
 
         // Determine if this is a rising-phase particle
-        const isRising = !!(flags & F_RISING)
         const isRisingCreature = !!(flags & F_CREATURE) && arch.creature?.pass === 'rising'
-        const isRisingHandler = !!(flags & F_HANDLER) && !!NAMED_RISING_HANDLERS[arch.handler!]
 
-        if (!isRising && !isRisingCreature && !isRisingHandler) continue
+        if (!isRisingCreature) continue
 
         // Only stamp cells we actually handle in this pass
         if (stampGrid[p] === tickParity) continue
@@ -54,13 +42,6 @@ export function risingPhysicsSystem(g: Uint8Array, cols: number, rows: number, c
         // ── Data-driven rising creatures (bird, bee, firefly) ──
         if (isRisingCreature) {
           applyCreature(g, x, y, p, c, cols, rows, rand)
-          continue
-        }
-
-        // ── Named handlers for complex rising particles ──
-        if (isRisingHandler) {
-          const handler = NAMED_RISING_HANDLERS[arch.handler!]
-          handler(g, x, y, p, cols, rows, rand)
           continue
         }
 

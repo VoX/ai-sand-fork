@@ -10,6 +10,7 @@ export const BULLET_TRAIL = 39
 export const CLOUD = 40, ACID = 41, LAVA = 42, SNOW = 43, VOLCANO = 44
 export const MOLD = 45, MERCURY = 46, VOID = 47, SEED = 48, RUST = 49
 export const SPORE = 50, ALGAE = 51, POISON = 52, DUST = 53, FIREWORK = 54
+export const CRASHING_COMET = 55
 export const GLITTER = 56, STAR = 57, COMET = 58, BLUE_FIRE = 59
 export const BLACK_HOLE = 60, FIREFLY = 61
 export const WORM = 62, FAIRY = 63
@@ -23,6 +24,7 @@ export const WET_RUST = 76
 export const CHAOTIC_FIRE = 77
 export const EXPLODING_NITRO = 78
 export const DETONATING_GUNPOWDER = 79
+export const GLASS_BOLT = 80
 
 export type Material = 'empty' | 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent' | 'wax'
 
@@ -70,7 +72,7 @@ export const COLORS_U32 = new Uint32Array([
   0xFF44DDFF, 0xFFD8D0C8, 0xFF00FFBF, 0xFF1414DC, 0xFFFFF0E0, 0xFF000066,
   0xFFEE687B, 0xFFC8C0B8, 0xFF54082E, 0xFF74A5D4, 0xFF0E41B7,
   0xFFAAB220, 0xFF3D7025, 0xFF8B008B, 0xFF87B8DE, 0xFF0066FF,
-  0xFFEBCE87, 0xFFC0C0C0, 0xFF00DFFF, 0xFFFFF97D, 0xFFFF901E, 0xFF000000, 0xFF00FFBF,
+  0xFFFFF97D, 0xFFC0C0C0, 0xFF00DFFF, 0xFFFFF97D, 0xFFFF901E, 0xFF000000, 0xFF00FFBF, // CRASHING_COMET(55) through FIREFLY(61)
   0xFF8090C0, 0xFFFF88FF,
   0xFF00A5FF, 0xFF8CB4D2,
   0xFF607860,
@@ -87,6 +89,7 @@ export const COLORS_U32 = new Uint32Array([
   0,          // CHAOTIC_FIRE: uses fire animated palette
   0xFF14FF39, // EXPLODING_NITRO: same as NITRO (transient)
   0xFF2060FF, // DETONATING_GUNPOWDER: same as LIT_GUNPOWDER (transient)
+  0,          // GLASS_BOLT: uses lightning animated palette (transient)
 ])
 
 export const FIRE_COLORS = new Uint32Array(32)
@@ -107,5 +110,4 @@ export const BG_COLOR = 0xFF1A1A1A
 // ── Physics constants ──────────────────────────────────────────────────
 export const FIREWORK_BURST_RADIUS_HIT = 8
 export const FIREWORK_BURST_RADIUS_TIMEOUT = 7
-export const LIGHTNING_NITRO_RADIUS = 15
 export const DENSITY_SWAP_RATE = 0.07

@@ -1,6 +1,6 @@
 import {
   ARCHETYPES, ARCHETYPE_FLAGS,
-  F_RISING, F_IMMOBILE,
+  F_IMMOBILE,
   F_CREATURE, F_SPAWNER, F_REACTIONS,
 } from '../archetypes'
 import { EMPTY } from '../constants'
@@ -34,9 +34,6 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
         const flags = ARCHETYPE_FLAGS[c]
         const arch = ARCHETYPES[c]
         if (!arch) continue
-
-        // Skip particles handled in the rising pass
-        if (flags & F_RISING) continue
 
         // ── Reactions (neighbor reactions, dissolve, spread, spawn — unified) ──
         if (flags & F_REACTIONS) {

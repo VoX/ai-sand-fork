@@ -6,10 +6,10 @@ import {
   BULLET_N, BULLET_NE, BULLET_E, BULLET_SE, BULLET_S, BULLET_SW, BULLET_W, BULLET_NW,
   BULLET_TRAIL, CLOUD, ACID, LAVA, SNOW, VOLCANO,
   MOLD, MERCURY, VOID, SEED, RUST, SPORE, ALGAE, POISON, DUST, FIREWORK,
-  GLITTER, STAR, COMET, BLUE_FIRE, BLACK_HOLE, FIREFLY,
+  GLITTER, STAR, COMET, BLUE_FIRE, BLACK_HOLE, FIREFLY, CRASHING_COMET,
   WORM, FAIRY, FISH, MOTH, VENT, LIT_GUNPOWDER, SMOKE,
   WAX, BURNING_WAX, MOLTEN_WAX, DRY_ROOT, WET_ROOT, GROWING_PLANT, WET_DIRT, WET_RUST,
-  CHAOTIC_FIRE, EXPLODING_NITRO, DETONATING_GUNPOWDER, COLORS_U32,
+  CHAOTIC_FIRE, EXPLODING_NITRO, DETONATING_GUNPOWDER, GLASS_BOLT, COLORS_U32,
 } from './constants'
 
 // ---------------------------------------------------------------------------
@@ -138,7 +138,6 @@ export interface ArchetypeDef {
 // Archetype flag bits (for ARCHETYPE_FLAGS bitmask)
 // ---------------------------------------------------------------------------
 
-export const F_RISING = 1 << 1
 export const F_IMMOBILE = 1 << 5
 export const F_SPAWNER = 1 << 7
 export const F_CREATURE = 1 << 8
@@ -811,19 +810,118 @@ ARCHETYPES[FIREWORK] = {
   color: COLORS_U32[FIREWORK],
 }
 
+// Comet: rises fast leaving BLUE_FIRE trail, reacts with materials, explodes on solids
+// Movement uses transform (selfInto: BLUE_FIRE trail, neighborInto: COMET to "move")
+const COMET_MOVE_MATCHERS: Matcher[] = [
+  { when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 },           // move into empty space
+  { when: { kind: 'idIn', ids: [WATER] }, outcomeId: 1 },           // evaporate water
+  { when: { kind: 'idIn', ids: [PLANT, FLUFF, FLOWER] }, outcomeId: 2 }, // burn organics
+  { when: { kind: 'idIn', ids: [SAND] }, outcomeId: 3 },            // vitrify sand
+  { when: { kind: 'not', p: { kind: 'idIn', ids: [EMPTY, WATER, PLANT, FLUFF, FLOWER, SAND] } }, outcomeId: 4 }, // solid impact → explode
+]
+const COMET_MOVE_OUTCOMES: Effect[] = [
+  { kind: 'transform', selfInto: BLUE_FIRE, neighborInto: COMET },    // 0: move + trail
+  { kind: 'transform', selfInto: BLUE_FIRE, neighborInto: GAS },      // 1: water → gas
+  { kind: 'transform', selfInto: BLUE_FIRE, neighborInto: BLUE_FIRE },// 2: burn organic
+  { kind: 'transform', selfInto: BLUE_FIRE, neighborInto: GLASS },    // 3: vitrify sand
+  { kind: 'transform', selfInto: CRASHING_COMET },                    // 4: solid → crash
+]
+
 ARCHETYPES[COMET] = {
-  buoyancy: 1.0,
-  handler: 'comet',
+  rules: [
+    // Spontaneous fizzle: 5% chance per tick → BLUE_FIRE
+    {
+      chance: 0.05, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: BLUE_FIRE }],
+      pass: 'rising',
+    },
+    // Fast upward movement (80%): 2 cells up with horizontal drift
+    {
+      chance: 0.8,
+      sampler: { kind: 'offsets', offsets: [[-1, -2], [0, -2], [1, -2]], samples: 1 },
+      matchers: COMET_MOVE_MATCHERS,
+      outcomes: COMET_MOVE_OUTCOMES,
+      pass: 'rising', stamp: true,
+    },
+    // Slow upward movement (fallback): 1 cell up with horizontal drift
+    {
+      chance: 1.0,
+      sampler: { kind: 'offsets', offsets: [[-1, -1], [0, -1], [1, -1]], samples: 1 },
+      matchers: COMET_MOVE_MATCHERS,
+      outcomes: COMET_MOVE_OUTCOMES,
+      pass: 'rising', stamp: true,
+    },
+  ],
   color: COLORS_U32[COMET],
 }
 
 ARCHETYPES[LIGHTNING] = {
-  rules: [{
-    chance: 0.2, sampler: { kind: 'self' },
-    matchers: [{ when: { kind: 'idIn', ids: [LIGHTNING] }, outcomeId: 0 }],
-    outcomes: [{ kind: 'transform', selfInto: STATIC }]
-  }],
-  handler: 'lightning',
+  rules: [
+    // Self-decay: 4% → STATIC
+    {
+      chance: 0.04, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'idIn', ids: [LIGHTNING] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: STATIC }],
+    },
+    // Self-decay: 16% → EMPTY
+    {
+      chance: 0.16, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'idIn', ids: [LIGHTNING] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: EMPTY }],
+    },
+    // Probe down 1-3 cells: react with first non-empty target
+    {
+      chance: 1.0,
+      sampler: { kind: 'orderedOffsets', groups: [[[0, 1], [0, 2], [0, 3]]] },
+      matchers: [
+        { when: { kind: 'idIn', ids: [SAND] }, outcomeId: 0 },
+        { when: { kind: 'idIn', ids: [WATER] }, outcomeId: 1 },
+        { when: { kind: 'idIn', ids: [PLANT, FLUFF, BUG] }, outcomeId: 2 },
+        { when: { kind: 'idIn', ids: [NITRO] }, outcomeId: 3 },
+        { when: { kind: 'idIn', ids: [STONE, GLASS] }, outcomeId: 4 },
+        { when: { kind: 'idIn', ids: [DIRT] }, outcomeId: 5 },
+        { when: { kind: 'not', p: { kind: 'idIn', ids: [EMPTY] } }, outcomeId: 6 },
+      ],
+      outcomes: [
+        { kind: 'transform', selfInto: EMPTY, neighborInto: GLASS_BOLT },          // 0: SAND → branching glass
+        { kind: 'transform', selfInto: EMPTY, neighborInto: LIGHTNING },            // 1: WATER → chain spread
+        { kind: 'transform', selfInto: EMPTY, neighborInto: FIRE },                // 2: organic → ignite
+        { kind: 'transform', selfInto: EMPTY, neighborInto: EXPLODING_NITRO },     // 3: NITRO → explosion
+        { kind: 'transform', selfInto: EMPTY },                                    // 4: hard surface → die
+        { kind: 'transform', selfInto: EMPTY, neighborInto: GLASS, neighborChance: 0.4 }, // 5: DIRT → 40% glass
+        { kind: 'transform', selfInto: EMPTY },                                    // 6: anything else → die
+      ],
+    },
+    // Water conduction: spread LIGHTNING to adjacent water (chain reaction)
+    {
+      chance: 0.7,
+      sampler: { kind: 'offsets', offsets: [[-1, 0], [1, 0], [0, 1], [-1, 1], [1, 1]], samples: 3 },
+      matchers: [{ when: { kind: 'idIn', ids: [WATER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: LIGHTNING }],
+    },
+    // Horizontal branching: 15% chance to fork sideways
+    {
+      chance: 0.15,
+      sampler: { kind: 'offsets', offsets: [[-1, 0], [1, 0]], samples: 1 },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: LIGHTNING }],
+    },
+    // Downward movement: swap with empty below
+    {
+      chance: 1.0,
+      sampler: { kind: 'offsets', offsets: [[0, 1]] },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'swap' }],
+      stamp: true,
+    },
+    // Fallback: die if blocked and nothing struck
+    {
+      chance: 1.0, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'idIn', ids: [LIGHTNING] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: EMPTY }],
+    },
+  ],
   color: COLORS_U32[LIGHTNING], palette: 3,
 }
 
@@ -1750,6 +1848,35 @@ ARCHETYPES[EXPLODING_NITRO] = {
   color: COLORS_U32[EXPLODING_NITRO],
 }
 
+ARCHETYPES[CRASHING_COMET] = {
+  rules: [
+    // Phase 1: EMPTY → BLUE_FIRE (60%)
+    {
+      chance: 1.0,
+      sampler: { kind: 'orderedOffsets', groups: [circleOffsets(2)] },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: BLUE_FIRE, neighborChance: 0.6 }],
+      pass: 'rising'
+    },
+    // Phase 2: remaining EMPTY → EMBER
+    {
+      chance: 1.0,
+      sampler: { kind: 'orderedOffsets', groups: [circleOffsets(2)] },
+      matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: EMBER }],
+      pass: 'rising'
+    },
+    // Phase 3: self → EMPTY
+    {
+      chance: 1.0, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: EMPTY }],
+      pass: 'rising'
+    },
+  ],
+  color: COLORS_U32[CRASHING_COMET],
+}
+
 ARCHETYPES[DETONATING_GUNPOWDER] = {
   rules: [
     // Fire core: non-immobile, non-EMPTY, non-WATER → FIRE
@@ -1781,23 +1908,38 @@ ARCHETYPES[DETONATING_GUNPOWDER] = {
   color: COLORS_U32[DETONATING_GUNPOWDER],
 }
 
+// ── Lightning glass intermediate (internal — branching vitrification) ──
+
+ARCHETYPES[GLASS_BOLT] = {
+  rules: [
+    // Spread through adjacent SAND → GLASS_BOLT (branching, biased down+lateral)
+    {
+      chance: 1.0,
+      sampler: { kind: 'offsets', offsets: [[-1, 1], [0, 1], [1, 1], [-1, 0], [1, 0]], samples: 3 },
+      matchers: [{ when: { kind: 'idIn', ids: [SAND] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: GLASS_BOLT, neighborChance: 0.4 }],
+      limit: 2,
+    },
+    // Rapid self-decay to GLASS
+    {
+      chance: 0.4, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'idIn', ids: [GLASS_BOLT] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: GLASS }],
+    },
+  ],
+  color: 0, palette: 3,
+}
+
 // ---------------------------------------------------------------------------
 // ARCHETYPE_FLAGS  -- precomputed bitmask array for fast dispatch
 // ---------------------------------------------------------------------------
 
-const MAX_TYPE = 80
+const MAX_TYPE = 81
 export const ARCHETYPE_FLAGS = new Uint32Array(MAX_TYPE)
 for (let i = 0; i < MAX_TYPE; i++) {
   const a = ARCHETYPES[i]
   if (!a) continue
   let f = 0
-  // F_RISING: has buoyancy (data value used by rising rules) or has rules with pass='rising'
-  if (a.buoyancy !== undefined) f |= F_RISING
-  if (a.rules) {
-    for (const r of a.rules) {
-      if (r.pass === 'rising') { f |= F_RISING; break }
-    }
-  }
   if (a.immobile) f |= F_IMMOBILE
   if (a.isSpawner) f |= F_SPAWNER
   if (a.creature) f |= F_CREATURE

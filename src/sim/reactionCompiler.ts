@@ -98,7 +98,7 @@ export interface CompiledRule {
 export const NO_MATCH = 0xFFFF
 
 /** Max material type ID (must match archetypes.ts). */
-const MAX_TYPE = 80
+const MAX_TYPE = 81
 
 // ---------------------------------------------------------------------------
 // Predicate evaluation — all predicates resolved at compile time
