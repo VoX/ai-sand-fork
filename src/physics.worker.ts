@@ -2,8 +2,10 @@
 // Runs physics simulation and rendering off the main thread
 // Uses two-canvas pipeline: world buffer (1px/cell) → GPU-scaled display canvas
 
-import { MATERIAL_TO_ID, type Material, STONE, TAP, GUN, BLACK_HOLE,
-  DEFAULT_ZOOM, BG_COLOR } from './sim/constants'
+import {
+  MATERIAL_TO_ID, type Material, STONE, TAP, GUN, BLACK_HOLE,
+  DEFAULT_ZOOM, BG_COLOR
+} from './sim/constants'
 import { renderSystem } from './sim/systems/render'
 import { CHUNK_SIZE } from './sim/ChunkMap'
 import { createRNG } from './sim/rng'
@@ -23,6 +25,8 @@ let pauseAtStep: number | null = null
 let debugChunks = false
 let cursorCellX = -1
 let cursorCellY = -1
+let cursorBrushSize = 3
+let cursorColor = ''
 let pendingInputs: Array<{ x: number; y: number; prevX: number; prevY: number; tool: Material; brushSize: number }> = []
 
 // Camera state
@@ -101,6 +105,23 @@ function render() {
   displayCtx.imageSmoothingEnabled = false
   displayCtx.drawImage(worldCanvas, cx, cy, viewW, viewH, 0, 0, dw, dh)
 
+  // Ghost brush preview under cursor
+  if (cursorCellX >= 0 && cursorColor) {
+    const bx = (cursorCellX + 0.5 - cx) * zoom
+    const by = (cursorCellY + 0.5 - cy) * zoom
+    const br = cursorBrushSize * zoom
+    displayCtx.beginPath()
+    displayCtx.arc(bx, by, br, 0, Math.PI * 2)
+    displayCtx.fillStyle = cursorColor
+    displayCtx.globalAlpha = 0.18
+    displayCtx.fill()
+    displayCtx.globalAlpha = 0.5
+    displayCtx.lineWidth = 1
+    displayCtx.strokeStyle = cursorColor
+    displayCtx.stroke()
+    displayCtx.globalAlpha = 1
+  }
+
   // Debug overlay: red rectangles on sleeping/inactive chunks
   if (debugChunks) {
     displayCtx.strokeStyle = 'rgba(255, 0, 0, 0.12)'
@@ -165,7 +186,7 @@ function gameLoop(timestamp: number) {
       if (pauseAtStep !== null && sim.simStep >= pauseAtStep) {
         isPaused = true
         pauseAtStep = null
-        ;(self as unknown as Worker).postMessage({ type: 'autoPaused' })
+          ; (self as unknown as Worker).postMessage({ type: 'autoPaused' })
       }
       physicsAccum = Math.min(physicsAccum - PHYSICS_STEP, PHYSICS_STEP)
     }
@@ -177,15 +198,15 @@ function gameLoop(timestamp: number) {
   fpsFrameCount++
   if (timestamp - fpsLastReport >= 500) {
     const fps = Math.round(fpsFrameCount / ((timestamp - fpsLastReport) / 1000))
-    ;(self as unknown as Worker).postMessage({ type: 'fps', data: fps })
+      ; (self as unknown as Worker).postMessage({ type: 'fps', data: fps })
     fpsFrameCount = 0
     fpsLastReport = timestamp
   }
 
   // Send particle type under cursor when debug is active
   if (debugChunks && sim && cursorCellX >= 0 && cursorCellY >= 0 &&
-      cursorCellX < sim.cols && cursorCellY < sim.rows) {
-    ;(self as unknown as Worker).postMessage({
+    cursorCellX < sim.cols && cursorCellY < sim.rows) {
+    ; (self as unknown as Worker).postMessage({
       type: 'cursorParticle',
       data: sim.grid[cursorCellY * sim.cols + cursorCellX]
     })
@@ -203,10 +224,10 @@ self.onmessage = (e: MessageEvent) => {
       displayCanvas = e.data.canvas as OffscreenCanvas
       displayCtx = displayCanvas.getContext('2d')!
       initGrid(displayCanvas.width, displayCanvas.height, data?.cols, data?.rows)
-      ;(self as unknown as Worker).postMessage({
-        type: 'gridResized',
-        data: { cols: sim!.cols, rows: sim!.rows }
-      })
+        ; (self as unknown as Worker).postMessage({
+          type: 'gridResized',
+          data: { cols: sim!.cols, rows: sim!.rows }
+        })
       lastUpdateTime = 0
       physicsAccum = 0
       requestAnimationFrame(gameLoop)
@@ -215,15 +236,15 @@ self.onmessage = (e: MessageEvent) => {
     case 'setGridSize': {
       if (!displayCanvas) break
       initGrid(displayCanvas.width, displayCanvas.height, data.cols, data.rows)
-      ;(self as unknown as Worker).postMessage({
-        type: 'gridResized',
-        data: { cols: sim!.cols, rows: sim!.rows }
-      })
-      // Send camera state so main thread stays in sync
-      ;(self as unknown as Worker).postMessage({
-        type: 'cameraSync',
-        data: { camX, camY, zoom }
-      })
+        ; (self as unknown as Worker).postMessage({
+          type: 'gridResized',
+          data: { cols: sim!.cols, rows: sim!.rows }
+        })
+        // Send camera state so main thread stays in sync
+        ; (self as unknown as Worker).postMessage({
+          type: 'cameraSync',
+          data: { camX, camY, zoom }
+        })
       break
     }
 
@@ -267,6 +288,8 @@ self.onmessage = (e: MessageEvent) => {
     case 'cursorPos':
       cursorCellX = data.x
       cursorCellY = data.y
+      cursorBrushSize = data.brushSize
+      cursorColor = data.color
       break
 
     case 'step':
@@ -286,7 +309,7 @@ self.onmessage = (e: MessageEvent) => {
     case 'save': {
       if (!sim) break
       const buf = sim.save()
-      ;(self as unknown as Worker).postMessage({ type: 'saveData', data: buf }, [buf])
+        ; (self as unknown as Worker).postMessage({ type: 'saveData', data: buf }, [buf])
       break
     }
 
@@ -366,18 +389,18 @@ self.onmessage = (e: MessageEvent) => {
       camX = 0
       camY = 0
 
-      // Notify main thread of new dimensions
-      ;(self as unknown as Worker).postMessage({
-        type: 'gridResized',
-        data: { cols: loadCols, rows: loadRows }
-      })
-      ;(self as unknown as Worker).postMessage({
-        type: 'cameraSync',
-        data: { camX, camY, zoom }
-      })
+        // Notify main thread of new dimensions
+        ; (self as unknown as Worker).postMessage({
+          type: 'gridResized',
+          data: { cols: loadCols, rows: loadRows }
+        })
+        ; (self as unknown as Worker).postMessage({
+          type: 'cameraSync',
+          data: { camX, camY, zoom }
+        })
       break
     }
   }
 }
 
-export {}
+export { }

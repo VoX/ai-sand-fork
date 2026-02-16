@@ -299,6 +299,10 @@ function App() {
         workerRef.current?.postMessage({ type: 'toggleDebugChunks' })
         setDebugMode(prev => !prev)
       }
+      if (e.key === ' ') {
+        e.preventDefault()
+        setIsPaused(prev => !prev)
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
@@ -428,11 +432,11 @@ function App() {
   }, [sendInputForPointer])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    // Send cursor position to worker for debug particle label
-    if (debugModeRef.current && workerRef.current) {
+    // Send cursor position to worker for ghost brush preview
+    if (workerRef.current) {
       const pos = getCellPos(e.clientX, e.clientY)
       if (pos) {
-        workerRef.current.postMessage({ type: 'cursorPos', data: { x: pos.x, y: pos.y } })
+        workerRef.current.postMessage({ type: 'cursorPos', data: { x: pos.x, y: pos.y, brushSize: brushSizeRef.current, color: BUTTON_COLORS[toolRef.current] } })
       }
     }
 
@@ -480,6 +484,10 @@ function App() {
       })
       setIsDrawing(true)
     }
+  }, [])
+
+  const handlePointerLeave = useCallback(() => {
+    workerRef.current?.postMessage({ type: 'cursorPos', data: { x: -1, y: -1, brushSize: 0, color: '' } })
   }, [])
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -540,6 +548,7 @@ function App() {
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
           onPointerEnter={handlePointerEnter}
+          onPointerLeave={handlePointerLeave}
           onWheel={handleWheel}
           onContextMenu={(e) => e.preventDefault()}
           style={{ touchAction: 'none' }}
