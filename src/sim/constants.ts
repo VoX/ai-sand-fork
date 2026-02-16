@@ -21,6 +21,8 @@ export const DRY_ROOT = 72, WET_ROOT = 73, GROWING_PLANT = 74
 export const WET_DIRT = 75
 export const WET_RUST = 76
 export const CHAOTIC_FIRE = 77
+export const EXPLODING_NITRO = 78
+export const DETONATING_GUNPOWDER = 79
 
 export type Material = 'empty' | 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent' | 'wax'
 
@@ -83,6 +85,8 @@ export const COLORS_U32 = new Uint32Array([
   0xFF2B5A8B, // WET_DIRT: same as DIRT
   0xFF0E41B7, // WET_RUST: same as RUST
   0,          // CHAOTIC_FIRE: uses fire animated palette
+  0xFF14FF39, // EXPLODING_NITRO: same as NITRO (transient)
+  0xFF2060FF, // DETONATING_GUNPOWDER: same as LIT_GUNPOWDER (transient)
 ])
 
 export const FIRE_COLORS = new Uint32Array(32)
@@ -101,12 +105,7 @@ for (let i = 0; i < 64; i++) {
 export const BG_COLOR = 0xFF1A1A1A
 
 // ── Physics constants ──────────────────────────────────────────────────
-export const NITRO_EXPLOSION_RADIUS = 12
-export const GUNPOWDER_EXPLOSION_RADIUS = 6
-export const GUNPOWDER_BLAST_RADIUS = 12
 export const FIREWORK_BURST_RADIUS_HIT = 8
 export const FIREWORK_BURST_RADIUS_TIMEOUT = 7
 export const LIGHTNING_NITRO_RADIUS = 15
-export const BLACK_HOLE_PULL_RADIUS = 10
-export const BLACK_HOLE_SAMPLE_COUNT = 16
 export const DENSITY_SWAP_RATE = 0.07

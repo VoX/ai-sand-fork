@@ -9,7 +9,7 @@ import {
   GLITTER, STAR, COMET, BLUE_FIRE, BLACK_HOLE, FIREFLY,
   WORM, FAIRY, FISH, MOTH, VENT, LIT_GUNPOWDER, SMOKE,
   WAX, BURNING_WAX, MOLTEN_WAX, DRY_ROOT, WET_ROOT, GROWING_PLANT, WET_DIRT, WET_RUST,
-  CHAOTIC_FIRE, COLORS_U32,
+  CHAOTIC_FIRE, EXPLODING_NITRO, DETONATING_GUNPOWDER, COLORS_U32,
 } from './constants'
 
 // ---------------------------------------------------------------------------
@@ -25,6 +25,7 @@ export type Effect =
   | { kind: 'transform'; selfInto?: number; neighborInto?: number; selfChance?: number; neighborChance?: number }
   | { kind: 'swap'; chance?: number }
   | { kind: 'densitySwap' }
+  | { kind: 'directionSwap'; length: number; destPred?: TargetPredicate }
   | { kind: 'noop' }
   | { kind: 'stop' }
 
@@ -122,11 +123,6 @@ export interface ArchetypeDef {
   immobile?: true
   tags?: number              // Material tag bitmask for predicate-based reaction filtering
 
-  // ── Parameterized behaviors ──
-  explosive?: [number, number]  // [radius, trigger: 0=heat-adjacent, 1=solid-contact]
-  blastRadius?: number          // Outward push radius for explosive detonation
-  detonationChance?: number     // Chance per tick to detonate (for fuse particles)
-
   // ── Reactions (unified neighbor/spread/dissolve/spawn) ──
   rules?: Rule[]
 
@@ -144,7 +140,6 @@ export interface ArchetypeDef {
 
 export const F_RISING = 1 << 1
 export const F_IMMOBILE = 1 << 5
-export const F_EXPLOSIVE = 1 << 6
 export const F_SPAWNER = 1 << 7
 export const F_CREATURE = 1 << 8
 export const F_HANDLER = 1 << 9
@@ -313,6 +308,7 @@ export const TAG_MINERAL = 1 << 6   // Hard minerals: stone, glass, crystal
 export const TAG_LIQUID = 1 << 7   // Liquid materials: water, acid, lava, mercury, etc.
 export const TAG_GAS = 1 << 8   // Gaseous: gas, smoke, spore
 export const TAG_EXPLOSIVE = 1 << 9   // Explosive: gunpowder, nitro, dust
+export const TAG_IMMOBILE = 1 << 10   // Immobile materials: stone, glass, plant, spawners, etc.
 
 // ---------------------------------------------------------------------------
 // ARCHETYPES table  (indexed by particle type ID)
@@ -370,12 +366,19 @@ ARCHETYPES[GUNPOWDER] = {
 
 ARCHETYPES[LIT_GUNPOWDER] = {
   gravity: 1.0, density: 4,
-  explosive: [6, 0], blastRadius: 12, detonationChance: 0.08,
-  rules: [{
-    chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
-    matchers: [{ when: { kind: 'hasTag', mask: TAG_FLAMMABLE }, outcomeId: 0 }],
-    outcomes: [{ kind: 'transform', neighborInto: FIRE, neighborChance: 0.5 }],
-  }, GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE],
+  rules: [
+    // 8% chance per tick to detonate
+    {
+      chance: 0.08, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'idIn', ids: [LIT_GUNPOWDER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: DETONATING_GUNPOWDER }],
+      pass: 'falling'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 1 },
+      matchers: [{ when: { kind: 'hasTag', mask: TAG_FLAMMABLE }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: FIRE, neighborChance: 0.5 }],
+    }, GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE],
   color: COLORS_U32[LIT_GUNPOWDER],
 }
 
@@ -432,7 +435,6 @@ ARCHETYPES[WET_RUST] = {
 
 ARCHETYPES[DUST] = {
   gravity: 0.3,
-  explosive: [2, 0],
   rules: [
     {
       chance: 0.003, sampler: { kind: 'self' },
@@ -482,8 +484,20 @@ ARCHETYPES[HONEY] = { gravity: 0.15, liquid: 0.3, density: 3, rules: [GRAVITY_DO
 
 ARCHETYPES[NITRO] = {
   gravity: 1.0, liquid: 0.5, density: 3,
-  explosive: [12, 1],
-  rules: [GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE, LIQUID_LATERAL_RULE, LIQUID_MIX_RULE],
+  rules: [
+    // Contact trigger: if above or below is a solid (not EMPTY/WATER/NITRO/EXPLODING_NITRO), detonate
+    {
+      chance: 1.0,
+      sampler: { kind: 'orderedOffsets', groups: [[[0, -1], [0, 1]]] },
+      matchers: [{
+        when: { kind: 'not', p: { kind: 'idIn', ids: [EMPTY, WATER, NITRO, EXPLODING_NITRO] } },
+        outcomeId: 0,
+      }],
+      outcomes: [{ kind: 'transform', selfInto: EXPLODING_NITRO }],
+      pass: 'falling'
+    },
+    GRAVITY_DOWN_RULE, GRAVITY_DIAG_RULE, LIQUID_LATERAL_RULE, LIQUID_MIX_RULE,
+  ],
   color: COLORS_U32[NITRO],
 }
 
@@ -741,42 +755,58 @@ ARCHETYPES[CLOUD] = {
 ARCHETYPES[FIREWORK] = {
   rules: [
     // 95% chance to rise into EMPTY above (swap); if it fires, pipeline stops
-    { chance: 0.95,
+    {
+      chance: 0.95,
       sampler: { kind: 'offsets', offsets: [[0, -1]] },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
       outcomes: [{ kind: 'swap' }],
-      pass: 'rising', stamp: true },
+      pass: 'rising', stamp: true
+    },
     // If we reach here: timeout (5%) OR blocked (above not EMPTY)
     // Deferred self-destruct — pipeline continues to burst rules
-    { chance: 1.0, sampler: { kind: 'self' },
+    {
+      chance: 1.0, sampler: { kind: 'self' },
       matchers: [{ when: { kind: 'idIn', ids: [FIREWORK] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', selfInto: EMPTY }],
-      commit: 'endOfPass', pass: 'rising' },
+      commit: 'endOfPass', pass: 'rising'
+    },
     // Burst: spawn 6 particle types into EMPTY cells at radius 8
-    { chance: 1.0, sampler: { kind: 'radius', r: 8 },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 8 },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', neighborInto: FIRE, neighborChance: 0.083 }],
-      pass: 'rising' },
-    { chance: 1.0, sampler: { kind: 'radius', r: 8 },
+      pass: 'rising'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 8 },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', neighborInto: EMBER, neighborChance: 0.083 }],
-      pass: 'rising' },
-    { chance: 1.0, sampler: { kind: 'radius', r: 8 },
+      pass: 'rising'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 8 },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', neighborInto: STATIC, neighborChance: 0.083 }],
-      pass: 'rising' },
-    { chance: 1.0, sampler: { kind: 'radius', r: 8 },
+      pass: 'rising'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 8 },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', neighborInto: PLASMA, neighborChance: 0.083 }],
-      pass: 'rising' },
-    { chance: 1.0, sampler: { kind: 'radius', r: 8 },
+      pass: 'rising'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 8 },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', neighborInto: GLITTER, neighborChance: 0.083 }],
-      pass: 'rising' },
-    { chance: 1.0, sampler: { kind: 'radius', r: 8 },
+      pass: 'rising'
+    },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 8 },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
       outcomes: [{ kind: 'transform', neighborInto: BLUE_FIRE, neighborChance: 0.083 }],
-      pass: 'rising' },
+      pass: 'rising'
+    },
   ],
   color: COLORS_U32[FIREWORK],
 }
@@ -917,35 +947,53 @@ ARCHETYPES[GUN] = {
   rules: [
     // 92% no-fire gate: selfInto GUN (no-op) returns from applyReactions
     // without stopping the caller pipeline, so spawner wake still runs
-    { chance: 0.92, sampler: { kind: 'self' },
+    {
+      chance: 0.92, sampler: { kind: 'self' },
       matchers: [{ when: { kind: 'idIn', ids: [GUN] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: GUN }] },
+      outcomes: [{ kind: 'transform', selfInto: GUN }]
+    },
     // 8% reached: fire one bullet in a random direction
     // Chances calibrated for uniform direction selection (1/N remaining)
-    { chance: 0.125, sampler: { kind: 'offsets', offsets: [[0, -1]] },
+    {
+      chance: 0.125, sampler: { kind: 'offsets', offsets: [[0, -1]] },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_N }] },
-    { chance: 0.1429, sampler: { kind: 'offsets', offsets: [[1, -1]] },
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_N }]
+    },
+    {
+      chance: 0.1429, sampler: { kind: 'offsets', offsets: [[1, -1]] },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_NE }] },
-    { chance: 0.1667, sampler: { kind: 'offsets', offsets: [[1, 0]] },
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_NE }]
+    },
+    {
+      chance: 0.1667, sampler: { kind: 'offsets', offsets: [[1, 0]] },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_E }] },
-    { chance: 0.2, sampler: { kind: 'offsets', offsets: [[1, 1]] },
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_E }]
+    },
+    {
+      chance: 0.2, sampler: { kind: 'offsets', offsets: [[1, 1]] },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_SE }] },
-    { chance: 0.25, sampler: { kind: 'offsets', offsets: [[0, 1]] },
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_SE }]
+    },
+    {
+      chance: 0.25, sampler: { kind: 'offsets', offsets: [[0, 1]] },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_S }] },
-    { chance: 0.3333, sampler: { kind: 'offsets', offsets: [[-1, 1]] },
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_S }]
+    },
+    {
+      chance: 0.3333, sampler: { kind: 'offsets', offsets: [[-1, 1]] },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_SW }] },
-    { chance: 0.5, sampler: { kind: 'offsets', offsets: [[-1, 0]] },
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_SW }]
+    },
+    {
+      chance: 0.5, sampler: { kind: 'offsets', offsets: [[-1, 0]] },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_W }] },
-    { chance: 1.0, sampler: { kind: 'offsets', offsets: [[-1, -1]] },
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_W }]
+    },
+    {
+      chance: 1.0, sampler: { kind: 'offsets', offsets: [[-1, -1]] },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_NW }] },
+      outcomes: [{ kind: 'transform', selfInto: GUN, neighborInto: BULLET_NW }]
+    },
   ],
   color: COLORS_U32[GUN],
 }
@@ -954,25 +1002,35 @@ ARCHETYPES[VOLCANO] = {
   immobile: true, isSpawner: true,
   rules: [
     // Evaporate nearby WATER→GAS; 8% chance to petrify self to STONE
-    { chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 3 },
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 3 },
       matchers: [{ when: { kind: 'idIn', ids: [WATER] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', selfInto: STONE, selfChance: 0.08, neighborInto: GAS }] },
+      outcomes: [{ kind: 'transform', selfInto: STONE, selfChance: 0.08, neighborInto: GAS }]
+    },
     // Melt nearby SNOW→WATER
-    { chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 3 }, limit: 3,
+    {
+      chance: 1.0, sampler: { kind: 'radius', r: 1, samples: 3 }, limit: 3,
       matchers: [{ when: { kind: 'idIn', ids: [SNOW] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', neighborInto: WATER }] },
+      outcomes: [{ kind: 'transform', neighborInto: WATER }]
+    },
     // Spawn LAVA above
-    { chance: 0.55, sampler: { kind: 'offsets', offsets: [[0, -1]] },
+    {
+      chance: 0.55, sampler: { kind: 'offsets', offsets: [[0, -1]] },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', neighborInto: LAVA }] },
+      outcomes: [{ kind: 'transform', neighborInto: LAVA }]
+    },
     // Spawn LAVA diagonal-above (random direction)
-    { chance: 0.25, sampler: { kind: 'offsets', offsets: [[-1, -1], [1, -1]], samples: 1 },
+    {
+      chance: 0.25, sampler: { kind: 'offsets', offsets: [[-1, -1], [1, -1]], samples: 1 },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', neighborInto: LAVA }] },
+      outcomes: [{ kind: 'transform', neighborInto: LAVA }]
+    },
     // Spawn EMBER in upper-half neighbor
-    { chance: 0.1, sampler: { kind: 'offsets', offsets: [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0]], samples: 1 },
+    {
+      chance: 0.1, sampler: { kind: 'offsets', offsets: [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0]], samples: 1 },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', neighborInto: EMBER }] },
+      outcomes: [{ kind: 'transform', neighborInto: EMBER }]
+    },
   ],
   color: COLORS_U32[VOLCANO],
 }
@@ -981,15 +1039,20 @@ ARCHETYPES[STAR] = {
   immobile: true, isSpawner: true,
   rules: [
     // Sparkle: spawn STATIC at radius 1–5
-    { chance: 0.12, sampler: { kind: 'ring', rMin: 1, rMax: 5, samples: 1 },
+    {
+      chance: 0.12, sampler: { kind: 'ring', rMin: 1, rMax: 5, samples: 1 },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', neighborInto: STATIC, neighborChance: 0.6 }] },
+      outcomes: [{ kind: 'transform', neighborInto: STATIC, neighborChance: 0.6 }]
+    },
     // Sparkle: spawn GLITTER at radius 1–5
-    { chance: 0.12, sampler: { kind: 'ring', rMin: 1, rMax: 5, samples: 1 },
+    {
+      chance: 0.12, sampler: { kind: 'ring', rMin: 1, rMax: 5, samples: 1 },
       matchers: [{ when: { kind: 'idIn', ids: [EMPTY] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', neighborInto: GLITTER, neighborChance: 0.4 }] },
+      outcomes: [{ kind: 'transform', neighborInto: GLITTER, neighborChance: 0.4 }]
+    },
     // Life aura: transform materials at radius 3–15
-    { chance: 0.04, sampler: { kind: 'ring', rMin: 3, rMax: 15, samples: 1 },
+    {
+      chance: 0.04, sampler: { kind: 'ring', rMin: 3, rMax: 15, samples: 1 },
       matchers: [
         { when: { kind: 'idIn', ids: [PLANT] }, outcomeId: 0 },
         { when: { kind: 'idIn', ids: [WATER] }, outcomeId: 1 },
@@ -1005,18 +1068,70 @@ ARCHETYPES[STAR] = {
         { kind: 'transform', neighborInto: PLANT, neighborChance: 0.05 },
         { kind: 'transform', neighborInto: WATER, neighborChance: 0.2 },
         { kind: 'transform', neighborInto: FLOWER, neighborChance: 0.1 },
-      ] },
+      ]
+    },
     // Evaporate nearby water
-    { chance: 0.02, sampler: { kind: 'radius', r: 2, samples: 5 }, limit: 5,
+    {
+      chance: 0.02, sampler: { kind: 'radius', r: 2, samples: 5 }, limit: 5,
       matchers: [{ when: { kind: 'idIn', ids: [WATER] }, outcomeId: 0 }],
-      outcomes: [{ kind: 'transform', neighborInto: GAS }] },
+      outcomes: [{ kind: 'transform', neighborInto: GAS }]
+    },
   ],
   color: COLORS_U32[STAR],
 }
 
+// Black hole: data-driven gravity pull via directionSwap rules.
+// Graduated gravity zones (high/medium/low) replace the old named handler.
+// Adjacent particles are consumed; further particles are pulled inward.
+const BH_PULLABLE: TargetPredicate = {
+  kind: 'and', ps: [
+    { kind: 'not', p: { kind: 'idIn', ids: [EMPTY, BLACK_HOLE] } },
+    { kind: 'not', p: { kind: 'hasTag', mask: TAG_IMMOBILE } },
+  ]
+}
+
+// Destination predicate for directionSwap: the cell being swapped into must not
+// be the black hole itself or an immobile particle.
+const BH_SWAP_DEST: TargetPredicate = {
+  kind: 'and', ps: [
+    { kind: 'not', p: { kind: 'idIn', ids: [BLACK_HOLE] } },
+    { kind: 'not', p: { kind: 'hasTag', mask: TAG_IMMOBILE } },
+  ]
+}
+
 ARCHETYPES[BLACK_HOLE] = {
   immobile: true, isSpawner: true,
-  handler: 'blackHole',
+  rules: [
+    // Event horizon: consume adjacent particles
+    {
+      chance: 1,
+      sampler: { kind: 'radius', r: 2, samples: 6 },
+      matchers: [{ when: BH_PULLABLE, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: EMPTY }],
+      limit: 4,
+    },
+    // High gravity zone: strong pull at close range (3-10 cells)
+    {
+      chance: 0.5,
+      sampler: { kind: 'ring', rMin: 3, rMax: 10, samples: 12 },
+      matchers: [{ when: BH_PULLABLE, outcomeId: 0 }],
+      outcomes: [{ kind: 'directionSwap', length: -1, destPred: BH_SWAP_DEST }],
+    },
+    // Medium gravity zone: moderate pull at mid range (10-20 cells)
+    {
+      chance: 0.2,
+      sampler: { kind: 'ring', rMin: 10, rMax: 20, samples: 14 },
+      matchers: [{ when: BH_PULLABLE, outcomeId: 0 }],
+      outcomes: [{ kind: 'directionSwap', length: -1, destPred: BH_SWAP_DEST }],
+    },
+    // Low gravity zone: weak pull at far range (20-30 cells)
+    {
+      chance: 0.1,
+      sampler: { kind: 'ring', rMin: 20, rMax: 40, samples: 30 },
+      matchers: [{ when: BH_PULLABLE, outcomeId: 0 }],
+      outcomes: [{ kind: 'directionSwap', length: -1, destPred: BH_SWAP_DEST }],
+    },
+  ],
   color: COLORS_U32[BLACK_HOLE],
 }
 
@@ -1350,11 +1465,15 @@ function bulletRules(bulletType: number, dirIndex: number): Rule[] {
       sampler: { kind: 'offsets', offsets: dir },
       matchers: [
         // Move through: empty, soft materials, creatures, water (remaining cases), other bullets
-        { when: { kind: 'idIn', ids: [
-          EMPTY, PLANT, FLOWER, GLASS, FLUFF, GAS,
-          BUG, ANT, BIRD, BEE, SLIME, WATER,
-          ...ALL_BULLETS,
-        ] }, outcomeId: 0 },
+        {
+          when: {
+            kind: 'idIn', ids: [
+              EMPTY, PLANT, FLOWER, GLASS, FLUFF, GAS,
+              BUG, ANT, BIRD, BEE, SLIME, WATER,
+              ...ALL_BULLETS,
+            ]
+          }, outcomeId: 0
+        },
         // Ignite explosives
         { when: { kind: 'idIn', ids: [GUNPOWDER, NITRO] }, outcomeId: 1 },
         // Mercury: reflect
@@ -1572,11 +1691,101 @@ ARCHETYPES[CHAOTIC_FIRE] = {
   color: COLORS_U32[CHAOTIC_FIRE], palette: 1,
 }
 
+// ── Explosion intermediates (internal — transient 1-tick particles) ──
+
+/** Generate all offsets within a circle of radius r (excluding origin). */
+function circleOffsets(r: number): [number, number][] {
+  const offsets: [number, number][] = []
+  const r2 = r * r
+  for (let dy = -r; dy <= r; dy++)
+    for (let dx = -r; dx <= r; dx++)
+      if ((dx !== 0 || dy !== 0) && dx * dx + dy * dy <= r2) offsets.push([dx, dy])
+  return offsets
+}
+
+/** Predicate matching non-EMPTY, non-immobile materials. */
+const NON_IMMOBILE_SOLID: TargetPredicate = {
+  kind: 'not', p: {
+    kind: 'or', ps: [
+      { kind: 'idIn', ids: [EMPTY] },
+      { kind: 'hasTag', mask: TAG_IMMOBILE },
+    ]
+  },
+}
+
+ARCHETYPES[EXPLODING_NITRO] = {
+  rules: [
+    // Phase 1: WATER → STONE (70%)
+    {
+      chance: 1.0,
+      sampler: { kind: 'orderedOffsets', groups: [circleOffsets(12)] },
+      matchers: [{ when: { kind: 'idIn', ids: [WATER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: STONE, neighborChance: 0.7 }],
+      pass: 'falling'
+    },
+    // Phase 2: remaining WATER → EMPTY
+    {
+      chance: 1.0,
+      sampler: { kind: 'orderedOffsets', groups: [circleOffsets(12)] },
+      matchers: [{ when: { kind: 'idIn', ids: [WATER] }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: EMPTY }],
+      pass: 'falling'
+    },
+    // Phase 3: non-immobile, non-EMPTY → FIRE
+    {
+      chance: 1.0,
+      sampler: { kind: 'orderedOffsets', groups: [circleOffsets(12)] },
+      matchers: [{ when: NON_IMMOBILE_SOLID, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', neighborInto: FIRE }],
+      pass: 'falling'
+    },
+    // Phase 4: self → FIRE
+    {
+      chance: 1.0, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: FIRE }],
+      pass: 'falling'
+    },
+  ],
+  color: COLORS_U32[EXPLODING_NITRO],
+}
+
+ARCHETYPES[DETONATING_GUNPOWDER] = {
+  rules: [
+    // Fire core: non-immobile, non-EMPTY, non-WATER → FIRE
+    {
+      chance: 1.0,
+      sampler: { kind: 'orderedOffsets', groups: [circleOffsets(6)] },
+      matchers: [{
+        when: {
+          kind: 'not', p: {
+            kind: 'or', ps: [
+              { kind: 'idIn', ids: [EMPTY, WATER] },
+              { kind: 'hasTag', mask: TAG_IMMOBILE },
+            ]
+          }
+        },
+        outcomeId: 0,
+      }],
+      outcomes: [{ kind: 'transform', neighborInto: FIRE }],
+      pass: 'falling'
+    },
+    // Self → FIRE
+    {
+      chance: 1.0, sampler: { kind: 'self' },
+      matchers: [{ when: { kind: 'any' }, outcomeId: 0 }],
+      outcomes: [{ kind: 'transform', selfInto: FIRE }],
+      pass: 'falling'
+    },
+  ],
+  color: COLORS_U32[DETONATING_GUNPOWDER],
+}
+
 // ---------------------------------------------------------------------------
 // ARCHETYPE_FLAGS  -- precomputed bitmask array for fast dispatch
 // ---------------------------------------------------------------------------
 
-const MAX_TYPE = 78
+const MAX_TYPE = 80
 export const ARCHETYPE_FLAGS = new Uint32Array(MAX_TYPE)
 for (let i = 0; i < MAX_TYPE; i++) {
   const a = ARCHETYPES[i]
@@ -1590,7 +1799,6 @@ for (let i = 0; i < MAX_TYPE; i++) {
     }
   }
   if (a.immobile) f |= F_IMMOBILE
-  if (a.explosive) f |= F_EXPLOSIVE
   if (a.isSpawner) f |= F_SPAWNER
   if (a.creature) f |= F_CREATURE
   if (a.handler) f |= F_HANDLER
@@ -1641,3 +1849,8 @@ assignTag(TAG_LIQUID,
 
 assignTag(TAG_GAS,
   GAS, SMOKE, SPORE)
+
+assignTag(TAG_IMMOBILE,
+  STONE, GLASS, FLOWER, CRYSTAL, PLANT, MOLD, VOID, WAX, BURNING_WAX,
+  TAP, ANTHILL, HIVE, NEST, GUN, VOLCANO, STAR, BLACK_HOLE, VENT,
+  DRY_ROOT, WET_ROOT, GROWING_PLANT)

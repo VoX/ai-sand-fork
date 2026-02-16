@@ -12,7 +12,7 @@ The game uses a **chunked grid engine** with **data-driven archetypes** and **co
 - **Dirty-rect rendering** — only chunks with changes are re-rendered to the pixel buffer
 - Systems iterate the grid in row order, skipping sleeping chunk columns within each row
 - Each particle type is defined as an **archetype** — a data structure encoding all behavior parameters
-- **Nearly all behaviors are data-driven**: movement, reactions (neighbor, spreading, dissolving, growth), creature AI, spawning, explosions, decay, projectiles — all read from archetype data and processed by generic composable systems
+- **Nearly all behaviors are data-driven**: movement, reactions (neighbor, spreading, dissolving, growth), creature AI, spawning, explosions (via intermediate particles), decay, projectiles — all read from archetype data and processed by generic composable systems
 - Only 3 particles still use **named handler** dispatch for behaviors too complex to fully data-drive (firework, comet, lightning)
 - A precomputed **`ARCHETYPE_FLAGS` bitmask array** enables fast flag-based dispatch per particle type
 - Handler functions operate on the global grid directly — chunking is transparent to them
@@ -25,15 +25,14 @@ The game uses a **chunked grid engine** with **data-driven archetypes** and **co
 - `/src/sim/Simulation.ts` - **Headless simulation engine**: owns `grid`, `cols`, `rows`, `chunkMap`, `rand`, `simStep`, `initialSeed`. Contains `step()` (the physics pipeline), `save()`/`load()` (binary format v4), and `reset()`
 - `/src/sim/ChunkMap.ts` - Chunk subdivision (32×32), activity tracking, sleep/wake, dirty-rect management, checksum-based change detection, per-cell stamp grid for double-move prevention
 - `/src/sim/rng.ts` - Mulberry32 fast seedable PRNG with `getState()`/`setState()` for save/load (returns [0,1) like Math.random)
-- `/src/sim/constants.ts` - Particle type IDs (0–77), color tables (`COLORS_U32`, animated palettes), `Material` type, `MATERIAL_TO_ID`, world dimensions, explosion radius constants
+- `/src/sim/constants.ts` - Particle type IDs (0–79), color tables (`COLORS_U32`, animated palettes), `Material` type, `MATERIAL_TO_ID`, world dimensions, physics constants
 - `/src/sim/archetypes.ts` - **Central behavior hub**: `ArchetypeDef` interface with `CreatureDef` sub-interface, `Effect`/`Sampler`/`TargetPredicate`/`Matcher`/`Rule` types for flexible rule authoring, shared rule constants (`GRAVITY_DOWN_RULE`, `GRAVITY_DIAG_RULE`, `LIQUID_LATERAL_RULE`, `LIQUID_MIX_RULE`, `RANDOM_WALK_RULE`, `MOVE_SKIP_RULE`, `RISING_UP_RULE`, `RISING_DRIFT_RULE`, `RISING_DIAG_RULE`, `GAS_RISE_RULE`, `GAS_RISE_DIAG_RULE`, `GAS_LATERAL_RULE`), `radiusOffsets()` helper, `ARCHETYPES[]` table (indexed by particle type ID), `ARCHETYPE_FLAGS` bitmask array, flag bit constants, material tag constants and `MATERIAL_TAGS` array
 - `/src/sim/reactionCompiler.ts` - **Reaction compiler**: compiles `Rule[]` into dense `CompiledRule` structures with Uint16Array match tables and pre-expanded Int16Array offsets. Runs at module load time. Exports `COMPILED_REACTIONS[]` indexed by material ID
 - `/src/sim/orchestration.ts` - Grid utilities (`queryCell`, `simSetCell`, `paintCircle`, `createIdx`), spawner type detection (`isSpawnerType`)
-- `/src/sim/systems/generic.ts` - **Composable generic systems**: `applyReactions` (compiled rule executor with deferred queues), `applyCreature`, `checkContactExplosion`, `checkDetonation`, `flushEndOfPass`, `flushEndOfTick`
-- `/src/sim/systems/falling.ts` - Falling pass (bottom-to-top, chunk-aware): named handler dispatch + composable system pipeline for all falling-phase particles
+- `/src/sim/systems/generic.ts` - **Composable generic systems**: `applyReactions` (compiled rule executor with deferred queues), `applyCreature`, `flushEndOfPass`, `flushEndOfTick`
+- `/src/sim/systems/falling.ts` - Falling pass (bottom-to-top, chunk-aware): composable system pipeline for all falling-phase particles
 - `/src/sim/systems/rising.ts` - Rising pass (top-to-bottom, chunk-aware): named handler dispatch + composable system pipeline for rising/buoyant particles
 - `/src/sim/systems/handlers.ts` - 3 complex named handlers that can't be fully data-driven: `updateFirework`, `updateComet`, `updateLightning`
-- `/src/sim/systems/spawners.ts` - 4 complex spawner handlers: `updateGun`, `updateVolcano`, `updateStar`, `updateBlackHole`
 - `/src/sim/systems/render.ts` - Dirty-chunk-only rendering: fills ImageData only for chunks marked `renderDirty`. Animated palettes for fire, chaotic fire, plasma, lightning, blue fire
 - `/dist/` - Built output for deployment
 
@@ -63,14 +62,11 @@ Both `fallingPhysicsSystem` and `risingPhysicsSystem` use `ARCHETYPE_FLAGS[parti
 
 #### Falling pass pipeline (bottom-to-top)
 1. **Skip check** — skip particles with `F_RISING` (handled in rising pass)
-2. **Named handler dispatch** — if `F_HANDLER`, look up `arch.handler` in `NAMED_HANDLERS` table (gun, volcano, star, blackHole). Named handlers may also have data-driven behaviors that run after the handler
-3. **Detonation** — if `arch.detonationChance`, check for blast wave + fire core (`checkDetonation`)
-4. **Contact explosion** — if `F_EXPLOSIVE` with trigger=1, check for NITRO-style explosion (`checkContactExplosion`)
-5. **Reactions** — if `F_REACTIONS`, process unified reaction rules: neighbor reactions, dissolving, spreading, spawning, gravity, density sinking, liquid lateral flow, liquid mixing, random walk, move skip (`applyReactions`)
-6. **Spawner wake** — if `F_SPAWNER`, wake surrounding chunks (`chunkMap.wakeRadius`)
-7. **Creature AI** — if `F_CREATURE` with `pass === 'falling'`, run full creature behavior (`applyCreature`)
-8. **Immobile check** — if `F_IMMOBILE`, stop here
-9. **End-of-pass flush** — `flushEndOfPass()` applies deferred rule writes
+2. **Reactions** — if `F_REACTIONS`, process unified reaction rules: neighbor reactions, dissolving, spreading, spawning, gravity, density sinking, liquid lateral flow, liquid mixing, random walk, move skip, explosion triggers, black hole gravity (`applyReactions`)
+3. **Spawner wake** — if `F_SPAWNER`, wake surrounding chunks (`chunkMap.wakeRadius`)
+4. **Creature AI** — if `F_CREATURE` with `pass === 'falling'`, run full creature behavior (`applyCreature`)
+5. **Immobile check** — if `F_IMMOBILE`, stop here
+6. **End-of-pass flush** — `flushEndOfPass()` applies deferred rule writes
 
 #### Rising pass pipeline (top-to-bottom)
 1. **Filter** — only process particles with `F_RISING`, rising creatures (`creature.pass === 'rising'`), or rising named handlers (firework, comet, lightning)
@@ -82,7 +78,7 @@ Both `fallingPhysicsSystem` and `risingPhysicsSystem` use `ARCHETYPE_FLAGS[parti
 
 ## Particle System
 
-- Numeric IDs (0–77) defined in `constants.ts`
+- Numeric IDs (0–79) defined in `constants.ts`
 - Rising elements processed top-to-bottom in `rising.ts`
 - Falling elements processed bottom-to-top in `falling.ts` (starting at `rows - 2`)
 - Use `rand()` for probabilistic physics
@@ -132,6 +128,8 @@ Some particles are internal and NOT added to Material type or `MATERIAL_TO_ID`:
 - **Blue Fire:** BLUE_FIRE (59) — spawned as trail by comets
 - **Lit Gunpowder:** LIT_GUNPOWDER (67) — transient fuse state before gunpowder detonation
 - **Chaotic Fire:** CHAOTIC_FIRE (77) — fire near other fire transforms into this; has random 8-dir movement, decays back to FIRE. Visually identical to FIRE (same animated palette)
+- **Exploding Nitro:** EXPLODING_NITRO (78) — transient 1-tick intermediate: NITRO transforms into this on contact, then its rules convert a radius-12 circle to FIRE (WATER → Stone 70% / Empty 30%)
+- **Detonating Gunpowder:** DETONATING_GUNPOWDER (79) — transient 1-tick intermediate: LIT_GUNPOWDER transforms into this at 8% chance per tick, then its rules fill a radius-6 fire core
 
 These are spawned by other particles (e.g., Gun spawns Bullets, Comet spawns Blue Fire, heat-adjacent Gunpowder becomes Lit Gunpowder) and have physics but no paint button.
 
@@ -160,11 +158,6 @@ Each particle type is defined as an `ArchetypeDef` in `archetypes.ts`. The syste
 - `immobile` — cannot move (stone, glass, spawners, etc.)
 - `tags` — material tag bitmask for predicate-based reaction filtering
 
-### Parameterized explosions
-- `explosive?: [radius, trigger]` — trigger: 0=heat-adjacent, 1=solid-contact. Applied by `checkContactExplosion()`
-- `blastRadius?: number` — outward push radius for detonation blast wave
-- `detonationChance?: number` — chance per tick to detonate (for fuse particles like LIT_GUNPOWDER). Applied by `checkDetonation()`
-
 ### Reactions (`rules?: Rule[]`)
 Unified system for neighbor reactions, spreading, dissolving, growth, spawning, gravity, and rising movement. Applied by `applyReactions()`.
 
@@ -172,7 +165,7 @@ All rules are **compiled at module load** into dense `CompiledRule` structures b
 - **Uint16Array match tables** — O(1) neighborMaterialId → outcomeIndex lookup (replaces Record property access)
 - **Pre-expanded Int16Array offsets** — no array destructuring in the hot loop
 - **Pre-normalized outcomes** — no variable-length tuple normalization at runtime
-- **Opcode-based outcomes** — extensible via new opcodes (OP_TRANSFORM, OP_SWAP, OP_DENSITY_SWAP, OP_STOP, OP_NOOP)
+- **Opcode-based outcomes** — extensible via new opcodes (OP_TRANSFORM, OP_SWAP, OP_DENSITY_SWAP, OP_STOP, OP_NOOP, OP_DIRECTION_SWAP)
 - **Pass filtering** — rules can target `'rising'` or `'falling'` pass, or `'either'` (both)
 - **Deferred execution** — rules can commit writes at end of pass or end of tick via `commit` field
 - **Shared rule constants** — reusable rules like `GRAVITY_DOWN_RULE`, `RISING_UP_RULE` referenced across archetypes
@@ -183,6 +176,7 @@ type Effect =
   | { kind: 'transform'; selfInto?: number; neighborInto?: number; selfChance?: number; neighborChance?: number }
   | { kind: 'swap'; chance?: number }
   | { kind: 'densitySwap' }
+  | { kind: 'directionSwap'; length: number; destPred?: TargetPredicate }
   | { kind: 'noop' }
   | { kind: 'stop' }
 
@@ -225,7 +219,7 @@ Materials have a `tags` bitmask for predicate-based filtering. Tags are defined 
 ```typescript
 // Tag constants (bitfields)
 TAG_HEAT, TAG_FLAMMABLE, TAG_CREATURE, TAG_ORGANIC, TAG_SOIL,
-TAG_WET, TAG_MINERAL, TAG_LIQUID, TAG_GAS, TAG_EXPLOSIVE
+TAG_WET, TAG_MINERAL, TAG_LIQUID, TAG_GAS, TAG_EXPLOSIVE, TAG_IMMOBILE
 
 // Example: fire spreading to all flammable materials via tag
 rules: [{
@@ -282,9 +276,8 @@ Used by: bug, ant, bird, bee, firefly, alien, worm, fairy, fish, moth
 ### Named handler (`handler?: string`)
 For behaviors too complex to fully data-drive yet. Only 3 particles use this:
 - **Rising handlers** (in `handlers.ts`): firework, comet, lightning
-- **Falling handlers** (in `spawners.ts`): gun, volcano, star, blackHole
 
-Note: Projectiles (bullets) were previously handled via named handlers but are now fully data-driven via `bulletRules()` in `archetypes.ts`.
+Note: Projectiles (bullets) and black hole were previously handled via named handlers but are now fully data-driven via rules in `archetypes.ts`. Black hole uses graduated `directionSwap` gravity zones.
 
 ### Spawner
 - `isSpawner?: true` — prevents chunk sleeping for particles that continuously produce others (spawner handlers + data-driven spawners like tap, anthill, etc.)
@@ -387,10 +380,8 @@ These systems read behavior entirely from archetype data and require no per-type
 
 | System | Flag | Data source | Description |
 |--------|------|-------------|-------------|
-| `applyReactions` | `F_REACTIONS` | `COMPILED_REACTIONS[]` | Compiled reaction system: match tables, opcodes, pre-expanded offsets. Handles gravity, rising, spreading, decay, liquid flow, random walk, etc. |
+| `applyReactions` | `F_REACTIONS` | `COMPILED_REACTIONS[]` | Compiled reaction system: match tables, opcodes, pre-expanded offsets. Handles gravity, rising, spreading, decay, liquid flow, random walk, explosions, etc. |
 | `applyCreature` | `F_CREATURE` | `arch.creature` | Full creature AI (movement, eating, hazards, reproduction) |
-| `checkContactExplosion` | `F_EXPLOSIVE` | `arch.explosive` | NITRO-style contact explosion |
-| `checkDetonation` | — | `arch.detonationChance` + `arch.explosive` | Blast wave + fire core |
 | `flushEndOfPass` | — | `endOfPassQueue` | Apply deferred rule writes at end of each pass |
 | `flushEndOfTick` | — | `endOfTickQueue` | Apply deferred rule writes at end of tick |
 
@@ -476,8 +467,8 @@ Normal particle placement only writes into EMPTY cells (non-empty cells are neve
 ## Destruction Hierarchy
 
 - Bullets interact per-type via data-driven rules: pass through soft materials (plant, flower, glass, fluff, gas), kill creatures, penetrate solids (stone, dirt, sand) ~80% of the time, ignite explosives, get slowed/stopped by water (15% die, 42.5% stall, 42.5% pass through), reflect off mercury. Each bullet direction is a separate particle type with rules generated by `bulletRules()` in `archetypes.ts`.
-- Gunpowder: heat-adjacent ignition via `rules`, converts to Lit Gunpowder, then `detonationChance` triggers blast wave (radius 6) pushing particles outward + fire core
-- Nitro: contact explosion via `explosive: [12, 1]` destroys most things except Stone/Glass; converts Water to Stone (70%) or Empty (30%)
+- Gunpowder: heat-adjacent ignition via `rules`, converts to Lit Gunpowder, then 8% chance per tick to transform to DETONATING_GUNPOWDER (which fills radius-6 fire core via rules)
+- Nitro: contact trigger via `rules` — when touching a solid above/below, transforms to EXPLODING_NITRO (which converts radius-12 circle to FIRE via rules; WATER → Stone 70% / Empty 30%)
 - Fire: `rules` targets flammable materials (plant, fluff, bug, gas, flower, hive, nest, dust, spore); near other fire transforms to CHAOTIC_FIRE for random movement
 - Acid: `rules` targets organics and creatures
 - Lava: `rules` for melting/igniting interactions

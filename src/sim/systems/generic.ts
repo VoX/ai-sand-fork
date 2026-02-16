@@ -1,7 +1,7 @@
-import { ARCHETYPES, ARCHETYPE_FLAGS, F_IMMOBILE, type ArchetypeDef } from '../archetypes'
-import { EMPTY, FIRE, WATER, DENSITY_SWAP_RATE } from '../constants'
+import { ARCHETYPES } from '../archetypes'
+import { EMPTY, WATER, DENSITY_SWAP_RATE } from '../constants'
 import {
-  COMPILED_REACTIONS, NO_MATCH, OP_TRANSFORM, OP_SWAP, OP_DENSITY_SWAP, OP_STOP,
+  COMPILED_REACTIONS, NO_MATCH, OP_TRANSFORM, OP_SWAP, OP_DENSITY_SWAP, OP_STOP, OP_DIRECTION_SWAP,
   PASS_EITHER, COMMIT_IMMEDIATE, COMMIT_END_OF_PASS,
 } from '../reactionCompiler'
 
@@ -178,6 +178,53 @@ export function applyReactions(
         case OP_STOP:
           return true
 
+        case OP_DIRECTION_SWAP: {
+          const len = outcome.a
+          // Direction from self toward sampled target
+          const dirX = dx > 0 ? 1 : dx < 0 ? -1 : 0
+          const dirY = dy > 0 ? 1 : dy < 0 ? -1 : 0
+          if (len >= 0) {
+            // Positive length: swap self with cell `length` steps in direction of target
+            const sx = x + dirX * len, sy = y + dirY * len
+            if (sx < 0 || sx >= cols || sy < 0 || sy >= rows) break
+            const si = sy * cols + sx
+            // Check destination predicate (e.g. exclude swapping with immobile/black hole)
+            const da = outcome.destAllowed
+            if (da && !da[g[si]]) break
+            if (deferred) {
+              queue!.push(p, g[si])
+              queue!.push(si, g[p])
+            } else {
+              const temp = g[p]
+              g[p] = g[si]
+              g[si] = temp
+              if (doStamp) stampGrid![si] = tickParity!
+              return g[p] !== type
+            }
+          } else {
+            // Negative length: move target cell |length| steps toward self
+            const absLen = -len
+            const toDirX = -(dirX)
+            const toDirY = -(dirY)
+            const sx = nx + toDirX * absLen, sy = ny + toDirY * absLen
+            if (sx < 0 || sx >= cols || sy < 0 || sy >= rows) break
+            const si = sy * cols + sx
+            // Check destination predicate (e.g. exclude swapping with immobile/black hole)
+            const da = outcome.destAllowed
+            if (da && !da[g[si]]) break
+            if (deferred) {
+              queue!.push(ni, g[si])
+              queue!.push(si, g[ni])
+            } else {
+              const temp = g[ni]
+              g[ni] = g[si]
+              g[si] = temp
+              if (doStamp) stampGrid![si] = tickParity!
+            }
+          }
+          break
+        }
+
         // OP_NOOP: do nothing
       }
     }
@@ -334,108 +381,4 @@ export function applyCreature(
       return
     }
   }
-}
-
-// ---------------------------------------------------------------------------
-// Explosion System — contact-triggered and detonation explosions
-// ---------------------------------------------------------------------------
-
-/**
- * Contact explosion (NITRO-style): explode when touching non-empty non-self.
- * Returns true if exploded.
- */
-export function checkContactExplosion(
-  g: Uint8Array, x: number, y: number, _p: number,
-  cols: number, rows: number, type: number, rand: () => number,
-  arch: ArchetypeDef
-): boolean {
-  const [radius, trigger] = arch.explosive!
-  if (trigger !== 1) return false
-
-  // Check above and below for non-compatible neighbors
-  const aboveCell = y > 0 ? g[(y - 1) * cols + x] : EMPTY
-  const belowCell = y < rows - 1 ? g[(y + 1) * cols + x] : EMPTY
-
-  const shouldExplode =
-    (belowCell !== EMPTY && belowCell !== WATER && belowCell !== type) ||
-    (aboveCell !== EMPTY && aboveCell !== WATER && aboveCell !== type)
-
-  if (!shouldExplode) return false
-
-  // Circular explosion
-  for (let edy = -radius; edy <= radius; edy++) {
-    for (let edx = -radius; edx <= radius; edx++) {
-      if (edx * edx + edy * edy > radius * radius) continue
-      const ex = x + edx, ey = y + edy
-      if (ex < 0 || ex >= cols || ey < 0 || ey >= rows) continue
-      const ei = ey * cols + ex
-      const ec = g[ei]
-      if (ec === WATER) g[ei] = rand() < 0.7 ? 70 : EMPTY  // 70 = STONE placeholder
-      else if (!(ARCHETYPE_FLAGS[ec] & F_IMMOBILE) || ec === type) g[ei] = FIRE
-    }
-  }
-  return true
-}
-
-/**
- * Detonation explosion (LIT_GUNPOWDER-style): blast wave + fire core.
- * Returns true if detonated.
- */
-export function checkDetonation(
-  g: Uint8Array, x: number, y: number, _p: number,
-  cols: number, rows: number, rand: () => number,
-  arch: ArchetypeDef
-): boolean {
-  if (!arch.detonationChance || rand() > arch.detonationChance) return false
-  if (!arch.explosive) return false
-
-  const [coreRadius] = arch.explosive
-  const blastR = arch.blastRadius ?? coreRadius * 2
-
-  // Blast wave: push particles outward ring by ring
-  for (let ring = blastR; ring >= 2; ring--) {
-    for (let bdy = -ring; bdy <= ring; bdy++) {
-      for (let bdx = -ring; bdx <= ring; bdx++) {
-        const d2 = bdx * bdx + bdy * bdy
-        if (d2 > ring * ring || d2 <= (ring - 1) * (ring - 1)) continue
-        const bnx = x + bdx, bny = y + bdy
-        if (bnx < 0 || bnx >= cols || bny < 0 || bny >= rows) continue
-        const bi = bny * cols + bnx, bc = g[bi]
-        if (bc === EMPTY || bc === FIRE) continue
-        if ((ARCHETYPE_FLAGS[bc] & F_IMMOBILE) && rand() > 0.5) continue
-        const pushX = bdx > 0 ? 1 : (bdx < 0 ? -1 : 0)
-        const pushY = bdy > 0 ? 1 : (bdy < 0 ? -1 : 0)
-        const dist = Math.sqrt(d2)
-        const pushDist = Math.max(2, Math.round((blastR - dist + 4) / 2))
-        let cx = bnx, cy = bny
-        for (let step = 0; step < pushDist; step++) {
-          const nextX = cx + pushX, nextY = cy + pushY
-          if (nextX < 0 || nextX >= cols || nextY < 0 || nextY >= rows) break
-          const ni = nextY * cols + nextX, nc = g[ni]
-          if (nc !== EMPTY) {
-            if ((ARCHETYPE_FLAGS[nc] & F_IMMOBILE) && rand() > 0.5) break
-            g[ni] = g[cy * cols + cx]
-            g[cy * cols + cx] = EMPTY
-          } else {
-            g[ni] = g[cy * cols + cx]
-            g[cy * cols + cx] = EMPTY
-          }
-          cx = nextX; cy = nextY
-        }
-      }
-    }
-  }
-
-  // Fire core after blast
-  for (let edy = -coreRadius; edy <= coreRadius; edy++) {
-    for (let edx = -coreRadius; edx <= coreRadius; edx++) {
-      if (edx * edx + edy * edy > coreRadius * coreRadius) continue
-      const ex = x + edx, ey = y + edy
-      if (ex < 0 || ex >= cols || ey < 0 || ey >= rows) continue
-      const ei = ey * cols + ex
-      const ec = g[ei]
-      if (!(ARCHETYPE_FLAGS[ec] & F_IMMOBILE) && ec !== WATER) g[ei] = FIRE
-    }
-  }
-  return true
 }

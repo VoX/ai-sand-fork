@@ -25,6 +25,7 @@ export const OP_SWAP = 1
 export const OP_NOOP = 2
 export const OP_DENSITY_SWAP = 3
 export const OP_STOP = 4
+export const OP_DIRECTION_SWAP = 5
 
 // Pass constants — which physics pass a rule fires in
 export const PASS_EITHER = 0
@@ -48,6 +49,9 @@ export interface CompiledOutcome {
   b: number  // neighborInto
   c: number  // neighborChance | swapChance
   d: number  // selfChance
+  /** OP_DIRECTION_SWAP only: per-materialId allowed check for the swap destination cell.
+   *  null means no restriction. Built from destPred at compile time. */
+  destAllowed: Uint8Array | null
 }
 
 /** A fully compiled reaction rule, optimized for the runtime hot loop. */
@@ -94,7 +98,7 @@ export interface CompiledRule {
 export const NO_MATCH = 0xFFFF
 
 /** Max material type ID (must match archetypes.ts). */
-const MAX_TYPE = 78
+const MAX_TYPE = 80
 
 // ---------------------------------------------------------------------------
 // Predicate evaluation — all predicates resolved at compile time
@@ -107,12 +111,12 @@ function resolvePropPair(
 ): [number, number] | null {
   const neighborArch = ARCHETYPES[materialId]
   if (!neighborArch) return null
-  const neighborVal = (neighborArch as any)[prop]
+  const neighborVal = (neighborArch as unknown as Record<string, unknown>)[prop]
   if (neighborVal === undefined || typeof neighborVal !== 'number') return null
   if (typeof value === 'number') return [neighborVal, value]
   const selfArch = ARCHETYPES[selfId]
   if (!selfArch) return null
-  const selfVal = (selfArch as any)[value.selfProp]
+  const selfVal = (selfArch as unknown as Record<string, unknown>)[value.selfProp]
   if (selfVal === undefined || typeof selfVal !== 'number') return null
   return [neighborVal, selfVal]
 }
@@ -151,7 +155,7 @@ function evalPredicate(pred: TargetPredicate, materialId: number, selfId: number
 // Compiler: Effect → CompiledOutcome
 // ---------------------------------------------------------------------------
 
-function compileEffect(effect: Effect): CompiledOutcome {
+function compileEffect(effect: Effect, selfId: number): CompiledOutcome {
   switch (effect.kind) {
     case 'transform':
       return {
@@ -160,15 +164,26 @@ function compileEffect(effect: Effect): CompiledOutcome {
         b: effect.neighborInto ?? -1,
         c: effect.neighborChance ?? 1,
         d: effect.selfChance ?? 1,
+        destAllowed: null,
       }
     case 'swap':
-      return { op: OP_SWAP, a: 0, b: 0, c: effect.chance ?? 1, d: 0 }
+      return { op: OP_SWAP, a: 0, b: 0, c: effect.chance ?? 1, d: 0, destAllowed: null }
     case 'densitySwap':
-      return { op: OP_DENSITY_SWAP, a: 0, b: 0, c: 0, d: 0 }
+      return { op: OP_DENSITY_SWAP, a: 0, b: 0, c: 0, d: 0, destAllowed: null }
     case 'noop':
-      return { op: OP_NOOP, a: 0, b: 0, c: 0, d: 0 }
+      return { op: OP_NOOP, a: 0, b: 0, c: 0, d: 0, destAllowed: null }
     case 'stop':
-      return { op: OP_STOP, a: 0, b: 0, c: 0, d: 0 }
+      return { op: OP_STOP, a: 0, b: 0, c: 0, d: 0, destAllowed: null }
+    case 'directionSwap': {
+      let destAllowed: Uint8Array | null = null
+      if (effect.destPred) {
+        destAllowed = new Uint8Array(MAX_TYPE)
+        for (let id = 0; id < MAX_TYPE; id++) {
+          destAllowed[id] = evalPredicate(effect.destPred, id, selfId) ? 1 : 0
+        }
+      }
+      return { op: OP_DIRECTION_SWAP, a: effect.length, b: 0, c: 0, d: 0, destAllowed }
+    }
   }
 }
 
@@ -295,7 +310,7 @@ function compileRule(rule: Rule, selfId: number): CompiledRule {
   }
 
   // Compile outcomes
-  const outcomes = rule.outcomes.map(compileEffect)
+  const outcomes = rule.outcomes.map(e => compileEffect(e, selfId))
 
   // Build match table by evaluating matchers against all material types.
   // Static predicates (tags/ids/props) are evaluated once per material here,

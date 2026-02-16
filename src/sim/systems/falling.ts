@@ -1,31 +1,15 @@
 import {
   ARCHETYPES, ARCHETYPE_FLAGS,
-  F_RISING, F_IMMOBILE, F_HANDLER,
+  F_RISING, F_IMMOBILE,
   F_CREATURE, F_SPAWNER, F_REACTIONS,
-  F_EXPLOSIVE,
 } from '../archetypes'
 import { EMPTY } from '../constants'
 import {
   applyReactions, flushEndOfPass,
   applyCreature,
-  checkContactExplosion, checkDetonation,
 } from './generic'
 import { type ChunkMap, CHUNK_SIZE, CHUNK_SHIFT } from '../ChunkMap'
 import { PASS_FALLING } from '../reactionCompiler'
-
-// Named handler dispatch table — for truly complex behaviors that can't be data-driven yet
-type ParticleHandler = (g: Uint8Array, x: number, y: number, p: number, cols: number, rows: number, rand: () => number) => void
-
-import { updateBlackHole } from './spawners'
-
-const NAMED_HANDLERS: Record<string, ParticleHandler> = {
-  blackHole: updateBlackHole,
-}
-
-/** Per-spawner-type wake radius (grid cells). */
-const SPAWNER_WAKE_RADIUS: Record<string, number> = {
-  blackHole: 12,
-}
 
 export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, chunkMap: ChunkMap, rand: () => number): void {
   const { chunkCols, active, stampGrid, tickParity } = chunkMap
@@ -53,36 +37,6 @@ export function fallingPhysicsSystem(g: Uint8Array, cols: number, rows: number, 
 
         // Skip particles handled in the rising pass
         if (flags & F_RISING) continue
-
-        // ── Named handler dispatch ──
-        if (flags & F_HANDLER) {
-          const handlerName = arch.handler!
-
-          const handler = NAMED_HANDLERS[handlerName]
-          if (handler) {
-            handler(g, x, y, p, cols, rows, rand)
-            // Wake radius for spawner-type handlers
-            const wakeR = SPAWNER_WAKE_RADIUS[handlerName]
-            if (wakeR) chunkMap.wakeRadius(x, y, wakeR)
-          }
-
-          // If handler moved/transformed the particle, skip further processing
-          if (g[p] !== c) continue
-
-          // Named handlers with additional data-driven behaviors
-          // (e.g., seed has both handler AND reactions — handler runs first, then reactions below)
-          if (!arch.rules) continue
-        }
-
-        // ── Detonation check (fuse particles like LIT_GUNPOWDER) ──
-        if (arch.detonationChance) {
-          if (checkDetonation(g, x, y, p, cols, rows, rand, arch)) continue
-        }
-
-        // ── Contact explosion (NITRO-style) ──
-        if ((flags & F_EXPLOSIVE) && arch.explosive && arch.explosive[1] === 1) {
-          if (checkContactExplosion(g, x, y, p, cols, rows, c, rand, arch)) continue
-        }
 
         // ── Reactions (neighbor reactions, dissolve, spread, spawn — unified) ──
         if (flags & F_REACTIONS) {
