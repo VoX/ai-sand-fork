@@ -1,8 +1,8 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
-import { DEFAULT_ZOOM, MAX_ZOOM } from './sim/constants'
+import { DEFAULT_ZOOM, MAX_ZOOM, MATERIAL_TO_ID } from './sim/constants'
 
-type Material = 'empty' | 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'bubble' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent'
+type Material = 'empty' | 'sand' | 'water' | 'dirt' | 'stone' | 'plant' | 'fire' | 'gas' | 'fluff' | 'bug' | 'plasma' | 'nitro' | 'glass' | 'lightning' | 'slime' | 'ant' | 'alien' | 'quark' | 'crystal' | 'ember' | 'static' | 'bird' | 'gunpowder' | 'tap' | 'anthill' | 'bee' | 'flower' | 'hive' | 'honey' | 'nest' | 'gun' | 'cloud' | 'acid' | 'lava' | 'snow' | 'volcano' | 'mold' | 'mercury' | 'void' | 'seed' | 'rust' | 'spore' | 'algae' | 'poison' | 'dust' | 'firework' | 'glitter' | 'star' | 'comet' | 'blackhole' | 'firefly' | 'worm' | 'fairy' | 'fish' | 'moth' | 'vent' | 'wax'
 type Tool = Material
 
 const BUTTON_COLORS: Record<Tool, string> = {
@@ -16,12 +16,25 @@ const BUTTON_COLORS: Record<Tool, string> = {
   acid: '#bfff00', lava: '#dc1414', snow: '#e0f0ff',
   volcano: '#660000', mold: '#7b68ee', mercury: '#b8c0c8', void: '#2e0854', seed: '#d4a574',
   rust: '#b7410e', spore: '#20b2aa', algae: '#2e8b57', poison: '#8b008b', dust: '#deb887',
-  firework: '#ff6600', bubble: '#87ceeb', glitter: '#c0c0c0', star: '#ffdf00', comet: '#7df9ff', blackhole: '#000000',
+  firework: '#ff6600', glitter: '#c0c0c0', star: '#ffdf00', comet: '#7df9ff', blackhole: '#000000',
   firefly: '#bfff00',
   worm: '#c09080', fairy: '#ff88ff',
   fish: '#ffa500', moth: '#d2b48c',
   vent: '#607860',
+  wax: '#e8d5b0',
 }
+
+// Reverse lookup: particle type ID → display name
+const ID_TO_NAME: string[] = []
+for (const [name, id] of Object.entries(MATERIAL_TO_ID)) {
+  ID_TO_NAME[id] = name
+}
+ID_TO_NAME[67] = 'lit gunpowder'
+ID_TO_NAME[68] = 'smoke'
+ID_TO_NAME[70] = 'burning wax'
+ID_TO_NAME[71] = 'molten wax'
+for (let i = 31; i <= 38; i++) ID_TO_NAME[i] = 'bullet'
+ID_TO_NAME[39] = 'bullet trail'
 
 interface MapSize { label: string; cols: number; rows: number }
 
@@ -43,10 +56,16 @@ function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const workerRef = useRef<Worker | null>(null)
   const workerInitRef = useRef(false)
-  const [tool, setTool] = useState<Tool>('sand')
+  const [tool, setTool] = useState<Tool>(() => {
+    const saved = localStorage.getItem('sand-tool')
+    return (saved && saved in BUTTON_COLORS) ? saved as Tool : 'sand'
+  })
   const [isDrawing, setIsDrawing] = useState(false)
-  const [brushSize, setBrushSize] = useState(3)
-  const [isPaused, setIsPaused] = useState(false)
+  const [brushSize, setBrushSize] = useState(() => {
+    const saved = localStorage.getItem('sand-brushSize')
+    return saved ? Math.max(1, Math.min(30, parseInt(saved, 10) || 3)) : 3
+  })
+  const [isPaused, setIsPaused] = useState(() => localStorage.getItem('sand-paused') === 'true')
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [fps, setFps] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -75,7 +94,10 @@ function App() {
 
   // Pan mode (single-finger pan instead of draw)
   const [panMode, setPanMode] = useState(false)
+  const [debugMode, setDebugMode] = useState(false)
+  const [cursorParticle, setCursorParticle] = useState('')
   const panModeRef = useRef(false)
+  const debugModeRef = useRef(false)
 
   // Multi-pointer drawing state: each active touch/pointer gets its own brush
   const drawPointersRef = useRef(new Map<number, { clientX: number; clientY: number; lastCell: { x: number; y: number } | null }>())
@@ -85,6 +107,12 @@ function App() {
   useEffect(() => { toolRef.current = tool }, [tool])
   useEffect(() => { brushSizeRef.current = brushSize }, [brushSize])
   useEffect(() => { panModeRef.current = panMode }, [panMode])
+  useEffect(() => { debugModeRef.current = debugMode }, [debugMode])
+
+  // Persist UI preferences to localStorage
+  useEffect(() => { localStorage.setItem('sand-tool', tool) }, [tool])
+  useEffect(() => { localStorage.setItem('sand-brushSize', String(brushSize)) }, [brushSize])
+  useEffect(() => { localStorage.setItem('sand-paused', String(isPaused)) }, [isPaused])
 
   const clampCamera = useCallback(() => {
     const canvas = canvasRef.current
@@ -204,6 +232,9 @@ function App() {
         camYRef.current = e.data.data.camY
         zoomRef.current = e.data.data.zoom
       }
+      if (e.data.type === 'cursorParticle') {
+        setCursorParticle(ID_TO_NAME[e.data.data] ?? `type ${e.data.data}`)
+      }
     }
 
     // Transfer canvas control to worker
@@ -252,6 +283,17 @@ function App() {
     return () => window.removeEventListener('resize', handleResize)
   }, [clampCamera, sendCamera])
 
+  // Auto-save simulation when page becomes hidden (tab switch, browser close)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) {
+        workerRef.current?.postMessage({ type: 'autoSave' })
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+
   // Sync pause state with worker
   useEffect(() => {
     if (workerRef.current) {
@@ -275,7 +317,14 @@ function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === ']' || e.key === '=') setBrushSize(prev => Math.min(30, prev + 1))
       if (e.key === '[' || e.key === '-') setBrushSize(prev => Math.max(1, prev - 1))
-      if (e.key === 'p' || e.key === 'P') workerRef.current?.postMessage({ type: 'toggleDebugChunks' })
+      if (e.key === 'p' || e.key === 'P') {
+        workerRef.current?.postMessage({ type: 'toggleDebugChunks' })
+        setDebugMode(prev => !prev)
+      }
+      if (e.key === ' ') {
+        e.preventDefault()
+        setIsPaused(prev => !prev)
+      }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
@@ -405,6 +454,14 @@ function App() {
   }, [sendInputForPointer])
 
   const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    // Send cursor position to worker for ghost brush preview
+    if (workerRef.current) {
+      const pos = getCellPos(e.clientX, e.clientY)
+      if (pos) {
+        workerRef.current.postMessage({ type: 'cursorPos', data: { x: pos.x, y: pos.y, brushSize: brushSizeRef.current, color: BUTTON_COLORS[toolRef.current] } })
+      }
+    }
+
     // Pan — only the pointer that initiated panning
     if (isPanningRef.current && e.pointerId === panPointerIdRef.current) {
       const dx = (e.clientX - panStartRef.current.x) / zoomRef.current
@@ -422,7 +479,7 @@ function App() {
       ptr.clientY = e.clientY
       sendInputForPointer(e.pointerId, e.clientX, e.clientY)
     }
-  }, [sendInputForPointer, sendCamera])
+  }, [sendInputForPointer, sendCamera, getCellPos])
 
   const handlePointerUp = useCallback((e: React.PointerEvent) => {
     // End panning if this is the pan pointer
@@ -449,6 +506,10 @@ function App() {
       })
       setIsDrawing(true)
     }
+  }, [])
+
+  const handlePointerLeave = useCallback(() => {
+    workerRef.current?.postMessage({ type: 'cursorPos', data: { x: -1, y: -1, brushSize: 0, color: '' } })
   }, [])
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -490,8 +551,8 @@ function App() {
 
   const categories: Array<{ label: string; items: Tool[] }> = [
     { label: 'basic', items: ['empty', 'sand', 'water', 'dirt', 'stone', 'glass', 'snow', 'dust', 'fluff'] },
-    { label: 'fluid', items: ['slime', 'acid', 'lava', 'mercury', 'honey', 'poison', 'gas', 'bubble'] },
-    { label: 'energy', items: ['fire', 'ember', 'plasma', 'lightning', 'static', 'nitro', 'gunpowder', 'firework', 'quark', 'comet'] },
+    { label: 'fluid', items: ['slime', 'acid', 'lava', 'mercury', 'honey', 'poison', 'gas'] },
+    { label: 'energy', items: ['fire', 'ember', 'plasma', 'lightning', 'static', 'nitro', 'gunpowder', 'firework', 'quark', 'comet', 'wax'] },
     { label: 'nature', items: ['plant', 'seed', 'flower', 'algae', 'mold', 'spore', 'rust', 'crystal', 'void', 'glitter'] },
     { label: 'spawner', items: ['tap', 'anthill', 'hive', 'nest', 'gun', 'volcano', 'vent', 'cloud', 'star', 'blackhole'] },
     { label: 'critter', items: ['bug', 'ant', 'bird', 'bee', 'firefly', 'worm', 'fish', 'moth', 'alien', 'fairy'] },
@@ -509,11 +570,15 @@ function App() {
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
           onPointerEnter={handlePointerEnter}
+          onPointerLeave={handlePointerLeave}
           onWheel={handleWheel}
           onContextMenu={(e) => e.preventDefault()}
           style={{ touchAction: 'none' }}
         />
         <div className="fps-counter">{fps} fps</div>
+        {debugMode && cursorParticle && (
+          <div className="cursor-particle-label">{cursorParticle}</div>
+        )}
       </div>
       <div className="controls">
         <input ref={fileInputRef} type="file" accept=".sand" onChange={handleFileLoad} style={{ display: 'none' }} aria-label="Load world file" />
@@ -576,6 +641,20 @@ function App() {
             <span>{tool}</span>
           </button>
         </div>
+        {debugMode && (
+          <div className="debug-controls">
+            <button
+              className="ctrl-btn debug-step"
+              onClick={() => {
+                setIsPaused(true)
+                workerRef.current?.postMessage({ type: 'step' })
+              }}
+              aria-label="Step simulation forward one tick"
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zm2-8.14L11.03 12 8 14.14V9.86zM16 6h2v12h-2z" /></svg>
+            </button>
+          </div>
+        )}
       </div>
       {dropdownOpen && (
         <div className="material-modal-overlay" onPointerDown={() => setDropdownOpen(false)}>
